@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "better-brush"
+version = "0.1.0"
+description = "Open-source rotoscoping desktop app powered by SAM 2"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Better Brush contributors" }]
+keywords = ["rotoscoping", "sam2", "segment-anything", "video", "masks"]
+
+[project.urls]
+Homepage = "https://github.com/better-brush/better-brush"
+SAM2 = "https://github.com/facebookresearch/sam2"
+
+# Better Brush is a src-layout desktop application launched with
+# `python -m src.main` (or `python src/main.py`) from the repository root.
+# Runtime dependencies are pinned in requirements.txt (includes SAM 2 from GitHub).

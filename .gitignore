@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# PyTorch / checkpoints
+checkpoints/*.pt
+checkpoints/*.pth
+*.pt
+*.pth
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+hardware_summary.json
+.pytest_cache/
+
+# App runtime caches
+exports/
+.better_brush_frames/
