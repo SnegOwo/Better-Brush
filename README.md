@@ -63,10 +63,11 @@ Heavy processing (SAM 2 inference, propagation, export) always runs in
 
 ## Known limitations
 
-- CPU-only inference is slow (~2 s/frame with the tiny model at 1024 px).
-- Single object tracking (`obj_id=1`); multi-object and brush-based mask
-  correction are on the roadmap.
+- Multi-object tracking is not implemented yet (`obj_id=1`); brush-based mask
+  correction is on the roadmap.
 - DirectML requires `torch-directml`, which does not support Python 3.13 yet.
+- PyTorch CUDA builds for Python 3.13 currently max out at 2.11.0+cu128
+  (install with `--index-url https://download.pytorch.org/whl/cu128`).
 
 ## License
 
