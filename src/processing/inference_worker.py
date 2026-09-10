@@ -91,6 +91,8 @@ class PropagationWorker(QThread):
         self._start_frame = 0
         self._points: list[PointPrompt] = []
         self._total_frames = 0
+        self._max_frames: Optional[int] = None
+        self._reverse = False
         self._cancel = threading.Event()
 
     def set_task(
@@ -104,6 +106,16 @@ class PropagationWorker(QThread):
         self._start_frame = start_frame
         self._points = list(points or [])
         self._total_frames = total_frames
+
+    def set_range(self, max_frames: Optional[int] = None, reverse: bool = False) -> None:
+        """Restrict propagation to a segment (for partial corrections).
+
+        Args:
+            max_frames: Number of frames to track (None = until the end).
+            reverse: Track backwards from the start frame.
+        """
+        self._max_frames = max_frames
+        self._reverse = bool(reverse)
 
     def cancel(self) -> None:
         """Request cooperative cancellation between frames."""
@@ -134,6 +146,8 @@ class PropagationWorker(QThread):
             stage("Propagating", 0, max(self._total_frames, 1))
             results = self._sam.propagate_in_video(
                 start_frame_idx=self._start_frame,
+                max_frames=self._max_frames,
+                reverse=self._reverse,
                 on_frame=self._on_frame,
                 cancel_event=self._cancel,
             )

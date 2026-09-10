@@ -11,6 +11,8 @@ from PySide6.QtCore import QThread, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -18,13 +20,14 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QSpinBox,
     QStatusBar,
     QVBoxLayout,
     QWidget,
 )
 
 from src.core.config import AppConfig
-from src.hardware import ContentProfile, HardwareDetector, SAM2Profiler
+from src.hardware import ContentProfile, HardwareDetector, ModelSize, SAM2Profiler
 from src.models.sam2_manager import MaskResult, PointPrompt, SAM2Manager
 from src.processing.frame_buffer import FrameBuffer
 from src.processing.inference_worker import InferenceWorker, PropagationWorker
@@ -98,10 +101,13 @@ class MainWindow(QMainWindow):
         self._inference_worker: Optional[InferenceWorker] = None
         self._propagation_worker: Optional[PropagationWorker] = None
         self._export_worker: Optional[ExportWorker] = None
+        self._play_start = 0
+        self._syncing = False
 
         # Build UI
         self._setup_menu()
         self._setup_central_widget()
+        self._setup_toolbar()
         self._setup_status_bar()
 
         # Hardware recommendation on startup
@@ -147,7 +153,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self._btn_segment)
 
         self._btn_propagate = QPushButton("Propagate to End")
-        self._btn_propagate.clicked.connect(self._run_propagation)
+        self._btn_propagate.clicked.connect(lambda: self._run_propagation(1))
         left_layout.addWidget(self._btn_propagate)
 
         self._btn_clear_points = QPushButton("Clear Points")
@@ -172,6 +178,7 @@ class MainWindow(QMainWindow):
         self._canvas.frame_navigate.connect(self._on_navigate)
         self._canvas.request_segment.connect(self._run_segmentation)
         self._canvas.play_pause.connect(self._toggle_play)
+        self._canvas.mask_edited.connect(self._on_canvas_mask_edited)
         right_layout.addWidget(self._canvas, stretch=1)
 
         self._timeline = Timeline()
@@ -180,12 +187,175 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(right)
         splitter.setSizes([260, 1140])
-        self.setCentralWidget(splitter)
+
+        central = QWidget()
+        self._central_layout = QVBoxLayout(central)
+        self._central_layout.setContentsMargins(0, 0, 0, 0)
+        self._central_layout.setSpacing(0)
+        self._central_layout.addWidget(splitter)
+        self.setCentralWidget(central)
 
     def _setup_status_bar(self) -> None:
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage("Ready")
+
+    # ------------------------------------------------------------------ #
+    # Transport / tools toolbar
+    # ------------------------------------------------------------------ #
+    def _setup_toolbar(self) -> None:
+        tb = QWidget(self)
+        lay = QHBoxLayout(tb)
+        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setSpacing(6)
+
+        # --- Playback transport ---
+        self._btn_play = QPushButton("▶ Play")
+        self._btn_play.setCheckable(True)
+        self._btn_play.clicked.connect(self._toggle_play)
+        lay.addWidget(self._btn_play)
+
+        self._btn_stop = QPushButton("⏹ Stop")
+        self._btn_stop.clicked.connect(self._stop_playback)
+        lay.addWidget(self._btn_stop)
+        lay.addSpacing(8)
+
+        # --- Preview ---
+        lay.addWidget(QLabel("Aperçu:"))
+        self._combo_preview = QComboBox()
+        self._combo_preview.addItem("Masque (overlay)", "mask")
+        self._combo_preview.addItem("Découpe (checker)", "cutout")
+        self._combo_preview.addItem("Vidéo brute", "frame")
+        lay.addWidget(self._combo_preview)
+        lay.addSpacing(8)
+
+        # --- Content mode ---
+        lay.addWidget(QLabel("Mode:"))
+        self._combo_mode = QComboBox()
+        for cp in ContentProfile:
+            self._combo_mode.addItem(self._content_label(cp), cp)
+        lay.addWidget(self._combo_mode)
+        lay.addSpacing(8)
+
+        # --- Model ---
+        lay.addWidget(QLabel("Modèle:"))
+        self._combo_model = QComboBox()
+        self._combo_model.addItem("Auto (recommandé)", None)
+        for size in (
+            ModelSize.TINY,
+            ModelSize.SMALL,
+            ModelSize.BASE_PLUS,
+            ModelSize.LARGE,
+        ):
+            self._combo_model.addItem(size.value, size)
+        lay.addWidget(self._combo_model)
+        lay.addSpacing(8)
+
+        # --- Segment navigation / re-propagate ---
+        btn_prev_kf = QPushButton("◀ Key")
+        btn_prev_kf.clicked.connect(lambda: self._goto_keyframe(-1))
+        lay.addWidget(btn_prev_kf)
+        btn_next_kf = QPushButton("Key ▶")
+        btn_next_kf.clicked.connect(lambda: self._goto_keyframe(1))
+        lay.addWidget(btn_next_kf)
+
+        btn_prop_back = QPushButton("Propager ←")
+        btn_prop_back.clicked.connect(lambda: self._run_propagation(-1))
+        lay.addWidget(btn_prop_back)
+        btn_prop_fwd = QPushButton("Propager →")
+        btn_prop_fwd.clicked.connect(lambda: self._run_propagation(1))
+        lay.addWidget(btn_prop_fwd)
+        lay.addSpacing(8)
+
+        # --- Tools: points / brush ---
+        self._btn_points = QPushButton("Point")
+        self._btn_points.setCheckable(True)
+        self._btn_points.setChecked(True)
+        self._btn_points.clicked.connect(lambda: self._set_tool("points"))
+        lay.addWidget(self._btn_points)
+
+        self._btn_brush = QPushButton("Pinceau")
+        self._btn_brush.setCheckable(True)
+        self._btn_brush.clicked.connect(lambda: self._set_tool("brush"))
+        lay.addWidget(self._btn_brush)
+
+        self._chk_erase = QCheckBox("Gomme")
+        lay.addWidget(self._chk_erase)
+
+        lay.addWidget(QLabel("Taille:"))
+        self._spin_brush = QSpinBox()
+        self._spin_brush.setRange(1, 300)
+        self._spin_brush.setValue(20)
+        lay.addWidget(self._spin_brush)
+        lay.addStretch()
+
+        self._central_layout.insertWidget(0, tb)
+
+        # Connect signals *after* the widgets exist so no handler fires
+        # while the toolbar is assembled.
+        self._combo_preview.currentIndexChanged.connect(self._on_preview_changed)
+        self._combo_mode.currentIndexChanged.connect(self._on_mode_changed)
+        self._combo_model.currentIndexChanged.connect(self._on_model_changed)
+        self._chk_erase.toggled.connect(self._canvas.set_brush_erase)
+        self._spin_brush.valueChanged.connect(self._on_brush_size_changed)
+
+    @staticmethod
+    def _content_label(cp: ContentProfile) -> str:
+        labels = {
+            ContentProfile.ANIME: "Anime / AMV",
+            ContentProfile.HUMAN: "Humain",
+            ContentProfile.OBJECT: "Objet",
+        }
+        return labels[cp]
+
+    # ------------------------------------------------------------------ #
+    # Toolbar handlers
+    # ------------------------------------------------------------------ #
+    def _on_preview_changed(self) -> None:
+        self._canvas.set_preview_mode(str(self._combo_preview.currentData() or "mask"))
+
+    def _on_mode_changed(self) -> None:
+        if self._syncing:
+            return
+        cp = self._combo_mode.currentData()
+        if cp is None or not isinstance(cp, ContentProfile):
+            return
+        self._set_content_mode(cp)
+
+    def _on_model_changed(self) -> None:
+        if self._syncing:
+            return
+        self._apply_model_selection()
+
+    def _set_tool(self, tool: str) -> None:
+        self._canvas.set_edit_mode(tool)
+        self._btn_points.setChecked(tool == "points")
+        self._btn_brush.setChecked(tool == "brush")
+
+    def _on_brush_size_changed(self, value: int) -> None:
+        self._canvas.set_brush_size(value)
+
+    def _on_canvas_mask_edited(self) -> None:
+        """Store a brush-painted mask for the current frame."""
+        mask = self._canvas.get_mask()
+        if mask is None:
+            return
+        self._masks[self._current_frame_idx] = mask
+        self._keyframes.add(self._current_frame_idx)
+        self._timeline.set_keyframes(self._keyframes)
+        self._timeline.set_masked_frames(set(self._masks))
+        self._status.showMessage(f"Mask édité au pinceau (frame {self._current_frame_idx})")
+
+    def _goto_keyframe(self, direction: int) -> None:
+        if not self._keyframes:
+            self._status.showMessage("No keyframes yet")
+            return
+        kfs = sorted(self._keyframes)
+        if direction > 0:
+            target = next((k for k in kfs if k > self._current_frame_idx), kfs[0])
+        else:
+            target = next((k for k in reversed(kfs) if k < self._current_frame_idx), kfs[-1])
+        self._set_frame(target)
 
     # ------------------------------------------------------------------ #
     # Hardware
@@ -194,15 +364,68 @@ class MainWindow(QMainWindow):
         self._status.showMessage("Detecting hardware...")
         QApplication.processEvents()
         try:
-            profile = HardwareDetector().detect()
-            rec = SAM2Profiler().recommend(profile, content=ContentProfile.GENERAL)
-            self._config.recommendation = rec
-            self._lbl_hw.setText(rec.user_message.replace("**", ""))
-            self._status.showMessage(f"Hardware OK — {rec.model_size.value} on {rec.device}")
-            logger.info("Hardware detection complete: %s", rec)
+            self._recommend_now()
+            self._sync_combos()
         except Exception as exc:
             logger.error("Hardware detection failed: %s", exc)
             self._status.showMessage(f"HW detection failed: {exc}")
+
+    def _recommend_now(self, force_model: Optional[ModelSize] = None) -> None:
+        """(Re)build the SAM 2 recommendation in real time.
+
+        Re-reads the hardware each time so the freshest *free VRAM* is used —
+        the model proposed is always the most adapted to the current load.
+        """
+        profile = HardwareDetector().detect()
+        rec = SAM2Profiler().recommend(
+            profile, content=self._config.content_profile, force_model=force_model
+        )
+        self._config.recommendation = rec
+        self._lbl_hw.setText(rec.user_message.replace("**", ""))
+        self._status.showMessage(f"Hardware OK — {rec.model_size.value} on {rec.device}")
+        logger.info("Hardware recommendation updated: %s", rec)
+
+    def _selected_force_model(self) -> Optional[ModelSize]:
+        data = self._combo_model.currentData() if hasattr(self, "_combo_model") else None
+        return data if isinstance(data, ModelSize) else None
+
+    def _set_content_mode(self, cp: ContentProfile) -> None:
+        """Switch content mode (anime / human / object) and re-recommend."""
+        self._config.content_profile = cp
+        self._recommend_now(force_model=self._selected_force_model())
+        self._sync_combos()
+        self._status.showMessage(
+            f"Mode {self._content_label(cp)} — "
+            f"modèle {self._config.recommendation.model_size.value}"
+        )
+
+    def _apply_model_selection(self) -> None:
+        """User picked a specific model in the combo (or back to Auto)."""
+        if not hasattr(self, "_combo_model") or self._combo_model is None:
+            return
+        self._recommend_now(force_model=self._selected_force_model())
+        self._sync_combos()
+
+    def _sync_combos(self) -> None:
+        """Align the combo boxes with the active configuration (no loops)."""
+        if not hasattr(self, "_combo_mode") or getattr(self, "_syncing", True):
+            return
+        rec = self._config.recommendation
+        if rec is None:
+            return
+        self._syncing = True
+        try:
+            for i in range(self._combo_mode.count()):
+                if self._combo_mode.itemData(i) == self._config.content_profile:
+                    self._combo_mode.setCurrentIndex(i)
+                    break
+            # If a forced model is no longer the active recommendation, reset
+            # the combo back to "Auto" so the user sees the real state.
+            forced = self._selected_force_model()
+            if forced is not None and forced != rec.model_size:
+                self._combo_model.setCurrentIndex(0)
+        finally:
+            self._syncing = False
 
     # ------------------------------------------------------------------ #
     # Video loading
@@ -227,6 +450,7 @@ class MainWindow(QMainWindow):
             self._points.clear()
             self._timeline.set_duration(self._video_reader.total_frames)
             self._timeline.set_current_frame(0)
+            self._timeline.set_masked_frames(set())
             self._show_current_frame()
             self._status.showMessage(
                 f"Loaded {path.name} — {self._video_reader.width}x{self._video_reader.height} "
@@ -261,22 +485,37 @@ class MainWindow(QMainWindow):
 
     def _toggle_play(self) -> None:
         if self._is_playing:
-            self._play_timer.stop()
-            self._is_playing = False
-            self._status.showMessage("Paused")
-        else:
-            if self._video_reader is None:
-                return
-            interval_ms = int(1000 / self._video_reader.fps) if self._video_reader.fps > 0 else 33
-            self._play_timer.start(interval_ms)
-            self._is_playing = True
-            self._status.showMessage("Playing")
+            self._pause_playback()
+            return
+        if self._video_reader is None:
+            self._btn_play.setChecked(False)
+            return
+        self._play_start = self._current_frame_idx
+        interval_ms = int(1000 / self._video_reader.fps) if self._video_reader.fps > 0 else 33
+        self._play_timer.start(interval_ms)
+        self._is_playing = True
+        self._btn_play.setText("⏸ Pause")
+        self._status.showMessage("Playing")
+
+    def _pause_playback(self) -> None:
+        self._play_timer.stop()
+        self._is_playing = False
+        self._btn_play.setText("▶ Play")
+        self._btn_play.setChecked(False)
+        self._status.showMessage("Paused")
+
+    def _stop_playback(self) -> None:
+        """Stop and return to the frame where playback started."""
+        self._pause_playback()
+        self._set_frame(self._play_start)
+        self._status.showMessage("Stopped")
 
     def _on_play_tick(self) -> None:
         if self._video_reader is None:
+            self._pause_playback()
             return
         if self._current_frame_idx + 1 >= self._video_reader.total_frames:
-            self._toggle_play()
+            self._pause_playback()
             return
         self._current_frame_idx += 1
         self._show_current_frame()
@@ -349,6 +588,7 @@ class MainWindow(QMainWindow):
             self._keyframes.add(self._current_frame_idx)
             self._canvas.set_mask(best.mask)
             self._timeline.set_keyframes(self._keyframes)
+            self._timeline.set_masked_frames(set(self._masks))
             self._status.showMessage(f"Mask generated (score={best.score:.3f})")
         else:
             self._status.showMessage("No mask found")
@@ -356,19 +596,24 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
     # Propagation (video predictor)
     # ------------------------------------------------------------------ #
-    def _run_propagation(self) -> None:
+    def _run_propagation(self, direction: int = 1) -> None:
         if self._video_reader is None:
             QMessageBox.warning(self, "No video", "Open a video first.")
             return
         if self._config.recommendation is None:
             QMessageBox.warning(self, "No model", "Run hardware detection first.")
             return
-        if not self._points and self._current_frame_idx not in self._masks:
-            QMessageBox.warning(self, "No prompt", "Add points or segment current frame first.")
+        if not self._points:
+            QMessageBox.warning(self, "No prompt", "Add correction points on this frame first.")
             return
         if self._propagation_worker is not None and self._propagation_worker.isRunning():
             QMessageBox.warning(self, "Busy", "A propagation is already running.")
             return
+
+        # Partial segment: from the current frame to the next (forward) or
+        # previous (backward) keyframe — leaves other segments untouched.
+        start, target = self._segment_bounds(direction)
+        max_frames = abs(target - start) + 1 if start != target else None
 
         # NOTE: the heavy work (frame extraction, model load, tracking) runs
         # inside the worker thread — the GUI thread only wires signals here.
@@ -377,16 +622,37 @@ class MainWindow(QMainWindow):
         )
         self._propagation_worker.set_task(
             str(self._video_reader.path),
-            start_frame=self._current_frame_idx,
+            start_frame=start,
             points=list(self._points) or None,
             total_frames=self._video_reader.total_frames,
         )
+        self._propagation_worker.set_range(max_frames=max_frames, reverse=direction < 0)
         self._propagation_worker.progress.connect(self._on_worker_progress)
         self._propagation_worker.frame_ready.connect(self._on_propagation_frame_ready)
         self._propagation_worker.finished.connect(self._on_propagation_finished)
-        self._status.showMessage("Propagating...")
+        self._status.showMessage(
+            f"Propagating {'←' if direction < 0 else '→'} from {start} to {target}... "
+            f"({max_frames if max_frames else 'end'} frame(s))"
+        )
         self.setEnabled(False)
         self._propagation_worker.start()
+
+    def _segment_bounds(self, direction: int) -> tuple[int, int]:
+        """Return (start, target) interval for a partial re-propagation.
+
+        Forward:  current frame → frame just before the next keyframe (or end).
+        Backward: current frame → frame just after the previous keyframe (or 0).
+        """
+        cur = self._current_frame_idx
+        n = self._video_reader.total_frames if self._video_reader else cur + 1
+        kfs = sorted(self._keyframes)
+        if direction >= 0:
+            nxt = next((k for k in kfs if k > cur), None)
+            target = (nxt - 1) if nxt is not None else n - 1
+            return cur, max(target, cur)
+        prv = next((k for k in reversed(kfs) if k < cur), None)
+        target = (prv + 1) if prv is not None else 0
+        return cur, min(target, cur)
 
     def _on_worker_progress(self, stage: str, current: int, total: int) -> None:
         if total > 0:
@@ -399,6 +665,7 @@ class MainWindow(QMainWindow):
         self._masks[frame_idx] = mask
         self._keyframes.add(frame_idx)
         self._timeline.set_keyframes(self._keyframes)
+        self._timeline.set_masked_frames(set(self._masks))
         if frame_idx == self._current_frame_idx:
             self._canvas.set_mask(mask)
 
@@ -415,6 +682,7 @@ class MainWindow(QMainWindow):
             self._masks[frame_idx] = mask
             self._keyframes.add(frame_idx)
         self._timeline.set_keyframes(self._keyframes)
+        self._timeline.set_masked_frames(set(self._masks))
         self._show_current_frame()
         n_frames = len(set(f for f, _, _, _ in results))
         self._status.showMessage(f"Propagation complete — {n_frames} frames masked")

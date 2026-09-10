@@ -15,9 +15,12 @@ logger = logging.getLogger(__name__)
 class ContentProfile(Enum):
     """Semantic content categories influencing SAM 2 parameters."""
 
-    ANIME = "anime"
-    HUMAN = "human"
-    GENERAL = "general"
+    ANIME = "anime"  # anime / AMV: crisp lines, flat shading
+    HUMAN = "human"  # human subjects: hair edges, fine details
+    OBJECT = "object"  # generic objects / products
+
+    # Backward-compatible alias (previously named "general").
+    GENERAL = OBJECT
 
 
 class ModelSize(Enum):
@@ -48,14 +51,27 @@ class SAM2Recommendation:
 
 
 class SAM2Profiler:
-    """Map hardware capabilities to optimal SAM 2 settings."""
+    """Map hardware capabilities to safe, *conservative* SAM 2 settings.
 
+    Priority is GPU stability over raw speed: a model tier is only
+    recommended when the free VRAM leaves ~35 % headroom. This avoids pushing
+    modest cards to 100 % utilisation, which can overheat the GPU and crash
+    the driver (black screen on laptops/desktops with weak cooling).
+    """
+
+    # Minimum VRAM REQUIRED (MB) to run a tier *comfortably* in video
+    # propagation mode (weights + activations + SAM 2's per-frame memory
+    # bank). Deliberately higher than the raw checkpoint size on disk.
     _VRAM_THRESHOLDS: dict[ModelSize, int] = {
-        ModelSize.TINY: 4_096,
-        ModelSize.SMALL: 6_144,
-        ModelSize.BASE_PLUS: 8_192,
-        ModelSize.LARGE: 12_288,
+        ModelSize.TINY: 2_800,
+        ModelSize.SMALL: 5_000,
+        ModelSize.BASE_PLUS: 8_500,
+        ModelSize.LARGE: 13_500,
     }
+
+    # Only recommend a tier when free VRAM × this factor clears the
+    # threshold above (keeps ~35 % of VRAM free at runtime).
+    _VRAM_SAFETY_FACTOR: float = 0.65
 
     _CONFIG_MAP: dict[ModelSize, str] = {
         ModelSize.LARGE: "sam2.1_hiera_l.yaml",
@@ -76,19 +92,24 @@ class SAM2Profiler:
     }
 
     _PROFILE_PRESETS: dict[ContentProfile, dict[str, float | int]] = {
+        # Anime / AMV: crisp outlines, flat colours — thinner line art needs
+        # a slightly lower IoU bar, long clips deserve a generous memory bank.
         ContentProfile.ANIME: {
             "num_mask_tokens": 3,
             "pred_iou_thresh": 0.82,
             "stability_score_offset": 0.8,
             "max_frames_in_memory": 64,
         },
+        # Human: hair / skin edges need extra mask tokens and a high IoU bar
+        # so partial / wobbly selections get rejected.
         ContentProfile.HUMAN: {
-            "num_mask_tokens": 3,
-            "pred_iou_thresh": 0.88,
+            "num_mask_tokens": 4,
+            "pred_iou_thresh": 0.90,
             "stability_score_offset": 1.0,
             "max_frames_in_memory": 48,
         },
-        ContentProfile.GENERAL: {
+        # Generic objects / products: intermediate tolerance, 3 tokens.
+        ContentProfile.OBJECT: {
             "num_mask_tokens": 3,
             "pred_iou_thresh": 0.86,
             "stability_score_offset": 0.9,
@@ -139,11 +160,30 @@ class SAM2Profiler:
         if gpu is None or gpu.total_vram_mb == 0:
             logger.warning("No GPU detected — falling back to TINY on CPU")
             return ModelSize.TINY
-        vram = gpu.available_vram_mb
-        effective = int(vram * 0.8)
+        # Free VRAM is the live signal; total VRAM is a fallback when the
+        # driver does not report free memory (DirectML, some WSL setups).
+        available = gpu.available_vram_mb or gpu.total_vram_mb
+        # Conservative headroom: we must stay comfortably below the card's
+        # limit. The previous "* 0.8" heuristic recommended the largest tier
+        # that *barely* fit -> GPU at 100 % -> overheating -> driver crash
+        # (black screen) on modestly-cooled cards.
+        effective = int(available * self._VRAM_SAFETY_FACTOR)
+        logger.debug(
+            "Pick model: %d MB free -> %d MB effective (factor x%.2f)",
+            available,
+            effective,
+            self._VRAM_SAFETY_FACTOR,
+        )
         for size in (ModelSize.LARGE, ModelSize.BASE_PLUS, ModelSize.SMALL, ModelSize.TINY):
             if effective >= self._VRAM_THRESHOLDS[size]:
+                logger.info(
+                    "Recommended %s (threshold %d MB, effective %d MB)",
+                    size.value,
+                    self._VRAM_THRESHOLDS[size],
+                    effective,
+                )
                 return size
+        logger.info("Free VRAM below the smallest tier — falling back to TINY")
         return ModelSize.TINY
 
     @staticmethod
@@ -162,7 +202,12 @@ class SAM2Profiler:
     def _build_user_message(
         model: ModelSize, backend: Backend, amp: bool, gpu: Optional[GPUInfo]
     ) -> str:
-        parts = [f"Modèle recommandé : **{model.value}**", f"Backend : **{backend.value}**"]
+        # The model pick is deliberately conservative: staying well under the
+        # GPU's limits prevents overheating (black screen) on modest cards.
+        parts = [
+            f"Modèle recommandé : **{model.value}** (choix conservateur, stabilité GPU)",
+            f"Backend : **{backend.value}**",
+        ]
         if gpu:
             parts.append(f"GPU détecté : {gpu.name} ({gpu.total_vram_mb} MB VRAM)")
         else:

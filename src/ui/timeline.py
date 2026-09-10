@@ -25,6 +25,7 @@ class Timeline(QWidget):
         self._total_frames = 0
         self._current_frame = 0
         self._keyframes: set[int] = set()
+        self._masked_frames: set[int] = set()
         self._dragging = False
 
     # ------------------------------------------------------------------ #
@@ -46,6 +47,11 @@ class Timeline(QWidget):
         self._keyframes.add(idx)
         self.update()
 
+    def set_masked_frames(self, frames: set[int]) -> None:
+        """Highlight every frame that already has a mask (segment view)."""
+        self._masked_frames = set(frames)
+        self.update()
+
     # ------------------------------------------------------------------ #
     # Painting
     # ------------------------------------------------------------------ #
@@ -58,8 +64,16 @@ class Timeline(QWidget):
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "No video")
             return
 
-        # Draw keyframe ticks
-        pen = QPen(QColor(120, 120, 120))
+        # Draw masked-frame band (blue = frames already processed)
+        if self._masked_frames:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(60, 140, 220)))
+            for mf in self._masked_frames:
+                x = int((mf / self._total_frames) * w)
+                painter.drawRect(x, 0, 2, h)
+
+        # Draw keyframe ticks (gold, over the band)
+        pen = QPen(QColor(230, 180, 40))
         painter.setPen(pen)
         for kf in self._keyframes:
             x = int((kf / self._total_frames) * w)

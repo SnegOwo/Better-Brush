@@ -30,10 +30,30 @@ python -m src.main
 The first segmentation/propagation downloads the SAM 2.1 checkpoint
 (~150 MB for `tiny`) into `checkpoints/`.
 
+## Editing workflow
+
+- **Transport** — `▶ Play / ⏸ Pause / ⏹ Stop` buttons (or `P` key) preview the
+  raw video or the cut-out result in real time.
+- **Preview modes** — toggle between *mask overlay*, *cut-out on checkerboard*
+  (exactly what will be exported) and *raw video*.
+- **Content modes** — *Anime / AMV*, *Humain* and *Objet* each ship tuned SAM 2
+  parameters (mask tokens, IoU threshold, stability offset, memory bank).
+- **Model** — *Auto* always proposes the model that best fits the current free
+  VRAM (re-detected live); you can still force `tiny / small / base_plus / large`.
+- **Frame-by-frame correction** — navigate with arrows, re-segment with points,
+  or paint directly with the **Pinceau** tool (`B`, size `[` `]` / Ctrl+wheel,
+  `Gomme` checkbox to erase). Painted masks are stored as the frame's mask;
+  the blue band in the timeline shows which frames are already masked.
+- **Segment re-propagation** — `Propager ← / →` re-tracks only the range
+  between two correction keyframes (◀Key / Key▶), leaving the rest intact.
+
 ## How it works
 
 - **Hardware detection** (`src/hardware/`) picks the best backend
-  (CUDA > DirectML > CPU) and recommends a SAM 2.1 model size for your VRAM.
+  (CUDA > DirectML > CPU) and *conservatively* recommends a SAM 2.1 model
+  size for your VRAM — it deliberately keeps ~35 % of VRAM headroom so the
+  GPU is never pushed to its limit (which crashed drivers / caused black
+  screens on modest cards).
 - **Video pipeline** (`src/processing/`): OpenCV `VideoReader` + LRU `FrameBuffer`;
   `init_video()` transparently extracts frames to a JPEG folder
   (`.better_brush_frames/` next to the video) because SAM 2's video loader only
