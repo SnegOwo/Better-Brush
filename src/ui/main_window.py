@@ -1692,6 +1692,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Busy", "An export is already running.")
             return
 
+        # Immediate visual feedback between the dialog and the progress window.
+        self._loading_overlay.show_message("Preparing export", "Reading frames…")
+
         fmt = settings["format"]
         base_name = settings.get("file_name", "output")
         output_dir = settings.get("output_dir", Path.cwd() / "exports")
@@ -1726,6 +1729,7 @@ class MainWindow(QMainWindow):
                 jobs.append((combined, base_name))
 
         if not jobs:
+            self._loading_overlay.hide_message()
             QMessageBox.warning(self, "No masks", "Nothing to export.")
             return
 
@@ -1759,6 +1763,7 @@ class MainWindow(QMainWindow):
         if not self._export_jobs:
             self._finish_exports()
             return
+        self._loading_overlay.hide_message()
         masks, job_name = self._export_jobs.pop(0)
         n_total = len(masks)
         dlg = self._export_progress_dlg
@@ -1811,6 +1816,7 @@ class MainWindow(QMainWindow):
             self._finish_exports()
 
     def _finish_exports(self) -> None:
+        self._loading_overlay.hide_message()
         dlg = self._export_progress_dlg
         if dlg is not None:
             has_error = any(kind == "error" for kind, _ in self._export_results)
