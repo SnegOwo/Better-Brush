@@ -41,3 +41,6 @@ htmlcov/
 # App runtime caches
 exports/
 .better_brush_frames/
+
+# Bundled binaries (kept out of the repo, pulled in by the spec at build time)
+For-Agent/

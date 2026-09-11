@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -16,13 +17,27 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+def _resolve_ffmpeg() -> str:
+    """Prefer the ffmpeg shipped inside the app bundle, then system PATH."""
+    if getattr(sys, "frozen", False):
+        bases = [
+            Path(getattr(sys, "_MEIPASS", "") or ""),
+            Path(sys.executable).resolve().parent,
+        ]
+        for base in bases:
+            for name in ("ffmpeg.exe", "ffmpeg"):
+                if (base / name).is_file():
+                    return str(base / name)
+    return shutil.which("ffmpeg") or "ffmpeg"
+
+
 class Exporter:
     """Handle export of mask sequences to PNG alpha and video via FFmpeg."""
 
     def __init__(self, output_dir: Optional[Path] = None) -> None:
         self.output_dir = output_dir or Path.cwd() / "exports"
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+        self._ffmpeg_path = _resolve_ffmpeg()
 
     # ------------------------------------------------------------------ #
     # PNG sequence
@@ -84,7 +99,9 @@ class Exporter:
         AAC, chosen for mp4/mov compatibility).
         """
         if not self._ffmpeg_available():
-            raise RuntimeError("ffmpeg not found in PATH")
+            raise RuntimeError(
+                "ffmpeg not found — reinstall Better Brush or add ffmpeg to PATH"
+            )
 
         if fmt == "prores":
             codec, pix_fmt, ext = "prores_ks", "yuva444p10le", "mov"

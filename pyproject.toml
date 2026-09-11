@@ -9,7 +9,8 @@ description = "Professional rotoscoping desktop app powered by SAM 2"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [{ name = "SnegOwo" }]
+authors = [{ name = "Sneg", email = "dev@sneg.dev" }]
+maintainers = [{ name = "Sneg HQ, a company of Lugunica", email = "dev@sneg.dev" }]
 keywords = ["rotoscoping", "sam2", "segment-anything", "video", "masks"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -47,7 +48,8 @@ directml = ["torch-directml>=0.2.0; sys_platform == 'win32'"]
 better-brush = "src.core.app:run"
 
 [project.urls]
-Homepage = "https://github.com/SnegOwo/Better-Brush"
+Homepage = "https://sneg.dev"
+Developer = "https://sneg.dev"
 Repository = "https://github.com/SnegOwo/Better-Brush"
 Issues = "https://github.com/SnegOwo/Better-Brush/issues"
 SAM2 = "https://github.com/facebookresearch/sam2"

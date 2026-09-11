@@ -35,7 +35,7 @@ from src.core.config import AppConfig
 from src.core.project import PROJECT_EXT, ObjectRecord, ProjectData, ProjectManager
 from src.core.scene import OBJECT_PALETTE, SceneObject, next_object_color, next_object_name
 from src.core.undo import UndoManager
-from src.ui.assets import logo_path
+from src.ui.assets import app_icon, logo_path
 from src.ui.components.tutorial_dialog import TutorialDialog
 from src.ui.components.welcome_dialog import WelcomeDialog
 from src.hardware import ContentProfile, HardwareDetector, ModelSize, SAM2Profiler
@@ -201,10 +201,10 @@ class MainWindow(QMainWindow):
         # Loading overlay covers the whole central area during long tasks
         self._loading_overlay = LoadingOverlay(self.centralWidget())
 
-        # Branding: window/taskbar icon from the logo asset
-        logo = logo_path()
-        if logo.is_file():
-            self.setWindowIcon(QIcon(str(logo)))
+        # Branding: window/taskbar icon from the bundled app icon
+        icon_path = app_icon()
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
 
         # Hardware recommendation on startup
         self._auto_detect_hardware()
@@ -999,12 +999,12 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About Better Brush",
-            "Better Brush\n\n"
+            "Better Brush v0.1.0 (beta)\n\n"
             "AI-powered rotoscoping with SAM 2.\n"
             "Import a video, prompt SAM 2 with points, propagate the mask "
             "across the timeline, refine with the brush, then export.\n\n"
-            "Save your session as a .bbproj project (Ctrl+S) to keep points "
-            "and masks for later.",
+            "Solo developer: Sneg — https://sneg.dev\n"
+            "Sneg HQ, a company of Lugunica.",
         )
 
     # ──────────────────────────────────────────────────────────────────────

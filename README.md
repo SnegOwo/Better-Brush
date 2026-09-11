@@ -1,38 +1,61 @@
-# Better Brush
+<p align="center">
+  <img src="assets/icons/LogoBetterBrush.png" alt="Better Brush" width="128" />
+</p>
 
-AI-powered rotoscoping desktop application built with PySide6 and SAM 2 (Segment Anything Model 2).
+<h1 align="center">Better Brush</h1>
 
-Click on a video frame, let SAM 2 generate a mask, propagate it across the timeline, correct with the brush tool, and export production-ready alpha mattes.
+<p align="center">
+  <b>AI-powered rotoscoping desktop app</b> · PySide6 + SAM 2
+  <br/>
+  Click. Segment. Propagate. Correct. Export.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BUSL--1.1-blue" alt="License: BUSL-1.1" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/version-0.1.0--beta-orange" alt="Version: 0.1.0-beta" /></a>
+  <img src="https://img.shields.io/badge/platform-Windows-informational" alt="Platform: Windows" />
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python: 3.11+" />
+  <img src="https://img.shields.io/badge/framework-PySide6-9cf" alt="PySide6" />
+</p>
+
+---
+
+Better Brush turns a video clip into **production-ready alpha mattes**. Point at
+your subject, let SAM 2 generate the mask, propagate it across the timeline, fix
+edges with the brush, and export transparent ProRes 4444 / PNG sequences — in one
+desktop app.
+
+---
 
 ## Features
 
-- **Point prompting** -- left-click to include, right-click to exclude. SAM 2 generates masks in real time.
-- **Brush correction** -- paint or erase masks frame-by-frame when SAM 2 misses edges.
-- **Video propagation** -- propagate masks across the entire video or between correction keyframes.
-- **Content-aware presets** -- Anime, Human, and Object modes tune SAM 2 parameters (IoU threshold, mask tokens, stability) for each use case.
-- **Auto model selection** -- detects your GPU VRAM and picks the best SAM 2.1 model size with conservative headroom.
-- **Export** -- professional export dialog (Ctrl+E): PNG alpha sequences, ProRes 4444, QuickTime Animation, or H.264 (MP4), with resolution scaling and size estimates.
-- **Include original audio** -- checkbox in the export dialog muxes the source video's audio track into your export (video formats only).
-- **Timeline range selection** -- Shift+drag on the timeline to draw/exact range, or use `I` / `O` to set in/out points at the playhead and `X` to clear. The selection drives the export range and is also remembered in the export dialog (Ctrl+E).
-- **Accelerated inference** -- on NVIDIA GPUs SAM 2 runs mixed-precision (bfloat16) with cuDNN/TF32 speedups, and reuses its internal state so correcting a frame and propagating again doesn't re-analyze the video.
-- **Project files** -- save your whole session as a `.bbproj` (Ctrl+S): the video reference, every point, keyframe, mask and view state. Reopen it later and keep working.
-- **Welcome screen** -- opens on launch with your recent projects plus quick "Start Blank" / "Import Video" actions, and a short tutorial walks new users through the workflow.
-- **Preview modes** -- overlay, cutout on checkerboard, or raw video.
-- **Hardware detection** -- CUDA, DirectML, or CPU with live GPU info.
-- **Drag and drop** -- drop a video file anywhere on the app to open it.
-- **Keyboard shortcuts** -- Space or P (play/pause), B (toggle brush/points), arrows (navigate), `[` `]` (brush size), Delete (remove selected point), `I`/`O`/`X` (timeline export range), Ctrl+S (save project).
+| | Capability |
+|---|---|
+| **Point prompting** | left-click to include, right-click to exclude; SAM 2 masks in real time |
+| **Brush correction** | paint or erase masks frame-by-frame |
+| **Video propagation** | across the whole clip or between correction keyframes |
+| **Content presets** | Anime / Human / Object tune SAM 2 thresholds per use case |
+| **Auto model selection** | detects VRAM and picks the best SAM 2.1 model with safe headroom |
+| **Accelerated inference** | bf16 + TF32/CuDNN on NVIDIA, cached predictor state |
+| **Pro export dialog** | Ctrl+E — PNG alpha, ProRes 4444, QuickTime Animation, H.264, audio mux |
+| **Project files** | `.bbproj` saves every point, keyframe, mask and view state |
+| **Hardware detection** | CUDA, DirectML, or CPU with live GPU info |
+| **Multi-object scenes** | several subjects, each its own mask layer; export combined / single / separate |
+| **Undo / Redo** | full history for points and brush strokes |
+| **Zoom & pan** | Ctrl+scroll to zoom, middle-drag to pan, from any tool |
+| **Keyboard shortcuts** | Space/P play, B brush/points, arrows navigate, `[` `]` brush size, Delete remove point, `I`/`O`/`X` range, Ctrl+S save, Ctrl+E export |
 
 ## Workflow
 
 ```
-Open Video  ->  Click Subject  ->  Segment  ->  Propagate  ->  Correct  ->  Export
+Open Video  →  Click Subject  →  Segment  →  Propagate  →  Correct  →  Export
 ```
 
 ## Requirements
 
 - Python 3.11+
-- PySide6 >= 6.7.0
-- PyTorch >= 2.3.0 (CUDA recommended)
+- PySide6 ≥ 6.7.0
+- PyTorch ≥ 2.3.0 (CUDA recommended)
 - SAM 2 (installed from GitHub)
 - FFmpeg (for video export)
 
@@ -77,10 +100,7 @@ pip install torch-directml
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v                       # all tests
-python -m tests.test_brush_editing               # brush + toolbar wiring
-python -m tests.test_hardware                     # hardware detection
-python -m tests.test_gui_smoke                    # full GUI smoke test (offscreen)
+python -m pytest tests/ -v
 ```
 
 ## Architecture
@@ -103,21 +123,26 @@ All heavy processing (SAM 2 inference, propagation, export) runs in QThread work
 - **Hardware detection** picks the best backend (CUDA > DirectML > CPU) and conservatively recommends a SAM 2.1 model size, keeping ~35% VRAM headroom to prevent GPU overheat and driver crashes.
 - **Video pipeline** uses OpenCV for reading and an LRU frame buffer for caching. SAM 2's video predictor works with JPEG frame extraction.
 - **Workers** handle segmentation, propagation, and export off the main thread with live progress reporting.
-- **Inference speed** -- CUDA sessions enable cuDNN benchmark mode, TF32 matmul, and bfloat16 autocast (supported by RTX 30-series+ GPUs); fall back to full precision automatically on older cards. The video predictor state is cached per source file, so repeat propagations on the same clip skip re-initialization.
+- **Inference speed** — CUDA sessions enable cuDNN benchmark mode, TF32 matmul, and bfloat16 autocast (supported by RTX 30-series+ GPUs); fall back to full precision automatically on older cards. The video predictor state is cached per source file, so repeat propagations on the same clip skip re-initialization.
 - **Export** dialog produces PNG sequences with alpha channels, transparent video via ffmpeg (ProRes 4444 with qtrle fallback), or H.264 MP4. With "Include Original Audio" checked, ffmpeg re-muxes the source audio (AAC, 192 kbps) without re-encoding the video.
 
 ## Packaging
 
-Build a standalone Windows executable (does not modify the repo, outputs to `dist/`):
+Build a standalone, self-contained Windows bundle (FFmpeg, PySide6, PyTorch and
+SAM 2 are all shipped inside — end users install nothing extra):
 
 ```bash
 pip install pyinstaller
-pyinstaller better_brush.spec
+pyinstaller --clean better_brush.spec
 ```
+
+Output lands in `dist/BetterBrush/` as a ready-to-run folder (`BetterBrush.exe`).
 
 ## License
 
 Business Source License 1.1 (BUSL-1.1) — see [LICENSE](LICENSE).
+
+© 2026 Sneg · solo developer — [sneg.dev](https://sneg.dev) · Sneg HQ, a company of Lugunica.
 
 Non-production, personal, evaluation, and educational use is free.
 Commercial production use requires a license from the Licensor.
