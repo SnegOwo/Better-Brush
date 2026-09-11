@@ -301,11 +301,13 @@ class SAM2Manager:
         """
         self.load_video_predictor()
         src = Path(video_path)
-        if self._video_state is not None and self._current_video_path == src:
-            # Re-use the already-extracted frames + memory bank: iterative
-            # "correct a frame, propagate again" workflows skip re-init cost.
-            logger.info("Reusing cached video state for %s", src)
-            return self._video_state
+        # NOTE: always build a FRESH video state. SAM 2's video predictor is
+        # single-supervisor: every object is tracked as ``obj_id=1`` inside one
+        # state, so reusing a cached state would make the next object's
+        # propagation continue from the previous object's memory bank (its
+        # masks would come out as the old object's silhouette). The expensive
+        # part — JPEG frame extraction — is already cached via
+        # ``_ensure_frames_dir``, so re-init only rebuilds the state structure.
         if src.is_dir():
             frames_dir = src
         else:

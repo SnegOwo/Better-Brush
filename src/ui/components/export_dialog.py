@@ -80,7 +80,29 @@ class ExportDialog(QDialog):
         self.setWindowTitle("Export")
         self.setModal(True)
         self.setMinimumWidth(520)
-        self.setStyleSheet("background: #202024;")
+        self.setStyleSheet(
+            """
+            background: #202024;
+            QRadioButton { color: #c4c4cc; background: transparent; }
+            QRadioButton::indicator {
+                width: 13px; height: 13px; border: 1px solid #555560;
+                border-radius: 7px; background: #1a1a1e;
+            }
+            QRadioButton::indicator:hover { border-color: #8b8b94; }
+            QRadioButton::indicator:checked {
+                border-color: #00b4f0; background: #00b4f0;
+            }
+            QCheckBox { color: #c4c4cc; background: transparent; }
+            QCheckBox::indicator {
+                width: 14px; height: 14px; border: 1px solid #555560;
+                border-radius: 3px; background: #1a1a1e;
+            }
+            QCheckBox::indicator:checked { background: #00b4f0; border-color: #00b4f0; }
+            QCheckBox:disabled { color: #3a3a42; }
+            QComboBox:disabled { color: #3a3a42; background: #171719; }
+            QPushButton:disabled { color: #3a3a42; }
+            """
+        )
 
         self._build_ui()
         self._update_estimates()
@@ -185,9 +207,12 @@ class ExportDialog(QDialog):
         root.addLayout(frame_row)
 
         # ── Background (H.264 only — no alpha in MP4) ──────────────────────
-        bg_row = QHBoxLayout()
-        bg_row.setSpacing(8)
-        bg_row.addWidget(self._label("Background:"))
+        self._bg_widget = QWidget()
+        self._bg_widget.setStyleSheet("background: transparent;")
+        bg_inner = QHBoxLayout(self._bg_widget)
+        bg_inner.setContentsMargins(0, 0, 0, 0)
+        bg_inner.setSpacing(8)
+        bg_inner.addWidget(self._label("Background:"))
         self._combo_bg = QComboBox()
         for name, _color in BACKGROUNDS:
             self._combo_bg.addItem(name, None if name == "none" else _color)
@@ -195,16 +220,15 @@ class ExportDialog(QDialog):
             "MP4 has no alpha channel. Pick a vibrant color as the backdrop so "
             "you can chroma-key / ultra-key the clip in your editor."
         )
-        bg_row.addWidget(self._combo_bg)
-        self._lbl_bg_hint = QLabel("for chroma-key use")
-        self._lbl_bg_hint.setStyleSheet(
+        bg_inner.addWidget(self._combo_bg)
+        lbl_hint = QLabel("for chroma-key use")
+        lbl_hint.setStyleSheet(
             "color: #555560; font-size: 10px; background: transparent;"
         )
-        bg_row.addWidget(self._lbl_bg_hint, alignment=Qt.AlignmentFlag.AlignLeft)
-        bg_row.addStretch()
-        root.addLayout(bg_row)
-        self._combo_bg.setEnabled(False)
-        self._lbl_bg_hint.setVisible(False)
+        bg_inner.addWidget(lbl_hint, alignment=Qt.AlignmentFlag.AlignLeft)
+        bg_inner.addStretch()
+        root.addWidget(self._bg_widget)
+        self._bg_widget.setVisible(False)
 
         # ── Original audio ────────────────────────────────────────────────
         root.addSpacing(4)
@@ -388,9 +412,7 @@ class ExportDialog(QDialog):
     def _on_format_changed(self) -> None:
         fmt = self._combo_format.currentData() or "prores"
         self._chk_audio.setEnabled(fmt != "png")
-        is_h264 = fmt == "h264"
-        self._combo_bg.setEnabled(is_h264)
-        self._lbl_bg_hint.setVisible(is_h264)
+        self._bg_widget.setVisible(fmt == "h264")
         self._update_estimates()
 
     def _on_preset_changed(self) -> None:
