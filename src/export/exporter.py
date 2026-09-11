@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+
+from src.core import licensing
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,7 @@ class Exporter:
         cancel_event: Optional[threading.Event] = None,
         audio_source: Optional[Path] = None,
         background: Optional[tuple[int, int, int]] = None,
+        watermark: Optional[bool] = None,
     ) -> Path:
         """Compose frames + masks into a video written directly into output_dir.
 
@@ -101,11 +104,37 @@ class Exporter:
         ``background`` (an RGB tuple) replaces the transparent areas with a
         solid color and disables alpha — for H.264 MP4 exports that will be
         chroma-keyed (green/blue screen) by editors without alpha support.
+
+        ``watermark`` defaults to the edition: Lite exports carry a small
+        "Better Brush" watermark; Pro exports are clean.
         """
         if not self._ffmpeg_available():
             raise RuntimeError(
                 "ffmpeg not found — reinstall Better Brush or add ffmpeg to PATH"
             )
+
+        pro = licensing.is_pro()
+
+        # ── Lite: silently downgrade Pro codecs / sizes / audio ──────────
+        if not pro:
+            if fmt != "h264":
+                logger.info("Lite edition: forcing H.264 codec (required codec is Pro-only)")
+                fmt = "h264"
+            if resolution:
+                w, h = resolution
+                capped = (
+                    min(int(w), licensing.LITE_MAX_WIDTH),
+                    min(int(h), licensing.LITE_MAX_HEIGHT),
+                )
+                if capped != (int(w), int(h)):
+                    logger.info(
+                        "Lite edition: scaling %sx%s -> %sx%s",
+                        w, h, *capped,
+                    )
+                resolution = capped
+            audio_source = None  # original-audio muxing is a Pro feature
+        if watermark is None:
+            watermark = not pro
 
         if fmt == "prores":
             codec, pix_fmt, ext = "prores_ks", "yuva444p10le", "mov"
@@ -133,6 +162,8 @@ class Exporter:
                 if mask is None:
                     mask = np.ones(frame.shape[:2], dtype=bool)
                 rgba = self._compose_rgba(frame, mask, background=background)
+                if watermark:
+                    rgba = self._draw_watermark(rgba)
                 Image.fromarray(rgba, mode="RGBA").save(tmp_path / f"frm_{idx:06d}.png")
                 if on_progress is not None:
                     on_progress(i + 1, total)
@@ -255,6 +286,36 @@ class Exporter:
         rgba[:, :, :3] = rgb
         rgba[:, :, 3] = (mask * 255).astype(np.uint8)
         return rgba
+
+    @staticmethod
+    def _draw_watermark(rgba: np.ndarray) -> np.ndarray:
+        """Burn a small 'Better Brush · Lite' mark into the bottom-right.
+
+        Text is drawn over the subject only (masked pixels), so transparent
+        exports keep a clean alpha channel while every Lite video still
+        carries a modest, non-destructive watermark.
+        """
+        h, w = rgba.shape[:2]
+        if h < 60 or w < 120:
+            return rgba  # too small to watermark legibly
+        img = Image.fromarray(rgba, mode="RGBA")
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        size = max(9, min(14, h // 60))
+        try:
+            font = ImageFont.truetype("arial.ttf", size)
+        except Exception:  # noqa: BLE001 - fall back to the default bitmap font
+            font = ImageFont.load_default()
+        text = "Better Brush"
+        text_w = draw.textlength(text, font=font)
+        pad = max(6, h // 40)
+        top = h - size - pad
+        left = w - int(text_w) - pad - 8
+        shadow = (0, 0, 0, 160)
+        white = (235, 235, 238, 200)
+        draw.text((left + 1, top + 1), text, font=font, fill=shadow)
+        draw.text((left, top), text, font=font, fill=white)
+        return np.asarray(Image.alpha_composite(img, overlay), dtype=np.uint8)
 
     def _ffmpeg_available(self) -> bool:
         return shutil.which(self._ffmpeg_path) is not None

@@ -41,11 +41,13 @@ from src.ui.components.welcome_dialog import WelcomeDialog
 from src.hardware import ContentProfile, HardwareDetector, ModelSize, SAM2Profiler
 from src.models.sam2_manager import MaskResult, PointPrompt, SAM2Manager
 from src.processing.frame_buffer import FrameBuffer
+from src.core import constants, licensing
 from src.processing.inference_worker import InferenceWorker, PropagationWorker
 from src.processing.video_reader import VideoReader
 from src.ui.timeline import Timeline
 from src.ui.video_canvas import VideoCanvas
 from src.ui.components import CollapsibleSection, Separator
+from src.ui.components.activation_dialog import ActivationDialog
 from src.ui.components.export_dialog import ExportDialog
 from src.ui.components.export_progress import ExportProgressDialog
 from src.ui.components.loading_overlay import LoadingOverlay
@@ -298,12 +300,19 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(redo_act)
 
         help_menu = menubar.addMenu("&Help")
+
+        self._act_activate_pro = QAction("&Activate Pro…", self)
+        self._act_activate_pro.triggered.connect(self._show_activation)
+        help_menu.addAction(self._act_activate_pro)
+
         tutorial_act = QAction("&Quick Tutorial", self)
         tutorial_act.triggered.connect(lambda: self._show_tutorial(parent=self))
         help_menu.addAction(tutorial_act)
         about_act = QAction("&About Better Brush", self)
         about_act.triggered.connect(self._on_about)
         help_menu.addAction(about_act)
+
+        self._on_edition_changed()  # sync the Pro action label on startup
 
     def _setup_central_widget(self) -> None:
         central = QWidget()
@@ -1003,10 +1012,35 @@ class MainWindow(QMainWindow):
         elif kind == "open" and path is not None:
             self._open_project(path)
 
+    def _show_activation(self) -> None:
+        """Open the Activate Pro window (Help → Activate Pro…)."""
+        dlg = getattr(self, "_activation_dlg", None)
+        if dlg is None:
+            dlg = ActivationDialog(self)
+            self._activation_dlg = dlg
+            dlg.changed.connect(self._on_edition_changed)
+        dlg._refresh()
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def _on_edition_changed(self) -> None:
+        """Edition changed — refresh Pro-sensitive UI state."""
+        self._act_activate_pro.setText(
+            "Activate Pro…" if not licensing.is_pro() else "Pro edition — licensed"
+        )
+        dlg = getattr(self, "_library_dialog", None)
+        if dlg is not None and hasattr(dlg, "panel"):
+            dlg.panel._apply_edition()
+
     def _show_tutorial(self, parent: Optional[QWidget] = None) -> None:
         TutorialDialog(parent or self).exec()
 
     def _on_about(self) -> None:
+        if licensing.is_pro():
+            edition = "Pro (licensed to %s)" % (licensing.current_licensee() or "you")
+        else:
+            edition = "Lite (free) — activate Pro for 4K, ProRes/Animation, audio & no watermark"
         QMessageBox.about(
             self,
             "About Better Brush",
@@ -1014,8 +1048,10 @@ class MainWindow(QMainWindow):
             "AI-powered rotoscoping with SAM 2.\n"
             "Import a video, prompt SAM 2 with points, propagate the mask "
             "across the timeline, refine with the brush, then export.\n\n"
-            "Solo developer: Sneg — https://sneg.dev\n"
-            "Sneg HQ, a company of Lugunica.",
+            f"Edition: {edition}\n"
+            "Proprietary software — © 2026 Sneg, Sneg HQ, a company of Lugunica.\n"
+            "See the LICENSE file for the full EULA.\n\n"
+            "Solo developer: Sneg — https://sneg.dev",
         )
 
     # ──────────────────────────────────────────────────────────────────────

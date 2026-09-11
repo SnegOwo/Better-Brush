@@ -54,6 +54,7 @@ class LibraryDialog(QDialog):
         return self._panel
 
 from src.core import constants
+from src.core import licensing
 from src.core.project import ProjectManager
 from src.export.exporter import _resolve_ffmpeg
 
@@ -263,6 +264,18 @@ class LibraryPanel(QWidget):
 
         self._list.currentItemChanged.connect(self._on_selection)
         self.refresh()
+        self._apply_edition()
+
+    def _apply_edition(self) -> None:
+        """Disable recode button when Pro is not activated."""
+        if licensing.is_pro():
+            self._btn_recode.setEnabled(bool(self._list.currentItem()))
+            self._btn_recode.setToolTip("")
+        else:
+            self._btn_recode.setEnabled(False)
+            self._btn_recode.setToolTip(
+                "Pro feature — activate Pro to recode (Help → Activate Pro)"
+            )
 
     # ── Public API ─────────────────────────────────────────────────────────
     def refresh(self) -> None:
@@ -316,11 +329,18 @@ class LibraryPanel(QWidget):
             os.startfile(str(path))  # open with the system video player
 
     def _on_selection(self, current: QListWidgetItem, _prev) -> None:
-        self._btn_recode.setEnabled(
-            current is not None and Path(current.toolTip()).is_file()
-        )
+        selected = current is not None and Path(current.toolTip()).is_file()
+        self._btn_recode.setEnabled(selected and licensing.is_pro())
 
     def _recode_selected(self) -> None:
+        if not licensing.is_pro():
+            QMessageBox.information(
+                self,
+                "Pro feature",
+                "Recoding videos is a Better Brush Pro feature.\n\n"
+                "Activate Pro via Help → Activate Pro…",
+            )
+            return
         path = self.current_path()
         if path is None:
             return

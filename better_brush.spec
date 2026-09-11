@@ -53,6 +53,9 @@ for _pkg in ("hydra", "omegaconf"):
 # App assets (logo + icons).
 datas.append((str(PROJECT_ROOT / "assets"), "assets"))
 
+# End-user license terms travel with the product (shown next to the EXE).
+datas.append((str(PROJECT_ROOT / "LICENSE"), "."))
+
 # Self-contained FFmpeg: sits next to BetterBrush.exe on disk so export
 # works without the user installing anything.
 datas.append((str(PROJECT_ROOT / "For-Agent" / "ffmpeg.exe"), "."))

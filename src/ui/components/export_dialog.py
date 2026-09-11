@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.core import licensing
 from src.processing.video_reader import VideoReader
 
 # ── Format metadata ────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ class ExportDialog(QDialog):
         )
 
         self._build_ui()
+        self._apply_edition_limits()
         self._update_estimates()
 
     # ── UI ─────────────────────────────────────────────────────────────────
@@ -248,6 +250,14 @@ class ExportDialog(QDialog):
             audio_row.addWidget(src_name_lbl, alignment=Qt.AlignmentFlag.AlignLeft)
         audio_row.addStretch()
         root.addLayout(audio_row)
+
+        # ── Edition note (Lite limits) ────────────────────────────────────
+        self._lbl_edition = QLabel()
+        self._lbl_edition.setStyleSheet(
+            "color: #dfa345; font-size: 10px; background: transparent;"
+        )
+        self._lbl_edition.setWordWrap(True)
+        root.addWidget(self._lbl_edition)
 
         root.addSpacing(6)
         root.addWidget(self._separator())
@@ -411,9 +421,77 @@ class ExportDialog(QDialog):
 
     def _on_format_changed(self) -> None:
         fmt = self._combo_format.currentData() or "prores"
-        self._chk_audio.setEnabled(fmt != "png")
+        self._chk_audio.setEnabled(fmt != "png" and licensing.is_pro())
         self._bg_widget.setVisible(fmt == "h264")
         self._update_estimates()
+
+    # ── Edition gates (Lite vs Pro) ───────────────────────────────────────
+    def _set_fmt_enabled(self, fid: str, enabled: bool) -> None:
+        for i in range(self._combo_format.count()):
+            if self._combo_format.itemData(i) == fid:
+                self._combo_format.model().item(i).setEnabled(enabled)
+                return
+
+    def _apply_edition_limits(self) -> None:
+        """Lite: lock Pro codecs, cap resolution at 1080p, block audio."""
+
+        def fmt_index(fid: str) -> int:
+            return next(
+                (i for i in range(self._combo_format.count())
+                 if self._combo_format.itemData(i) == fid),
+                -1,
+            )
+
+        if licensing.is_pro():
+            for fid in ("prores", "qtrle", "h264", "png"):
+                self._set_fmt_enabled(fid, True)
+            self._spin_w.setMaximum(8192)
+            self._spin_h.setMaximum(8192)
+            self._chk_audio.setEnabled(True)
+            self._chk_audio.setToolTip(
+                "Muxes the source video's audio track into the export "
+                "(video formats only). Ignored for PNG sequences."
+            )
+            self._lbl_edition.setText("Pro edition — you can resize up to 8K, choose any codec and include original audio.")
+            return
+
+        # ── Lite ──
+        for fid in ("prores", "qtrle"):
+            self._set_fmt_enabled(fid, False)
+        if (self._combo_format.currentData() or "prores") in ("prores", "qtrle"):
+            idx = fmt_index("h264")
+            if idx >= 0:
+                self._combo_format.setCurrentIndex(idx)
+            elif idx == -1:
+                self._combo_format.setCurrentIndex(2)  # h264 fallback
+
+        # Clamp the source to Lite caps and disallow "Match Source" if the
+        # source exceeds them (the exporter enforces this too).
+        self._spin_w.setMaximum(licensing.LITE_MAX_WIDTH)
+        self._spin_h.setMaximum(licensing.LITE_MAX_HEIGHT)
+        if self._spin_w.value() > licensing.LITE_MAX_WIDTH:
+            self._spin_w.setValue(licensing.LITE_MAX_WIDTH)
+        if self._spin_h.value() > licensing.LITE_MAX_HEIGHT:
+            self._spin_h.setValue(licensing.LITE_MAX_HEIGHT)
+        if (
+            self._source_width() > licensing.LITE_MAX_WIDTH
+            or self._source_height() > licensing.LITE_MAX_HEIGHT
+        ):
+            self._chk_match.setChecked(False)
+            self._chk_match.setEnabled(False)
+            self._chk_match.setToolTip(
+                "Lite is limited to 1920×1080 — activate Pro to export at full resolution."
+            )
+
+        self._chk_audio.setChecked(False)
+        self._chk_audio.setEnabled(False)
+        self._chk_audio.setToolTip("Pro feature — activate Pro to mux original audio.")
+
+        self._lbl_edition.setText(
+            "Lite edition: H.264 / PNG up to 1920×1080 with a small watermark. "
+            "Activate Pro (Help → Activate Pro…) for 4K, ProRes/Animation MOV, "
+            "original audio and watermark-free exports."
+        )
 
     def _on_preset_changed(self) -> None:
         text = self._combo_preset.currentText()
@@ -465,21 +543,31 @@ class ExportDialog(QDialog):
 
     # ── Result ────────────────────────────────────────────────────────────
     def settings(self) -> dict:
-        """Return validated export settings."""
+        """Return validated export settings (edition-limited)."""
         fmt = self._combo_format.currentData() or "prores"
+        if not licensing.is_pro() and fmt in ("prores", "qtrle"):
+            fmt = "h264"  # backend defaults
         name = self._ed_name.text().strip() or "output"
         path = self._ed_path.text().strip()
         match = self._chk_match.isChecked()
+        _pro = licensing.is_pro()
         include_audio = bool(
             self._chk_audio.isChecked()
             and fmt != "png"
             and self._video_reader is not None
+            and _pro
         )
         resolution = (
             (self._spin_w.value(), self._spin_h.value())
             if not match
             else None
         )
+        if not _pro and resolution:
+            w, h = resolution
+            resolution = (
+                min(w, licensing.LITE_MAX_WIDTH),
+                min(h, licensing.LITE_MAX_HEIGHT),
+            )
         background = (
             self._combo_bg.currentData()
             if fmt == "h264" and self._combo_bg.currentData() is not None

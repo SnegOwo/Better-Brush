@@ -1,61 +1,94 @@
-Business Source License 1.1
+Better Brush — Proprietary Software License and End User License Agreement (EULA)
 
 Copyright (c) 2026 Sneg — Sneg HQ, a company of Lugunica. https://sneg.dev
+All Rights Reserved.
 
-License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved.
-"Business Source License" is a trademark of MariaDB Corporation Ab.
+Better Brush is proprietary, commercial software. It is licensed, not sold.
+By installing, copying, or using Better Brush you accept this License. If you
+do not agree, do not install or use the software and delete any copies you
+already have.
 
-Terms
 
-The Licensor hereby grants you the right to copy, modify, create derivative
-works, redistribute, and make non-production use of the Licensed Work. The
-Licensor may make an Additional Use Grant, above, permitting limited
-production use.
+1. GRANT OF LICENSE
 
-Effective on the Change Date, or the fourth anniversary of the first publicly
-available distribution of a specific version of the Licensed Work under this
-License, whichever comes first, the Licensor hereby grants you rights under the
-terms of the Change License, and the rights granted in the paragraph above
-terminate.
+   Subscriber to the terms below receives a limited, personal,
+   non-exclusive, non-transferable, non-sublicensable license to run Better
+   Brush on their own equipment for the permitted use described in the
+   "EDITIONS" section.
 
-If your use of the Licensed Work does not comply with the requirements
-currently in effect as described in this License, you must purchase a
-commercial license from the Licensor, its affiliated entities, or authorized
-resellers, or you must refrain from using the Licensed Work.
+2. EDITIONS
 
-All copies of the original and modified Licensed Work, and derivative works of
-the Licensed Work, are subject to this License. This License applies separately
-for each version of the Licensed Work and the Change Date may vary for each
-version of the Licensed Work released by Licensor.
+   a) Lite (free).  Anyone may use the Lite edition. Lite includes full
+      masking, keyframing and propagation, PNG alpha export, H.264 MP4
+      export up to 1920×1080 with chroma-key backgrounds, and a small
+      "Better Brush" watermark on video exports.
 
-You must conspicuously display this License on each original or modified copy of
-the Licensed Work. If you receive the Licensed Work in original or modified form
-from a third party, the terms and conditions set forth in this License apply to
-your use of that work.
+   b) Pro (paid).  A Pro activation key unlocks: exports made with the
+      ProRes and QuickTime Animation codecs (MOV with alpha), resolutions
+      beyond 1920×1080, muxing of the original video's audio track, Library
+      recoding, and export without the Lite watermark.
 
-Any use of the Licensed Work in violation of this License will automatically
-terminate your rights under this License for the current and all other versions
-of the Licensed Work.
+   The purchase of a Pro key covers one (1) installation. Distributing,
+      sharing, publishing or reselling Pro keys is prohibited.
 
-This License does not grant you any right in any trademark or logo of Licensor
-or its affiliates (provided that you may use a trademark or logo of Licensor as
-expressly required by this License).
+3. ACTIVATION KEYS
 
-TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON AN
-"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR
-IMPLIED, INCLUDING, WITHOUT LIMITATION, WARRANTIES OR CONDITIONS OF TITLE,
-FITNESS FOR A PARTICULAR PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT. IN NO
-EVENT WILL LICENSOR BE LIABLE TO YOU ON ANY LEGAL THEORY FOR ANY SPECIAL,
-INCIDENTAL, CONSEQUENTIAL, PUNITIVE OR EXEMPLARY DAMAGES ARISING OUT OF THIS
-LICENSE OR THE USE OF THE LICENSED WORK, EVEN IF LICENSOR HAS BEEN ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGES.
+   Pro keys are issued by Sneg and are unique to the licensee named in the
+   key. Keys may optionally have an expiry date. Activity checks are
+   performed entirely offline; no data is transmitted.
 
-Notice
+4. RESTRICTIONS
 
-    Licensor: Sneg — Sneg HQ, a company of Lugunica. https://sneg.dev
-    Licensed Work: Better Brush
-    Additional Use Grant: Non-production, personal, evaluation, and
-        educational use is permitted. Commercial production use requires a
-        separate commercial license from the Licensor.
-    Change Date: 2030-09-11
-    Change License: Apache License, Version 2.0
+   You may not, and may not permit others to:
+     - redistribute, rent, lease, lend, sell, sublicense or otherwise
+       transfer Better Brush or its Pro keys, in whole or in part;
+     - reverse engineer, decompile, disassemble or attempt to derive the
+       source code of the runtime components beyond what the source release
+       already provides;
+     - remove, obscure or alter any copyright notices, watermarks,
+       proprietary markings or license information.
+
+5. THIRD-PARTY COMPONENTS
+
+   Better Brush bundles and depends on third-party components (including,
+   without limitation, PySide6, PyTorch, SAM 2, OpenCV and FFmpeg) that are
+   governed by their own respective licenses. Those components remain
+   subject to their original license terms, and this License does not
+   restrict your rights under them.
+
+6. TERMINATION
+
+   This License is effective until terminated. It terminates automatically
+   if you breach any term. Upon termination you must delete all copies of
+   Better Brush and any Pro keys in your possession.
+
+7. DISCLAIMER OF WARRANTY
+
+   TO THE EXTENT PERMITTED BY APPLICABLE LAW, BETTER BRUSH IS PROVIDED "AS
+   IS" AND "WITH ALL FAULTS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. YOU USE THE
+   SOFTWARE AT YOUR OWN RISK. NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN
+   BY SNEG SHALL CREATE A WARRANTY.
+
+8. LIMITATION OF LIABILITY
+
+   TO THE EXTENT PERMITTED BY APPLICABLE LAW, SNEG SHALL NOT BE LIABLE FOR
+   ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR
+   FOR LOST PROFITS, REVENUE, DATA OR USE, ARISING OUT OF OR RELATING TO
+   THIS LICENSE OR THE USE OF OR INABILITY TO USE BETTER BRUSH, EVEN IF
+   ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THE TOTAL LIABILITY OF SNEG
+   FOR ALL CLAIMS ARISING OUT OF THIS LICENSE SHALL NOT EXCEED THE AMOUNT
+   YOU PAID FOR BETTER BRUSH.
+
+9. GENERAL
+
+   This License constitutes the entire agreement between you and Sneg
+   concerning Better Brush. It is governed by the laws of the jurisdiction
+   in which Sneg is established, without regard to conflict-of-law rules.
+   If any provision is held unenforceable, the remainder continues in full
+   force and effect.
+
+10. CONTACT
+
+   For supported licenses, upgrades and questions: dev@sneg.dev
