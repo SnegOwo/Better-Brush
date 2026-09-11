@@ -2,12 +2,13 @@
 
 The app ships in two editions:
 
-  * Lite — free. Core masking + H.264 (4K-capable sources capped at 1080p)
-    + PNG alpha exports, chroma-key backgrounds and a small watermark on
-    every video export.
-  * Pro  — once per purchase (≈ €5). Removes the watermark and unlocks
-    ProRes/QuickTime Animation (MOV with alpha), up to 4K, original-audio
-    muxing and Library recoding.
+  * Lite — free, forever. Full masking engine, single-object projects only,
+    H.264 MP4 + ProRes/QuickTime MOV + PNG alpha exports capped at
+    1920×1080, chroma-key backgrounds and a small watermark on every video
+    export.
+  * Pro  — once per purchase (€5 at https://sneg.dev/BetterBrush). Removes
+    the watermark and unlocks multi-object editing, exports above 1080p
+    (up to 4K/8K), original-audio muxing and Library recoding.
 
 Activation is OFFLINE: a Pro license is a self-signed key such as
 
@@ -29,6 +30,10 @@ from enum import Enum
 from typing import Optional
 
 from src.core.project import ProjectManager
+
+# Buying / pricing constants for the in-app upsell texts.
+PRO_URL = "https://sneg.dev/BetterBrush"
+PRO_PRICE_EUR = "5"
 
 # The signing secret. MUST stay identical between tools/make_license.py and
 # every shipped build so previously issued keys keep validating.

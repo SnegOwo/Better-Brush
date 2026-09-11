@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from PySide6.QtCore import QThread, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPixmap
+from PySide6.QtCore import QThread, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -48,6 +48,7 @@ from src.ui.timeline import Timeline
 from src.ui.video_canvas import VideoCanvas
 from src.ui.components import CollapsibleSection, Separator
 from src.ui.components.activation_dialog import ActivationDialog
+from src.ui.components.edition import LiteNoticeDialog, ProFeaturesDialog
 from src.ui.components.export_dialog import ExportDialog
 from src.ui.components.export_progress import ExportProgressDialog
 from src.ui.components.loading_overlay import LoadingOverlay
@@ -301,6 +302,10 @@ class MainWindow(QMainWindow):
 
         help_menu = menubar.addMenu("&Help")
 
+        self._act_pro_features = QAction("Pro vs &Lite…", self)
+        self._act_pro_features.triggered.connect(self._show_pro_features)
+        help_menu.addAction(self._act_pro_features)
+
         self._act_activate_pro = QAction("&Activate Pro…", self)
         self._act_activate_pro.triggered.connect(self._show_activation)
         help_menu.addAction(self._act_activate_pro)
@@ -451,7 +456,10 @@ class MainWindow(QMainWindow):
         obj_row.addWidget(self._combo_object, stretch=1)
         self._btn_add_object = QPushButton("+")
         self._btn_add_object.setFixedWidth(28)
-        self._btn_add_object.setToolTip("Add object")
+        if licensing.is_pro():
+            self._btn_add_object.setToolTip("Add object — multiple subjects (Pro)")
+        else:
+            self._btn_add_object.setToolTip("Add object (2nd + is a Pro feature)")
         self._btn_add_object.clicked.connect(self._add_object)
         obj_row.addWidget(self._btn_add_object)
         self._btn_delete_object = QPushButton("\u2212")
@@ -670,6 +678,21 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status)
         self._status.showMessage("Ready")
 
+        # Edition upsell pill (Lite only) — hidden entirely for Pro.
+        self._btn_edition = QPushButton(
+            f"Lite (free) · Pro €{licensing.PRO_PRICE_EUR} at {licensing.PRO_URL}"
+        )
+        self._btn_edition.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_edition.setStyleSheet(
+            "QPushButton { background: #26262b; border: 1px solid #3a3a42; "
+            "border-radius: 9px; color: #ffb454; font-size: 10px; padding: 2px 8px; }"
+            "QPushButton:hover { border-color: #4a9eff; color: #ffd18a; }"
+        )
+        self._btn_edition.setToolTip("You are on the free Lite edition. See what Pro adds.")
+        self._btn_edition.clicked.connect(self._show_pro_features)
+        self._status.addPermanentWidget(self._btn_edition)
+        self._on_edition_changed()  # hide the pill entirely for Pro users
+
     # ──────────────────────────────────────────────────────────────────────
     # Static helpers
     # ──────────────────────────────────────────────────────────────────────
@@ -767,6 +790,15 @@ class MainWindow(QMainWindow):
         return obj
 
     def _add_object(self) -> None:
+        if not licensing.is_pro() and len(self._objects) >= 1:
+            QMessageBox.information(
+                self,
+                "Pro feature",
+                "Editing more than one object is a Better Brush Pro feature.\n\n"
+                f"Upgrade €{licensing.PRO_PRICE_EUR} (one-time) at "
+                f"{licensing.PRO_URL} to cut out several subjects at once.",
+            )
+            return
         obj = self._new_object()
         self._set_active_object(obj.obj_id)
         self._status.showMessage(f"Added object - {obj.name}")
@@ -996,10 +1028,22 @@ class MainWindow(QMainWindow):
         dlg = WelcomeDialog(self)
         dlg.exec()
         self._on_welcome_result(dlg.choice)
+        self._maybe_show_lite_notice()
         # Quick tutorial on the very first launch
         if ProjectManager.is_first_run():
             ProjectManager.set_first_run_done()
             QTimer.singleShot(0, lambda: self._show_tutorial(parent=self))
+
+    def _maybe_show_lite_notice(self) -> None:
+        """One-time WinRAR-style Lite notice; never repeats (even after reset)."""
+        if licensing.is_pro():
+            return
+        settings = ProjectManager.load_user_settings()
+        if settings.get("lite_notice_shown"):
+            return
+        settings["lite_notice_shown"] = True
+        ProjectManager.save_user_settings(settings)
+        LiteNoticeDialog(self).exec()
 
     def show_welcome(self) -> None:
         """Public hook called by the app bootstrap to open the launcher."""
@@ -1011,6 +1055,11 @@ class MainWindow(QMainWindow):
             self._load_video(path)
         elif kind == "open" and path is not None:
             self._open_project(path)
+
+    def _show_pro_features(self) -> None:
+        """Comparison of what is included in Lite vs Pro (Help → Pro vs Lite)."""
+        dlg = ProFeaturesDialog(self)
+        dlg.exec()
 
     def _show_activation(self) -> None:
         """Open the Activate Pro window (Help → Activate Pro…)."""
@@ -1029,6 +1078,9 @@ class MainWindow(QMainWindow):
         self._act_activate_pro.setText(
             "Activate Pro…" if not licensing.is_pro() else "Pro edition — licensed"
         )
+        btn = getattr(self, "_btn_edition", None)
+        if btn is not None:
+            btn.setVisible(not licensing.is_pro())
         dlg = getattr(self, "_library_dialog", None)
         if dlg is not None and hasattr(dlg, "panel"):
             dlg.panel._apply_edition()
@@ -1040,7 +1092,11 @@ class MainWindow(QMainWindow):
         if licensing.is_pro():
             edition = "Pro (licensed to %s)" % (licensing.current_licensee() or "you")
         else:
-            edition = "Lite (free) — activate Pro for 4K, ProRes/Animation, audio & no watermark"
+            edition = (
+                "Lite (free, forever) — one-time €%s upgrade at %s unlocks "
+                "multi-object, 4K, audio & no watermark. See Help → Pro vs Lite."
+                % (licensing.PRO_PRICE_EUR, licensing.PRO_URL)
+            )
         QMessageBox.about(
             self,
             "About Better Brush",

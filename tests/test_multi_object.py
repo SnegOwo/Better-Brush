@@ -21,6 +21,7 @@ import pytest
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from src.core import licensing
 from src.core.project import ObjectRecord, ProjectData, ProjectManager, mask_to_b64
 from src.core.scene import OBJECT_PALETTE
 from src.models.sam2_manager import PointPrompt
@@ -59,7 +60,12 @@ def _stub_video(win: MainWindow, tmp_path: Path, name: str = "clip.mp4") -> None
 def isolated_settings(tmp_path, monkeypatch):
     """Keep settings / autosave / registry files inside tmp_path."""
     monkeypatch.setattr(ProjectManager, "settings_dir", lambda: tmp_path)
+    # Multi-object editing is a Pro feature — run these tests with Pro active.
+    key = licensing.issue_key("CI Tester")
+    ok, msg = licensing.activate(key)
+    assert ok, msg
     yield
+    licensing.deactivate()
 
 
 def test_initial_single_object():

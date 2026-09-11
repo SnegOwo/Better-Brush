@@ -31,24 +31,49 @@ def _parse_expiry(exp: str) -> int:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
+    count = 1
+    expires_str = ""
+    positional = []
+    argv = list(sys.argv[1:])
+    while argv:
+        a = argv.pop(0)
+        if a.startswith("--count="):
+            count = max(1, int(a.split("=", 1)[1]))
+        elif a in ("-n", "--count"):
+            if argv:
+                count = max(1, int(argv.pop(0)))
+            else:
+                count = 1
+        elif a.lower().startswith("expires:"):
+            expires_str = a
+        else:
+            positional.append(a)
+
+    if not positional:
         print(textwrap.dedent("""\
-            Usage:  python tools/make_license.py "Owner Name" [expires:YYYY-MM-DD]
+            Usage:  python tools/make_license.py "Owner Name" [expires:YYYY-MM-DD] [--count N]
 
             Args:
               name          — licensee / buyer name shown in the activation.
               expires       — optional expiry date. Omit or 0/never for permanent keys.
+              --count N     — print N keys at once (e.g. a batch of 10).
+
+            Example:
+              python tools/make_license.py "Buyer" --count 10     # names "Buyer 1".."Buyer 10"
         """))
         sys.exit(2)
 
-    name = sys.argv[1].strip()
-    expires_str = sys.argv[2] if len(sys.argv) > 2 else ""
+    name = positional[0].strip()
     expires = _parse_expiry(expires_str)
 
-    key = issue_key(name, expires=expires)
-    print(f"\n  Licensee  : {name}")
-    print(f"  Expires   : {expires_str or 'never (permanent)'}")
-    print(f"  Key       : {key}\n")
+    for i in range(count):
+        licensee = name if count == 1 else f"{name} {i + 1}"
+        key = issue_key(licensee, expires=expires)
+        print(f"[{i + 1:>2}] {licensee:<24} {key}")
+
+    print()
+    print(f"Generated {count} key(s) · expiry: {expires_str or 'never (permanent)'}")
+    print("Send each key to its buyer; they paste it into Help → Activate Pro…")
 
 
 if __name__ == "__main__":

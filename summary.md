@@ -14,15 +14,20 @@ every build). Third-party components retain their own licenses.
 
 | Feature                                              | Lite (free) | Pro (€5, one-time) |
 |------------------------------------------------------|:-----------:|:------------------:|
-| Full masking / keyframing / propagation              | ✅          | ✅                 |
+| Full masking / keyframing / propagation              | ✅ single obj | ✅ multi-object   |
+| H.264 MP4 export with chroma-key backgrounds         | ✅ ≤1080p   | ✅ ≤8K             |
+| ProRes 4444 / QuickTime Animation (MOV, alpha)       | ✅ ≤1080p   | ✅ ≤8K             |
 | PNG alpha sequence export                            | ✅          | ✅                 |
-| H.264 MP4 export                                     | ✅ ≤1080p   | ✅ ≤8K             |
-| Chroma-key backgrounds (green/blue/…)                | ✅          | ✅                 |
-| ProRes 4444 / QuickTime Animation (MOV, alpha)       | ❌          | ✅                 |
+| Editing **more than one object** in a project        | ❌ (1 object) | ✅               |
 | Resize beyond 1920×1080                              | ❌          | ✅                 |
 | Mux original audio into the export                   | ❌          | ✅                 |
 | Library recoding (MP4 ↔ MOV ↔ WebM)                  | ❌          | ✅                 |
 | Watermark on video exports                           | small       | none              |
+
+The free Lite tier keeps all real rendering value: full SAM 2 masking,
+propagation, every export codec (incl. alpha-capable MOV) up to 1080p —
+so a free user can produce professional results. Pro adds multi-object
+editing, 4K+, original audio, recoding and watermark-free exports.
 
 ## Licensing & Activation
 
@@ -36,24 +41,28 @@ every build). Third-party components retain their own licenses.
 - Issue keys (distributor side, from the repo root):
 
   ```
-  python tools/make_license.py "Buyer Name"                    # permanent key
-  python tools/make_license.py "Buyer Name" expires:2027-12-31  # timed key
+  python tools/make_license.py "Buyer Name"                        # 1 permanent key
+  python tools/make_license.py "Buyer Name" expires:2027-12-31     # timed key
+  python tools/make_license.py "Buyer" --count 10                  # 10 keys at once
   ```
 
 - Users activate via **Help → Activate Pro…** and paste the key. About shows
   the current edition. Keys are tied to the licensee name printed at issue
-  time.
+  time — trust-based (keys can technically be shared; there is no server).
 
 ## Enforcement (defense in depth)
 
-- **UI gates:** Pro codecs, audio checkbox and recode button are disabled and
-  labelled for Lite; 4K sources are clamped to 1920×1080.
-- **Backend enforcement (`src/export/exporter.py`):** even if a Lite session
-  requests ProRes/4K/audio, the exporter silently downgrades to H.264 ≤1080p
-  and drops audio.
+- **UI gates:** the "+ object" button, audio checkbox and Library recode are
+  disabled/labelled for Lite; 4K sources are clamped to 1920×1080.
+- **Backend enforcement (`src/export/exporter.py` + `main_window.py`):** even
+  if a Lite session requests 4K/audio, the exporter silently scales to ≤1080p
+  and drops audio; the second-object prompt is rejected by `_add_object`.
 - **Watermark:** Lite video exports carry a small bottom-corner "Better Brush"
   mark, composited over the subject (`_draw_watermark`).
   PNG exports remain watermark-free for free-tier users.
+- **In-app Lite texts** (status-bar €5 pill, first-launch notice, About,
+  export dialog note, comparison dialog) are Lite-only and disappear entirely
+  once a Pro key is activated — no residual ads for paying users.
 
 ## Build
 
@@ -72,6 +81,13 @@ pyinstaller --clean --noconfirm --distpath dist_public better_brush.spec   # pub
 
 ## Recent polish (this release)
 
+- Alpha-capable codecs (ProRes/QuickTime MOV) available in Lite — the paywall
+  now sits on multi-object editing, 4K+, audio, recoding and the watermark.
+- MP4 background picker shows **solid chroma colors only** (no confusing
+  "No background / black" option); defaults to Vivid Green for keying.
+- First-launch Lite notice (WinRAR-style, one-time) + status-bar €5 pill +
+  Help → **Pro vs Lite…** comparison + export-dialog/A-about notes. Pro
+  activation removes every one of those texts.
 - Library moved to **File → Media Library (Ctrl+L)**.
 - Launch splash no longer stays on top of other windows.
 - Right sidebar decluttered (AI Model + Hardware collapsed, clearer hints).

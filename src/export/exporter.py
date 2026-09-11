@@ -115,11 +115,8 @@ class Exporter:
 
         pro = licensing.is_pro()
 
-        # ── Lite: silently downgrade Pro codecs / sizes / audio ──────────
+        # ── Lite: cap resolution + audio, add watermark (codecs are shared) ──
         if not pro:
-            if fmt != "h264":
-                logger.info("Lite edition: forcing H.264 codec (required codec is Pro-only)")
-                fmt = "h264"
             if resolution:
                 w, h = resolution
                 capped = (

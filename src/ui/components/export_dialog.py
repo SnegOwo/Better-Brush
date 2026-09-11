@@ -423,28 +423,23 @@ class ExportDialog(QDialog):
         fmt = self._combo_format.currentData() or "prores"
         self._chk_audio.setEnabled(fmt != "png" and licensing.is_pro())
         self._bg_widget.setVisible(fmt == "h264")
+        if fmt == "h264":
+            # MP4 has no alpha channel — offering "No background (black)" is
+            # confusing. Only solid chroma-key colors make sense here.
+            for i in range(self._combo_bg.count()):
+                is_none = self._combo_bg.itemData(i) is None
+                self._combo_bg.model().item(i).setEnabled(not is_none)
+            if self._combo_bg.currentData() is None:
+                self._combo_bg.setCurrentIndex(1)  # "Vivid Green" default
+        else:
+            for i in range(self._combo_bg.count()):
+                self._combo_bg.model().item(i).setEnabled(True)
         self._update_estimates()
 
     # ── Edition gates (Lite vs Pro) ───────────────────────────────────────
-    def _set_fmt_enabled(self, fid: str, enabled: bool) -> None:
-        for i in range(self._combo_format.count()):
-            if self._combo_format.itemData(i) == fid:
-                self._combo_format.model().item(i).setEnabled(enabled)
-                return
-
     def _apply_edition_limits(self) -> None:
-        """Lite: lock Pro codecs, cap resolution at 1080p, block audio."""
-
-        def fmt_index(fid: str) -> int:
-            return next(
-                (i for i in range(self._combo_format.count())
-                 if self._combo_format.itemData(i) == fid),
-                -1,
-            )
-
+        """Lite: cap resolution at 1080p and block audio/watermark-free."""
         if licensing.is_pro():
-            for fid in ("prores", "qtrle", "h264", "png"):
-                self._set_fmt_enabled(fid, True)
             self._spin_w.setMaximum(8192)
             self._spin_h.setMaximum(8192)
             self._chk_audio.setEnabled(True)
@@ -452,21 +447,13 @@ class ExportDialog(QDialog):
                 "Muxes the source video's audio track into the export "
                 "(video formats only). Ignored for PNG sequences."
             )
-            self._lbl_edition.setText("Pro edition — you can resize up to 8K, choose any codec and include original audio.")
+            self._lbl_edition.setText(
+                "Pro edition — everything is unlocked: 4K, original audio and "
+                "watermark-free exports."
+            )
             return
 
         # ── Lite ──
-        for fid in ("prores", "qtrle"):
-            self._set_fmt_enabled(fid, False)
-        if (self._combo_format.currentData() or "prores") in ("prores", "qtrle"):
-            idx = fmt_index("h264")
-            if idx >= 0:
-                self._combo_format.setCurrentIndex(idx)
-            elif idx == -1:
-                self._combo_format.setCurrentIndex(2)  # h264 fallback
-
-        # Clamp the source to Lite caps and disallow "Match Source" if the
-        # source exceeds them (the exporter enforces this too).
         self._spin_w.setMaximum(licensing.LITE_MAX_WIDTH)
         self._spin_h.setMaximum(licensing.LITE_MAX_HEIGHT)
         if self._spin_w.value() > licensing.LITE_MAX_WIDTH:
@@ -488,9 +475,9 @@ class ExportDialog(QDialog):
         self._chk_audio.setToolTip("Pro feature — activate Pro to mux original audio.")
 
         self._lbl_edition.setText(
-            "Lite edition: H.264 / PNG up to 1920×1080 with a small watermark. "
-            "Activate Pro (Help → Activate Pro…) for 4K, ProRes/Animation MOV, "
-            "original audio and watermark-free exports."
+            f"Lite edition (free): exports up to 1920×1080 with a small watermark. "
+            f"Upgrade once for €{licensing.PRO_PRICE_EUR} (Pro) at "
+            f"{licensing.PRO_URL} — unlocks 4K, original audio and no watermark."
         )
 
     def _on_preset_changed(self) -> None:
@@ -545,8 +532,6 @@ class ExportDialog(QDialog):
     def settings(self) -> dict:
         """Return validated export settings (edition-limited)."""
         fmt = self._combo_format.currentData() or "prores"
-        if not licensing.is_pro() and fmt in ("prores", "qtrle"):
-            fmt = "h264"  # backend defaults
         name = self._ed_name.text().strip() or "output"
         path = self._ed_path.text().strip()
         match = self._chk_match.isChecked()
