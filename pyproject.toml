@@ -1,21 +1,69 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "better-brush"
 version = "0.1.0"
-description = "Open-source rotoscoping desktop app powered by SAM 2"
+description = "Professional rotoscoping desktop app powered by SAM 2"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [{ name = "Better Brush contributors" }]
+authors = [{ name = "SnegOwo" }]
 keywords = ["rotoscoping", "sam2", "segment-anything", "video", "masks"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: Other/Proprietary License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = [
+    "PySide6>=6.7.0",
+    "torch>=2.3.0",
+    "torchvision>=0.18.0",
+    "sam2 @ git+https://github.com/facebookresearch/sam2.git@main",
+    "opencv-python>=4.9.0",
+    "Pillow>=10.0.0",
+    "nvidia-ml-py>=12.535.0",
+    "psutil>=5.9.0",
+    "ffmpeg-python>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.6.0"]
+build = ["pyinstaller>=6.6.0"]
+directml = ["torch-directml>=0.2.0; sys_platform == 'win32'"]
+
+[project.gui-scripts]
+better-brush = "src.core.app:run"
 
 [project.urls]
-Homepage = "https://github.com/better-brush/better-brush"
+Homepage = "https://github.com/SnegOwo/Better-Brush"
+Repository = "https://github.com/SnegOwo/Better-Brush"
+Issues = "https://github.com/SnegOwo/Better-Brush/issues"
 SAM2 = "https://github.com/facebookresearch/sam2"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 # Better Brush is a src-layout desktop application launched with
 # `python -m src.main` (or `python src/main.py`) from the repository root.
 # Runtime dependencies are pinned in requirements.txt (includes SAM 2 from GitHub).
+# The GUI entry point is also exposed as the `better-brush` command.

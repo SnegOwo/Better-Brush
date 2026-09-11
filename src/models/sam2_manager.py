@@ -74,7 +74,31 @@ class SAM2Manager:
         self._video_predictor: Optional[Any] = None
         self._video_state: Optional[Any] = None
         self._current_video_path: Optional[Path] = None
+        self._enable_fast_cuda_paths()
         logger.info("SAM2Manager created for %s on %s", self.rec.model_size.value, self.rec.device)
+
+    # ------------------------------------------------------------------ #
+    # Speed helpers
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _enable_fast_cuda_paths() -> None:
+        """Turn on cuDNN autotuning / TF32 to speed up SAM 2 on tensor cores."""
+        try:
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+        except AttributeError:  # pragma: no cover - non-CUDA build
+            pass
+
+    def _speed_context(self):
+        """Return an autocast context for fast inference.
+
+        Uses bf16 mixed precision on CUDA (Ampere+ tensor cores give a
+        near-2x speed-up) and a no-op context everywhere else.
+        """
+        if self.rec.device.startswith("cuda") and torch.cuda.is_available():
+            return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        return torch.autocast(device_type="cpu", enabled=False)
 
     # ------------------------------------------------------------------ #
     # Properties
@@ -147,13 +171,13 @@ class SAM2Manager:
             raise ValueError("predict_frame requires at least one prompt point")
         self.load_image_predictor()
         predictor = self._image_predictor
-        predictor.set_image(frame)
-
         coords = np.array([[p.x, p.y] for p in points], dtype=np.float32)
         labels = np.array([p.label for p in points], dtype=np.int32)
 
-        # SAM 2's own predict() runs under torch.no_grad() internally.
-        with torch.no_grad():
+        # SAM 2's own predict() runs under torch.no_grad() internally;
+        # mixed precision (bf16 on CUDA) is OFF by default -> we enable it.
+        with self._speed_context(), torch.inference_mode():
+            predictor.set_image(frame)
             masks, scores, logits = predictor.predict(
                 point_coords=coords,
                 point_labels=labels,
@@ -171,6 +195,91 @@ class SAM2Manager:
                 )
             )
         return results
+
+    def predict_frame_from_mask(
+        self,
+        frame: np.ndarray,
+        mask: np.ndarray,
+        n_points: int = 4,
+    ) -> list[MaskResult]:
+        """Refine a hand-drawn (brush) mask on a single frame with SAM 2.
+
+        The drawn mask is used to build a box prompt plus a handful of
+        positive points sampled inside the painted region, then SAM 2 is
+        asked to recover the true object silhouette. Candidate masks are
+        ranked by overlap (IoU) with the drawn mask so the result "follows"
+        the user's intention.
+
+        Args:
+            frame: RGB uint8 array HxWx3.
+            mask: Bool HxW user-painted mask.
+            n_points: Number of interior points to sample as prompts.
+
+        Returns:
+            A list with a single :class:`MaskResult` (the best candidate).
+        """
+        h, w = mask.shape
+        ys, xs = np.nonzero(mask)
+        if len(xs) == 0:
+            raise ValueError("predict_frame_from_mask requires a non-empty mask")
+
+        # Bounding box with a small padding
+        pad = max(2, int(0.04 * max(w, h)))
+        x1, y1 = int(max(0, xs.min() - pad)), int(max(0, ys.min() - pad))
+        x2, y2 = int(min(w - 1, xs.max() + pad)), int(min(h - 1, ys.max() + pad))
+        box = np.array([x1, y1, x2, y2], dtype=np.float32)
+
+        # Sample points spread across the painted region
+        coords = self._sample_mask_points(xs, ys, w, h, n_points)
+        labels = np.ones(len(coords), dtype=np.int32)
+
+        self.load_image_predictor()
+        predictor = self._image_predictor
+        with self._speed_context(), torch.inference_mode():
+            predictor.set_image(frame)
+            masks_arr, scores, _ = predictor.predict(
+                point_coords=coords,
+                point_labels=labels,
+                box=box,
+                multimask_output=True,
+            )
+
+        # Prefer the candidate that best matches the user's drawn mask
+        best_idx = 0
+        best_iou = -1.0
+        for i in range(masks_arr.shape[0]):
+            cand = masks_arr[i].astype(bool)
+            intersection = np.logical_and(cand, mask).sum()
+            union = np.logical_or(cand, mask).sum()
+            if union == 0:
+                continue
+            iou = intersection / union
+            if iou > best_iou:
+                best_iou = iou
+                best_idx = i
+        if best_iou < 0.0:  # no overlap at all -> fall back to highest score
+            best_idx = int(np.argmax(scores))
+
+        return [
+            MaskResult(
+                mask=masks_arr[best_idx].astype(bool),
+                score=float(scores[best_idx]),
+            )
+        ]
+
+    @staticmethod
+    def _sample_mask_points(
+        ys: np.ndarray, xs: np.ndarray, w: int, h: int, n_points: int
+    ) -> np.ndarray:
+        """Pick evenly-spread points inside the painted mask region."""
+        pts = [(int(xs.mean()), int(ys.mean()))]
+        if n_points > 1 and len(xs) >= n_points:
+            step = max(1, len(xs) // (n_points - 1))
+            order = np.argsort(xs)
+            for k in range(1, n_points):
+                i = order[min(len(xs) - 1, k * step)]
+                pts.append((int(xs[i]), int(ys[i])))
+        return np.array(pts, dtype=np.float32)
 
     # ------------------------------------------------------------------ #
     # Video inference
@@ -192,6 +301,11 @@ class SAM2Manager:
         """
         self.load_video_predictor()
         src = Path(video_path)
+        if self._video_state is not None and self._current_video_path == src:
+            # Re-use the already-extracted frames + memory bank: iterative
+            # "correct a frame, propagate again" workflows skip re-init cost.
+            logger.info("Reusing cached video state for %s", src)
+            return self._video_state
         if src.is_dir():
             frames_dir = src
         else:
@@ -263,14 +377,39 @@ class SAM2Manager:
         fn = getattr(self._video_predictor, "add_new_points_or_box", None)
         if fn is None:
             fn = self._video_predictor.add_new_points_or_boxes  # type: ignore[attr-defined]
-        return fn(
-            inference_state=self._video_state,
-            frame_idx=frame_idx,
-            obj_id=obj_id,
-            points=coords,
-            labels=labels,
-            clear_old_points=clear_old_points,
-        )
+        with self._speed_context(), torch.inference_mode():
+            return fn(
+                inference_state=self._video_state,
+                frame_idx=frame_idx,
+                obj_id=obj_id,
+                points=coords,
+                labels=labels,
+                clear_old_points=clear_old_points,
+            )
+
+    def add_mask_to_video(
+        self,
+        frame_idx: int,
+        obj_id: int,
+        mask: np.ndarray,
+    ) -> Any:
+        """Add a hand-drawn mask as the propagation source for video mode.
+
+        Lets the user propagate from a brush-painted (or refined) mask
+        instead of prompt points.
+        """
+        if self._video_state is None:
+            raise RuntimeError("Video not initialised. Call init_video() first.")
+        fn = getattr(self._video_predictor, "add_new_mask", None)
+        if fn is None:
+            raise RuntimeError("add_new_mask is not available in the installed SAM 2")
+        with self._speed_context(), torch.inference_mode():
+            return fn(
+                inference_state=self._video_state,
+                frame_idx=frame_idx,
+                obj_id=obj_id,
+                mask=mask,
+            )
 
     def propagate_in_video(
         self,
@@ -303,20 +442,21 @@ class SAM2Manager:
             kwargs["reverse"] = True
 
         results: list[tuple[int, int, np.ndarray, np.ndarray]] = []
-        for frame_idx, obj_ids, mask_logits in self._video_predictor.propagate_in_video(
-            self._video_state, **kwargs
-        ):
-            if cancel_event is not None and cancel_event.is_set():
-                logger.info("Propagation cancelled at frame %d", frame_idx)
-                break
-            # mask_logits shape: (N_obj, 1, H, W) at original video resolution
-            masks = (mask_logits > 0.0).cpu().numpy()[:, 0]
-            for i, obj_id in enumerate(obj_ids):
-                # SAM 2 video predictor does not expose IoU scores; use 1.0
-                entry = (int(frame_idx), int(obj_id), masks[i], np.array([1.0]))
-                results.append(entry)
-                if on_frame is not None:
-                    on_frame(entry[0], entry[1], entry[2])
+        with self._speed_context(), torch.inference_mode():
+            for frame_idx, obj_ids, mask_logits in self._video_predictor.propagate_in_video(
+                self._video_state, **kwargs
+            ):
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("Propagation cancelled at frame %d", frame_idx)
+                    break
+                # mask_logits shape: (N_obj, 1, H, W) at original video resolution
+                masks = (mask_logits > 0.0).cpu().numpy()[:, 0]
+                for i, obj_id in enumerate(obj_ids):
+                    # SAM 2 video predictor does not expose IoU scores; use 1.0
+                    entry = (int(frame_idx), int(obj_id), masks[i], np.array([1.0]))
+                    results.append(entry)
+                    if on_frame is not None:
+                        on_frame(entry[0], entry[1], entry[2])
         logger.info("Propagation complete: %d frame entries", len(results))
         return results
 

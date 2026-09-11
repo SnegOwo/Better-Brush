@@ -39,10 +39,18 @@ class InferenceWorker(QThread):
         self._owns_manager = sam_manager is None
         self._frame: Optional[np.ndarray] = None
         self._points: list[PointPrompt] = []
+        self._mask: Optional[np.ndarray] = None
 
     def set_task(self, frame: np.ndarray, points: list[PointPrompt]) -> None:
         self._frame = frame
         self._points = list(points)
+        self._mask = None
+
+    def set_task_mask(self, frame: np.ndarray, mask: np.ndarray) -> None:
+        """Run a refinement pass using a hand-drawn mask as the prompt."""
+        self._frame = frame
+        self._points = []
+        self._mask = mask
 
     def run(self) -> None:
         try:
@@ -51,6 +59,11 @@ class InferenceWorker(QThread):
                 self._sam = SAM2Manager(self.rec)
             if self._frame is None:
                 raise ValueError("No frame set")
+            if self._mask is not None:
+                self.progress.emit("Refining brush mask with SAM 2...")
+                results = self._sam.predict_frame_from_mask(self._frame, self._mask)
+                self.finished.emit(results)
+                return
             if not self._points:
                 raise ValueError("No prompt points set")
             self.progress.emit("Running inference...")
@@ -90,6 +103,7 @@ class PropagationWorker(QThread):
         self._video_path: Optional[str] = None
         self._start_frame = 0
         self._points: list[PointPrompt] = []
+        self._mask: Optional[np.ndarray] = None
         self._total_frames = 0
         self._max_frames: Optional[int] = None
         self._reverse = False
@@ -101,11 +115,13 @@ class PropagationWorker(QThread):
         start_frame: int = 0,
         points: Optional[list[PointPrompt]] = None,
         total_frames: int = 0,
+        mask: Optional[np.ndarray] = None,
     ) -> None:
         self._video_path = video_path
         self._start_frame = start_frame
         self._points = list(points or [])
         self._total_frames = total_frames
+        self._mask = mask
 
     def set_range(self, max_frames: Optional[int] = None, reverse: bool = False) -> None:
         """Restrict propagation to a segment (for partial corrections).
@@ -135,7 +151,14 @@ class PropagationWorker(QThread):
                 progress_cb=lambda cur, total: stage("Preparing frames", cur, total),
             )
 
-            if self._points:
+            if self._mask is not None:
+                stage("Applying brush mask...")
+                self._sam.add_mask_to_video(
+                    frame_idx=self._start_frame,
+                    obj_id=1,
+                    mask=self._mask,
+                )
+            elif self._points:
                 stage("Applying prompts...")
                 self._sam.add_points_to_video(
                     frame_idx=self._start_frame,

@@ -31,6 +31,13 @@ Thumbs.db
 hardware_summary.json
 .pytest_cache/
 
+# Coverage / linters
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.log
+
 # App runtime caches
 exports/
 .better_brush_frames/
