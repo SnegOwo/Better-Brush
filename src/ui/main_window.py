@@ -49,7 +49,7 @@ from src.ui.components import CollapsibleSection, Separator
 from src.ui.components.export_dialog import ExportDialog
 from src.ui.components.export_progress import ExportProgressDialog
 from src.ui.components.loading_overlay import LoadingOverlay
-from src.ui.components.library_panel import LibraryPanel
+from src.ui.components.library_panel import LibraryDialog
 from src.export.exporter import Exporter
 
 logger = logging.getLogger(__name__)
@@ -272,6 +272,13 @@ class MainWindow(QMainWindow):
         open_act.triggered.connect(self._on_open_video)
         file_menu.addAction(open_act)
 
+        file_menu.addSeparator()
+
+        lib_act = QAction("&Media Library...", self)
+        lib_act.setShortcut(QKeySequence("Ctrl+L"))
+        lib_act.triggered.connect(self._show_library)
+        file_menu.addAction(lib_act)
+
         export_menu = menubar.addMenu("&Export")
         export_act = QAction("&Export...", self)
         export_act.setShortcut(QKeySequence("Ctrl+E"))
@@ -413,7 +420,7 @@ class MainWindow(QMainWindow):
         pl.addWidget(sec_content)
 
         # ── AI Model ──────────────────────────────────────────────────────
-        sec_model = CollapsibleSection("AI Model")
+        sec_model = CollapsibleSection("AI Model", expanded=False)
         self._combo_model = QComboBox()
         self._combo_model.addItem("Auto (recommended)", None)
         for size in (
@@ -479,9 +486,9 @@ class MainWindow(QMainWindow):
         size_row.addWidget(self._spin_brush, stretch=1)
         sec_tools.add_layout(size_row)
 
-        # Contextual hint: keyboard shortcuts for navigation / zooming
-        hint_nav = QLabel("Ctrl+scroll = zoom · middle-drag = pan")
-        hint_nav.setStyleSheet("color: #555560; font-size: 10px; background: transparent;")
+        # Tools hint: brush add/erase via Shift
+        hint_nav = QLabel("Brush: paint to add · hold Shift while painting to erase")
+        hint_nav.setStyleSheet("color: #7a7a84; font-size: 10px; background: transparent;")
         hint_nav.setWordWrap(True)
         sec_tools.add_widget(hint_nav)
 
@@ -506,7 +513,7 @@ class MainWindow(QMainWindow):
 
         hint = QLabel("Left-click = include (green) · Right-click = exclude (red)")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #6b6b74; font-size: 10px; background: transparent;")
+        hint.setStyleSheet("color: #7a7a84; font-size: 10px; background: transparent;")
         sec_segment.add_widget(hint)
 
         self._btn_clear_mask = QPushButton("Clear Mask")
@@ -562,17 +569,6 @@ class MainWindow(QMainWindow):
         sec_export.add_widget(lbl_export_hint)
 
         pl.addWidget(sec_export)
-
-        pl.addWidget(Separator())
-
-        # ── Library (exported videos viewer + recode) ─────────────────────
-        sec_lib = CollapsibleSection("Library", expanded=True)
-
-        self._library_panel = LibraryPanel()
-        sec_lib.add_widget(self._library_panel)
-        sec_lib.toggled.connect(lambda ex: self._library_panel.refresh() if ex else None)
-
-        pl.addWidget(sec_lib)
 
         pl.addWidget(Separator())
 
@@ -1853,9 +1849,9 @@ class MainWindow(QMainWindow):
         if not paths:
             return
         # New files landed in the exports folder — refresh the Library view.
-        lib = getattr(self, "_library_panel", None)
-        if lib is not None:
-            lib.refresh()
+        dlg = getattr(self, "_library_dialog", None)
+        if dlg is not None and hasattr(dlg, "panel"):
+            dlg.panel.refresh()
         if len(paths) == 1:
             QMessageBox.information(self, "Export OK", f"Saved to:\n{paths[0]}")
         else:
@@ -1864,6 +1860,15 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, "Export OK", f"Saved {len(paths)} files to:\n{folder}\n{lines}"
             )
+
+    def _show_library(self) -> None:
+        """Open the Media Library (File > Media Library) as a docked dialog."""
+        if getattr(self, "_library_dialog", None) is None:
+            self._library_dialog = LibraryDialog(self)
+        self._library_dialog.panel.refresh()
+        self._library_dialog.show()
+        self._library_dialog.raise_()
+        self._library_dialog.activateWindow()
 
     def _on_export_png(self) -> None:
         """Backwards-compatible: opens the export dialog preset to PNG."""

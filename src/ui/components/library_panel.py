@@ -29,6 +29,30 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+
+class LibraryDialog(QDialog):
+    """Wraps :class:`LibraryPanel` in a standalone dialog for the menu bar."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Media Library")
+        self.setMinimumSize(560, 440)
+        self.setStyleSheet("background: #202024;")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        self._panel = LibraryPanel()
+        root.addWidget(self._panel)
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.close)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(btn_close)
+        root.addLayout(btn_row)
+
+    @property
+    def panel(self) -> LibraryPanel:
+        return self._panel
+
 from src.core import constants
 from src.core.project import ProjectManager
 from src.export.exporter import _resolve_ffmpeg

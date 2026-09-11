@@ -69,6 +69,7 @@ class VideoCanvas(QWidget):
         self._edit_mode = "points"  # "points" | "brush"
         self._brush_size = 20  # diameter in widget px
         self._brush_erase = False
+        self._shift_held = False
         self._preview_mode = "mask"  # "frame" | "mask" | "cutout"
         self._brush_hover: Optional[tuple[int, int]] = None
         self._painting = False
@@ -237,7 +238,8 @@ class VideoCanvas(QWidget):
         """Draw a professional brush cursor: circle + center dot."""
         hx, hy = self._brush_hover
         r = self._brush_size
-        color = _BRUSH_ERASE if self._brush_erase else _BRUSH_ADD
+        erase = self._brush_erase or self._shift_held
+        color = _BRUSH_ERASE if erase else _BRUSH_ADD
 
         # Outer circle
         painter.setPen(QPen(color, 1.5))
@@ -245,7 +247,7 @@ class VideoCanvas(QWidget):
         painter.drawEllipse(hx - r, hy - r, r * 2, r * 2)
 
         # Semi-transparent fill
-        fill_color = QColor(240, 90, 90, 30) if self._brush_erase else QColor(255, 255, 255, 20)
+        fill_color = QColor(240, 90, 90, 30) if erase else QColor(255, 255, 255, 20)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(fill_color))
         painter.drawEllipse(hx - r, hy - r, r * 2, r * 2)
@@ -272,6 +274,9 @@ class VideoCanvas(QWidget):
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):
                 self._painting = True
                 self._painted = False
+                self._shift_held = bool(
+                    event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                )
                 self.brush_press.emit()
                 self._apply_brush(pos.x(), pos.y())
             return
@@ -303,6 +308,9 @@ class VideoCanvas(QWidget):
             return
         if self._edit_mode == "brush":
             self._brush_hover = (pos.x(), pos.y())
+            self._shift_held = bool(
+                event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            )
             if self._painting:
                 self._apply_brush(pos.x(), pos.y())
             self.update()
@@ -316,6 +324,7 @@ class VideoCanvas(QWidget):
             return
         if self._edit_mode == "brush" and self._painting:
             self._painting = False
+            self._shift_held = False
             if self._painted:
                 self.mask_edited.emit()
             self.update()
@@ -397,7 +406,8 @@ class VideoCanvas(QWidget):
             return
         yy, xx = np.mgrid[y0:y1, x0:x1]
         inside = ((xx - img_x) ** 2 + (yy - img_y) ** 2) <= radius**2
-        if self._brush_erase:
+        erase = self._brush_erase or self._shift_held
+        if erase:
             self._mask[y0:y1, x0:x1][inside] = False
         else:
             self._mask[y0:y1, x0:x1][inside] = True

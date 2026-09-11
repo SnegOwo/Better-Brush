@@ -35,9 +35,9 @@ class SplashScreen(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-        )
+        # Frameless but NOT always-on-top: the splash must be able to sink
+        # below other apps when deactivated.
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setFixedSize(360, 224)
         self._text = "Starting…"
         self._frac = -1.0  # <0 → indeterminate pulse
@@ -148,6 +148,7 @@ def run() -> int:
 
     if splash is not None:
         # 'Liquid' handoff: fade the splash out over the now-visible window.
+        splash.raise_()  # keep it above the main window during the fade
         def _fade(step: int = 0) -> None:
             if step >= 8:
                 splash.close()
