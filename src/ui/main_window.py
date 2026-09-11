@@ -49,6 +49,7 @@ from src.ui.components import CollapsibleSection, Separator
 from src.ui.components.export_dialog import ExportDialog
 from src.ui.components.export_progress import ExportProgressDialog
 from src.ui.components.loading_overlay import LoadingOverlay
+from src.ui.components.library_panel import LibraryPanel
 from src.export.exporter import Exporter
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ class ExportWorker(QThread):
         start_frame: int = 0,
         end_frame: int = 0,
         audio_source: Optional[Path] = None,
+        background: Optional[tuple[int, int, int]] = None,
     ) -> None:
         super().__init__(parent)
         self._exporter = exporter
@@ -87,6 +89,7 @@ class ExportWorker(QThread):
         self._start_frame = start_frame
         self._end_frame = end_frame
         self._audio_source = audio_source
+        self._background = background
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -131,6 +134,7 @@ class ExportWorker(QThread):
                     on_progress=lambda c, t: self.progress.emit("Encoding frames", c, t),
                     cancel_event=self._cancel,
                     audio_source=self._audio_source,
+                    background=self._background,
                 )
             self.finished.emit(dest)
         except Exception as exc:  # noqa: BLE001
@@ -558,6 +562,17 @@ class MainWindow(QMainWindow):
         sec_export.add_widget(lbl_export_hint)
 
         pl.addWidget(sec_export)
+
+        pl.addWidget(Separator())
+
+        # ── Library (exported videos viewer + recode) ─────────────────────
+        sec_lib = CollapsibleSection("Library", expanded=True)
+
+        self._library_panel = LibraryPanel()
+        sec_lib.add_widget(self._library_panel)
+        sec_lib.toggled.connect(lambda ex: self._library_panel.refresh() if ex else None)
+
+        pl.addWidget(sec_lib)
 
         pl.addWidget(Separator())
 
@@ -1693,7 +1708,10 @@ class MainWindow(QMainWindow):
             return
 
         # Immediate visual feedback between the dialog and the progress window.
+        # processEvents() forces an immediate repaint: the prefetch loop below is
+        # synchronous CPU work, otherwise the overlay would never be drawn.
         self._loading_overlay.show_message("Preparing export", "Reading frames…")
+        QApplication.processEvents()
 
         fmt = settings["format"]
         base_name = settings.get("file_name", "output")
@@ -1704,6 +1722,7 @@ class MainWindow(QMainWindow):
         start_frame = settings.get("start_frame", 0)
         end_frame = settings.get("end_frame", 0)
         include_audio = settings.get("include_audio", False)
+        background = settings.get("background")
         audio_source: Optional[Path] = None
         if include_audio and fmt != "png" and self._video_reader is not None:
             audio_source = self._video_reader.path
@@ -1753,6 +1772,7 @@ class MainWindow(QMainWindow):
         self._export_start_frame = start_frame
         self._export_end_frame = end_frame
         self._export_audio_source = audio_source
+        self._export_background = background
         self._export_output_dir = output_dir
         self._export_results = []
         self._export_progress_dlg = ExportProgressDialog(self)
@@ -1781,6 +1801,7 @@ class MainWindow(QMainWindow):
             start_frame=self._export_start_frame,
             end_frame=self._export_end_frame,
             audio_source=self._export_audio_source,
+            background=self._export_background,
         )
         self._export_worker.progress.connect(self._on_export_progress)
         self._export_worker.finished.connect(self._on_export_finished)
@@ -1831,6 +1852,10 @@ class MainWindow(QMainWindow):
             return
         if not paths:
             return
+        # New files landed in the exports folder — refresh the Library view.
+        lib = getattr(self, "_library_panel", None)
+        if lib is not None:
+            lib.refresh()
         if len(paths) == 1:
             QMessageBox.information(self, "Export OK", f"Saved to:\n{paths[0]}")
         else:

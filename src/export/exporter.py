@@ -84,6 +84,7 @@ class Exporter:
         on_progress: Optional[Callable[[int, int], None]] = None,
         cancel_event: Optional[threading.Event] = None,
         audio_source: Optional[Path] = None,
+        background: Optional[tuple[int, int, int]] = None,
     ) -> Path:
         """Compose frames + masks into a video written directly into output_dir.
 
@@ -95,8 +96,11 @@ class Exporter:
         Resolution is optional; ffmpeg scales if provided.
 
         ``audio_source`` optionally points at the original video file whose
-        audio track should be muxed into the export (kept lossless-ish as
-        AAC, chosen for mp4/mov compatibility).
+        audio track should be muxed into the export.
+
+        ``background`` (an RGB tuple) replaces the transparent areas with a
+        solid color and disables alpha — for H.264 MP4 exports that will be
+        chroma-keyed (green/blue screen) by editors without alpha support.
         """
         if not self._ffmpeg_available():
             raise RuntimeError(
@@ -128,7 +132,7 @@ class Exporter:
                 mask = masks.get(idx)
                 if mask is None:
                     mask = np.ones(frame.shape[:2], dtype=bool)
-                rgba = self._compose_rgba(frame, mask)
+                rgba = self._compose_rgba(frame, mask, background=background)
                 Image.fromarray(rgba, mode="RGBA").save(tmp_path / f"frm_{idx:06d}.png")
                 if on_progress is not None:
                     on_progress(i + 1, total)
@@ -136,6 +140,7 @@ class Exporter:
             cmd = [
                 self._ffmpeg_path,
                 "-y",
+                "-nostdin",
                 "-framerate", str(fps),
                 "-i", str(tmp_path / "frm_%06d.png"),
             ]
@@ -168,35 +173,49 @@ class Exporter:
         return out_file
 
     def _mux_audio(self, video_file: Path, audio_source: Path) -> Path:
-        """Re-mux *audio_source*'s audio into *video_file* (fast, no re-encode)."""
+        """Mux *audio_source*'s audio into *video_file* (fast, copy-first).
+
+        Audio is copied losslessly when the codec is container-compatible,
+        otherwise re-encoded to AAC.  If audio cannot be muxed for any reason
+        the export is kept silent instead of failing — audio must never
+        brick an otherwise-finished render.
+        """
         # Keep a real container extension so ffmpeg can infer the output format
         # (a bare ".mux.tmp" suffix makes ffmpeg fail with "Invalid argument").
         tmp = video_file.with_name(video_file.stem + ".mux" + video_file.suffix)
-        cmd = [
-            self._ffmpeg_path,
-            "-y",
-            "-i", str(video_file),
-            "-i", str(audio_source),
-            "-map", "0:v:0",
-            "-map", "1:a:0?",
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-shortest",
-            str(tmp),
-        ]
-        logger.info("Muxing audio: %s", " ".join(cmd))
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        stdout, stderr = proc.communicate(timeout=3600)
-        if proc.returncode != 0:
-            logger.error("Audio mux failed: %s", stderr)
+
+        for audio_args in (["-c:a", "copy"], ["-c:a", "aac", "-b:a", "192k"]):
+            cmd = [
+                self._ffmpeg_path,
+                "-y",
+                "-nostdin",
+                "-i", str(video_file),
+                "-i", str(audio_source),
+                "-map", "0:v:0",
+                "-map", "1:a:0?",
+                "-c:v", "copy",
+                *audio_args,
+                "-shortest",
+                str(tmp),
+            ]
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            stdout, stderr = proc.communicate(timeout=3600)
+            if proc.returncode == 0:
+                del stdout
+                video_file.unlink(missing_ok=True)
+                tmp.replace(video_file)
+                return video_file
+            # Log detail, then fall through to the next strategy.
+            tail = " | ".join(stderr.strip().splitlines()[-4:]) if stderr.strip() else "no stderr"
+            logger.warning(
+                "Audio mux attempt failed (code %s, args %s): %s",
+                proc.returncode, " ".join(audio_args), tail,
+            )
             tmp.unlink(missing_ok=True)
-            raise RuntimeError(f"FFmpeg audio mux failed with code {proc.returncode}")
-        del stdout
-        video_file.unlink(missing_ok=True)
-        tmp.replace(video_file)
+
+        logger.warning("Could not mux original audio; keeping export silent: %s", video_file)
         return video_file
 
     def export_transparent_video(
@@ -217,10 +236,22 @@ class Exporter:
     # Helpers
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _compose_rgba(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    def _compose_rgba(
+        frame: np.ndarray, mask: np.ndarray, background: Optional[tuple[int, int, int]] = None
+    ) -> np.ndarray:
         h, w = frame.shape[:2]
         rgba = np.zeros((h, w, 4), dtype=np.uint8)
         rgb = frame[:, :, :3] if frame.shape[2] >= 3 else np.stack([frame[:, :, 0]] * 3, axis=-1)
+        if background is not None:
+            # Flatten the alpha channel into a solid chroma-key background
+            # (kept fully opaque for yuv420p): subject pixels keep their color,
+            # everything else becomes the key color.
+            fill = np.zeros((h, w, 3), dtype=np.uint8)
+            fill[:, :] = background
+            out = np.where(mask[:, :, None], rgb, fill)
+            rgba[:, :, :3] = out
+            rgba[:, :, 3] = 255
+            return rgba
         rgba[:, :, :3] = rgb
         rgba[:, :, 3] = (mask * 255).astype(np.uint8)
         return rgba

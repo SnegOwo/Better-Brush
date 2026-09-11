@@ -45,6 +45,17 @@ _BPP_ESTIMATE = {
 # Preset resolutions (excluding "Match Source")
 _PRESETS = ["1920 x 1080", "1280 x 720", "960 x 540"]
 
+# Solid backgrounds for chroma-keying (H.264 MP4 exports without alpha)
+BACKGROUNDS = [
+    ("none", "No background (black)"),
+    ("Vivid Green", (0, 255, 0)),
+    ("Vivid Blue", (0, 0, 255)),
+    ("Magenta", (255, 0, 255)),
+    ("Red", (255, 0, 0)),
+    ("White", (255, 255, 255)),
+    ("Black", (0, 0, 0)),
+]
+
 
 class ExportDialog(QDialog):
     """Modal export dialog with file settings, format, and export range."""
@@ -172,6 +183,28 @@ class ExportDialog(QDialog):
         frame_row.addLayout(vs2)
         frame_row.addWidget(self._label("fps"), alignment=Qt.AlignmentFlag.AlignLeft)
         root.addLayout(frame_row)
+
+        # ── Background (H.264 only — no alpha in MP4) ──────────────────────
+        bg_row = QHBoxLayout()
+        bg_row.setSpacing(8)
+        bg_row.addWidget(self._label("Background:"))
+        self._combo_bg = QComboBox()
+        for name, _color in BACKGROUNDS:
+            self._combo_bg.addItem(name, None if name == "none" else _color)
+        self._combo_bg.setToolTip(
+            "MP4 has no alpha channel. Pick a vibrant color as the backdrop so "
+            "you can chroma-key / ultra-key the clip in your editor."
+        )
+        bg_row.addWidget(self._combo_bg)
+        self._lbl_bg_hint = QLabel("for chroma-key use")
+        self._lbl_bg_hint.setStyleSheet(
+            "color: #555560; font-size: 10px; background: transparent;"
+        )
+        bg_row.addWidget(self._lbl_bg_hint, alignment=Qt.AlignmentFlag.AlignLeft)
+        bg_row.addStretch()
+        root.addLayout(bg_row)
+        self._combo_bg.setEnabled(False)
+        self._lbl_bg_hint.setVisible(False)
 
         # ── Original audio ────────────────────────────────────────────────
         root.addSpacing(4)
@@ -355,6 +388,9 @@ class ExportDialog(QDialog):
     def _on_format_changed(self) -> None:
         fmt = self._combo_format.currentData() or "prores"
         self._chk_audio.setEnabled(fmt != "png")
+        is_h264 = fmt == "h264"
+        self._combo_bg.setEnabled(is_h264)
+        self._lbl_bg_hint.setVisible(is_h264)
         self._update_estimates()
 
     def _on_preset_changed(self) -> None:
@@ -422,6 +458,11 @@ class ExportDialog(QDialog):
             if not match
             else None
         )
+        background = (
+            self._combo_bg.currentData()
+            if fmt == "h264" and self._combo_bg.currentData() is not None
+            else None
+        )
         if self._rb_timeline.isChecked() and self._timeline_selection is not None:
             range_mode = "range"
             start_frame, end_frame = self._timeline_selection
@@ -448,6 +489,7 @@ class ExportDialog(QDialog):
             "start_frame": start_frame,
             "end_frame": end_frame,
             "include_audio": include_audio,
+            "background": background,
             "object_mode": object_mode,
             "object_id": self._combo_object.currentData(),
         }
