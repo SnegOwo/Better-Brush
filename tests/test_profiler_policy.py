@@ -27,15 +27,15 @@ _SUT = SAM2Profiler()
 # crashed the user's GPU. free ≈ 11 GB on a 12 GB card used to recommend
 # base_plus; it must now stay on the much lighter *small* tier.
 _CASES: list[tuple[int, int, ModelSize]] = [
-    (0, 0, ModelSize.TINY),                  # no GPU / unknown VRAM
-    (3_000, 3_000, ModelSize.TINY),          # 3 GB card
-    (5_000, 5_000, ModelSize.TINY),          # 5 GB: 3.25 GB effective < 5 GB
-    (8_000, 8_000, ModelSize.SMALL),         # 8 GB card -> small (5.2 GB eff.)
-    (11_000, 12_288, ModelSize.SMALL),       # RTX 3060 12 GB, idle at launch
-    (6_582, 12_288, ModelSize.TINY),         # 3060 while another app uses VRAM
-    (14_000, 16_000, ModelSize.BASE_PLUS),   # 16 GB card -> base_plus
-    (17_000, 18_000, ModelSize.BASE_PLUS),   # 18 GB card still base_plus
-    (24_000, 24_000, ModelSize.LARGE),       # 24 GB card can take large
+    (0, 0, ModelSize.TINY),  # no GPU / unknown VRAM
+    (3_000, 3_000, ModelSize.TINY),  # 3 GB card
+    (5_000, 5_000, ModelSize.TINY),  # 5 GB: 3.25 GB effective < 5 GB
+    (8_000, 8_000, ModelSize.SMALL),  # 8 GB card -> small (5.2 GB eff.)
+    (11_000, 12_288, ModelSize.SMALL),  # RTX 3060 12 GB, idle at launch
+    (6_582, 12_288, ModelSize.TINY),  # 3060 while another app uses VRAM
+    (14_000, 16_000, ModelSize.BASE_PLUS),  # 16 GB card -> base_plus
+    (17_000, 18_000, ModelSize.BASE_PLUS),  # 18 GB card still base_plus
+    (24_000, 24_000, ModelSize.LARGE),  # 24 GB card can take large
 ]
 
 
@@ -84,7 +84,7 @@ def test_recommendation_stays_below_vram_limit() -> None:
 
 def test_effective_vram_keeps_headroom() -> None:
     """effective VRAM = free × 0.65, i.e. ~35 % headroom is kept."""
-    assert int(11_000 * _SUT._VRAM_SAFETY_FACTOR) == 7_150  # noqa: SLF001
+    assert int(11_000 * _SUT._VRAM_SAFETY_FACTOR) == 7_150
 
 
 def test_cpu_fallback_is_tiny() -> None:
@@ -112,8 +112,10 @@ def main() -> int:
     for free_mb, total_mb, expected in _CASES:
         got = _SUT.recommend(_profile(_gpu(total_mb, free_mb))).model_size
         ok = got is expected
-        print(f"  [{'OK ' if ok else 'FAIL'}] free={free_mb:>6} MB "
-              f"total={total_mb:>6} MB -> {got.value:<24} expected {expected.value}")
+        print(
+            f"  [{'OK ' if ok else 'FAIL'}] free={free_mb:>6} MB "
+            f"total={total_mb:>6} MB -> {got.value:<24} expected {expected.value}"
+        )
     if failures:
         print("\nFAILURES:")
         for line in failures:
@@ -121,12 +123,22 @@ def main() -> int:
         return 1
 
     checks = [
-        ("CPU fallback -> tiny", _SUT.recommend(_profile()).model_size is ModelSize.TINY),
-        ("force_model=large respected",
-         _SUT.recommend(_profile(_gpu(8_000, 8_000)), force_model=ModelSize.LARGE).model_size
-         is ModelSize.LARGE),
-        ("user message mentions conservative choice",
-         "conservateur" in _SUT.recommend(_profile(_gpu(11_000, 12_288))).user_message),
+        (
+            "CPU fallback -> tiny",
+            _SUT.recommend(_profile()).model_size is ModelSize.TINY,
+        ),
+        (
+            "force_model=large respected",
+            _SUT.recommend(
+                _profile(_gpu(8_000, 8_000)), force_model=ModelSize.LARGE
+            ).model_size
+            is ModelSize.LARGE,
+        ),
+        (
+            "user message mentions conservative choice",
+            "conservateur"
+            in _SUT.recommend(_profile(_gpu(11_000, 12_288))).user_message,
+        ),
     ]
     for label, ok in checks:
         print(f"  [{'OK ' if ok else 'FAIL'}] {label}")

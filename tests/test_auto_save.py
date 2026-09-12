@@ -47,7 +47,7 @@ def _win() -> MainWindow:
     win.activateWindow()
     QTest.qWaitForWindowExposed(win)
     # Bypass the "Discard unsaved changes?" modal so close() never blocks.
-    win._confirm_discard = lambda: True  # noqa: SLF001
+    win._confirm_discard = lambda: True
     return win
 
 
@@ -55,7 +55,7 @@ def _stub_video(win: MainWindow, tmp_path: Path) -> None:
     video = SimpleNamespace(
         path=tmp_path / "demo.mp4", fps=30.0, width=160, height=120, total_frames=12
     )
-    win._video_reader = video  # noqa: SLF001
+    win._video_reader = video
 
 
 def test_user_settings_defaults(tmp_path):
@@ -79,7 +79,7 @@ def test_user_settings_roundtrip(tmp_path):
 def test_enabled_by_default_and_action_reflects_state(tmp_path):
     win = _win()
     try:
-        assert win._auto_save_enabled is True  # noqa: SLF001
+        assert win._auto_save_enabled is True
         assert win._act_auto_save.isChecked()
     finally:
         win.close()
@@ -89,13 +89,13 @@ def test_toggle_action_persists_and_stops_timer(tmp_path):
     win = _win()
     try:
         _stub_video(win, tmp_path)
-        win._project_dirty = True  # noqa: SLF001
+        win._project_dirty = True
         win._update_auto_save_timer()
-        assert win._auto_save_timer.isActive()  # noqa: SLF001
+        assert win._auto_save_timer.isActive()
 
         win._act_auto_save.setChecked(False)
-        assert win._auto_save_enabled is False  # noqa: SLF001
-        assert not win._auto_save_timer.isActive()  # noqa: SLF001
+        assert win._auto_save_enabled is False
+        assert not win._auto_save_timer.isActive()
         assert ProjectManager.load_user_settings()["auto_save_enabled"] is False
     finally:
         win.close()
@@ -105,8 +105,8 @@ def test_autosave_writes_file_and_does_not_clear_dirty(tmp_path):
     win = _win()
     try:
         _stub_video(win, tmp_path)
-        win._project_dirty = True  # noqa: SLF001
-        win._masks[0] = np.ones((120, 160), dtype=bool)  # noqa: SLF001
+        win._project_dirty = True
+        win._masks[0] = np.ones((120, 160), dtype=bool)
 
         win._perform_autosave()
 
@@ -117,8 +117,8 @@ def test_autosave_writes_file_and_does_not_clear_dirty(tmp_path):
         assert loaded.masks[0].all()
         assert len(loaded.objects) == 1
         # Autosave must not clear the dirty flag or touch the project path.
-        assert win._project_dirty is True  # noqa: SLF001
-        assert win._project_path is None  # noqa: SLF001
+        assert win._project_dirty is True
+        assert win._project_path is None
     finally:
         win.close()
 
@@ -127,8 +127,8 @@ def test_autosave_skipped_when_clean(tmp_path):
     win = _win()
     try:
         _stub_video(win, tmp_path)
-        win._project_dirty = False  # noqa: SLF001
-        win._masks[0] = np.ones((120, 160), dtype=bool)  # noqa: SLF001
+        win._project_dirty = False
+        win._masks[0] = np.ones((120, 160), dtype=bool)
         win._perform_autosave()
         dest = ProjectManager.autosave_dir() / "demo.autosave.bbproj"
         assert not dest.exists(), "clean sessions must not autosave"

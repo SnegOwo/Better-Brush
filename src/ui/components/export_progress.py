@@ -28,8 +28,7 @@ class ExportProgressDialog(QDialog):
         self.setModal(True)
         self.setFixedSize(380, 170)
         self.setWindowFlags(
-            self.windowFlags()
-            & ~Qt.WindowType.WindowContextHelpButtonHint
+            self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
         self._cancelled = False
@@ -145,7 +144,9 @@ class ExportProgressDialog(QDialog):
             eta_mins, eta_secs_i = divmod(int(eta_secs), 60)
             eta_hrs, eta_mins = divmod(eta_mins, 60)
             if eta_hrs > 0:
-                self._lbl_eta.setText(f"Remaining  {eta_hrs}h {eta_mins}m {eta_secs_i}s")
+                self._lbl_eta.setText(
+                    f"Remaining  {eta_hrs}h {eta_mins}m {eta_secs_i}s"
+                )
             else:
                 self._lbl_eta.setText(f"Remaining  {eta_mins}m {eta_secs_i}s")
         else:

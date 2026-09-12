@@ -5,9 +5,10 @@ from __future__ import annotations
 import gc
 import logging
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -61,7 +62,7 @@ class MaskResult:
 
     mask: np.ndarray  # bool HxW
     score: float
-    logits: Optional[np.ndarray] = None
+    logits: np.ndarray | None = None
 
 
 class SAM2Manager:
@@ -70,12 +71,16 @@ class SAM2Manager:
     def __init__(self, recommendation: SAM2Recommendation) -> None:
         self.rec = recommendation
         self._ckpt_mgr = CheckpointManager()
-        self._image_predictor: Optional[Any] = None
-        self._video_predictor: Optional[Any] = None
-        self._video_state: Optional[Any] = None
-        self._current_video_path: Optional[Path] = None
+        self._image_predictor: Any | None = None
+        self._video_predictor: Any | None = None
+        self._video_state: Any | None = None
+        self._current_video_path: Path | None = None
         self._enable_fast_cuda_paths()
-        logger.info("SAM2Manager created for %s on %s", self.rec.model_size.value, self.rec.device)
+        logger.info(
+            "SAM2Manager created for %s on %s",
+            self.rec.model_size.value,
+            self.rec.device,
+        )
 
     # ------------------------------------------------------------------ #
     # Speed helpers
@@ -289,7 +294,7 @@ class SAM2Manager:
     def init_video(
         self,
         video_path: Path,
-        progress_cb: Optional[Callable[[int, int], None]] = None,
+        progress_cb: Callable[[int, int], None] | None = None,
     ) -> Any:
         """Initialise video state; must be called before video propagation.
 
@@ -324,7 +329,7 @@ class SAM2Manager:
     def _ensure_frames_dir(
         cls,
         video_path: Path,
-        progress_cb: Optional[Callable[[int, int], None]] = None,
+        progress_cb: Callable[[int, int], None] | None = None,
     ) -> Path:
         """Extract all frames of *video_path* to a cached JPEG directory.
 
@@ -416,10 +421,10 @@ class SAM2Manager:
     def propagate_in_video(
         self,
         start_frame_idx: int = 0,
-        max_frames: Optional[int] = None,
+        max_frames: int | None = None,
         reverse: bool = False,
-        on_frame: Optional[Callable[[int, int, np.ndarray], None]] = None,
-        cancel_event: Optional[Any] = None,
+        on_frame: Callable[[int, int, np.ndarray], None] | None = None,
+        cancel_event: Any | None = None,
     ) -> list[tuple[int, int, np.ndarray, np.ndarray]]:
         """Propagate mask forward (or backward) through video.
 
@@ -436,7 +441,9 @@ class SAM2Manager:
         """
         if self._video_state is None:
             raise RuntimeError("Video not initialised.")
-        logger.info("Propagating from frame %d (reverse=%s) ...", start_frame_idx, reverse)
+        logger.info(
+            "Propagating from frame %d (reverse=%s) ...", start_frame_idx, reverse
+        )
         kwargs: dict[str, Any] = {"start_frame_idx": start_frame_idx}
         if max_frames is not None:
             kwargs["max_frame_num_to_track"] = max_frames
@@ -445,9 +452,11 @@ class SAM2Manager:
 
         results: list[tuple[int, int, np.ndarray, np.ndarray]] = []
         with self._speed_context(), torch.inference_mode():
-            for frame_idx, obj_ids, mask_logits in self._video_predictor.propagate_in_video(
-                self._video_state, **kwargs
-            ):
+            for (
+                frame_idx,
+                obj_ids,
+                mask_logits,
+            ) in self._video_predictor.propagate_in_video(self._video_state, **kwargs):
                 if cancel_event is not None and cancel_event.is_set():
                     logger.info("Propagation cancelled at frame %d", frame_idx)
                     break

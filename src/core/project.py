@@ -10,15 +10,17 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 PROJECT_EXT = ".bbproj"
 RECENTS_FILE = "recent_projects.json"
@@ -48,17 +50,19 @@ class ProjectData:
     """Serializable snapshot of a rotoscoping session."""
 
     version: int = 1
-    video_path: Optional[str] = None
-    video_meta: dict = field(default_factory=dict)  # fps / width / height / total_frames
+    video_path: str | None = None
+    video_meta: dict = field(
+        default_factory=dict
+    )  # fps / width / height / total_frames
     points: list[dict] = field(default_factory=list)  # {x, y, label}
     keyframes: list[int] = field(default_factory=list)
     masks: dict[int, np.ndarray] = field(default_factory=dict)
     current_frame: int = 0
     edit_mode: str = "points"
     brush_size: int = 20
-    timeline_selection: Optional[list[int]] = None
-    objects: list["ObjectRecord"] = field(default_factory=list)
-    active_object: Optional[int] = None
+    timeline_selection: list[int] | None = None
+    objects: list[ObjectRecord] = field(default_factory=list)
+    active_object: int | None = None
 
     @property
     def video_name(self) -> str:
@@ -116,9 +120,7 @@ class ProjectManager:
         return cls._read_registry().get("recent", [])
 
     @classmethod
-    def add_recent(
-        cls, project_path: Path, video_path: Optional[Path] = None
-    ) -> None:
+    def add_recent(cls, project_path: Path, video_path: Path | None = None) -> None:
         """Record a saved project at the top of the recent list."""
         registry = cls._read_registry()
         recent = registry.get("recent", [])
@@ -128,7 +130,7 @@ class ProjectManager:
             "project": key,
             "video": str(video_path) if video_path else "",
             "video_name": video_path.name if video_path else project_path.name,
-            "saved_at": datetime.now().isoformat(timespec="minutes"),
+            "saved_at": datetime.now(UTC).isoformat(timespec="minutes"),
         }
         recent.insert(0, entry)
         registry["recent"] = recent[:_MAX_RECENT]
@@ -138,7 +140,9 @@ class ProjectManager:
     def remove_recent(cls, project_path: Path) -> None:
         registry = cls._read_registry()
         key = str(project_path)
-        registry["recent"] = [r for r in registry.get("recent", []) if r.get("project") != key]
+        registry["recent"] = [
+            r for r in registry.get("recent", []) if r.get("project") != key
+        ]
         cls._write_registry(registry)
 
     @classmethod
@@ -186,7 +190,7 @@ class ProjectManager:
             cls.settings_file().write_text(
                 json.dumps(current, indent=2), encoding="utf-8"
             )
-        except OSError:  # noqa: BLE001 - non-critical preference save
+        except OSError:
             return
 
     @classmethod
@@ -208,13 +212,15 @@ class ProjectManager:
         payload = {
             "app": "Better Brush",
             "version": _PROJECT_VERSION if data.objects else int(data.version or 1),
-            "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "saved_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "video_path": data.video_path,
             "video_meta": data.video_meta,
             "current_frame": int(data.current_frame or 0),
             "edit_mode": data.edit_mode or "points",
             "brush_size": int(data.brush_size or 20),
-            "timeline_selection": list(data.timeline_selection) if data.timeline_selection else None,
+            "timeline_selection": list(data.timeline_selection)
+            if data.timeline_selection
+            else None,
             # Backward-compatible top-level fields reflect the active object.
             "points": [
                 {
@@ -225,9 +231,7 @@ class ProjectManager:
                 for p in data.points
             ],
             "keyframes": sorted(int(k) for k in data.keyframes),
-            "masks": {
-                str(i): mask_to_b64(m) for i, m in sorted(data.masks.items())
-            },
+            "masks": {str(i): mask_to_b64(m) for i, m in sorted(data.masks.items())},
             "active_object": data.active_object,
             "objects": [
                 {
@@ -259,7 +263,7 @@ class ProjectManager:
         """Deserialize a project. Raises if malformed or missing."""
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
-            raise ValueError(f"Not a valid Better Brush project: {path.name}")
+            raise TypeError(f"Not a valid Better Brush project: {path.name}")
         masks: dict[int, np.ndarray] = {}
         masks_raw = payload.get("masks", {})
         if isinstance(masks_raw, dict):
@@ -267,6 +271,7 @@ class ProjectManager:
                 try:
                     masks[int(k)] = mask_from_b64(b64)
                 except Exception:  # noqa: BLE001 - keep other frames on bad frame
+                    logger.debug("Skipping unreadable mask for frame %s", k)
                     continue
 
         selection = payload.get("timeline_selection")
@@ -289,8 +294,10 @@ class ProjectManager:
         ]
 
         objects: list[ObjectRecord] = []
-        active_object: Optional[int] = None
-        keyframes = sorted(int(k) for k in payload.get("keyframes", []) if isinstance(k, int))
+        active_object: int | None = None
+        keyframes = sorted(
+            int(k) for k in payload.get("keyframes", []) if isinstance(k, int)
+        )
         raw_objects = payload.get("objects")
         if isinstance(raw_objects, list) and raw_objects:
             for raw in raw_objects:
@@ -303,6 +310,7 @@ class ProjectManager:
                         try:
                             obj_masks[int(k)] = mask_from_b64(b64)
                         except Exception:  # noqa: BLE001
+                            logger.debug("Skipping unreadable mask frame %s", k)
                             continue
                 obj_points = raw.get("points", [])
                 if not isinstance(obj_points, list):
@@ -313,7 +321,9 @@ class ProjectManager:
                         name=str(raw.get("name", "Object 1")),
                         color=str(raw.get("color", "#00b4f0")),
                         keyframes=sorted(
-                            int(k) for k in raw.get("keyframes", []) if isinstance(k, int)
+                            int(k)
+                            for k in raw.get("keyframes", [])
+                            if isinstance(k, int)
                         ),
                         points=[
                             {
@@ -329,7 +339,10 @@ class ProjectManager:
                 )
             active_object = payload.get("active_object")
             active_object = (
-                int(active_object) if isinstance(active_object, int) and not isinstance(active_object, bool) else None
+                int(active_object)
+                if isinstance(active_object, int)
+                and not isinstance(active_object, bool)
+                else None
             )
             # Top-level fields fall back to the first object for tools that
             # do not understand multi-object projects yet.

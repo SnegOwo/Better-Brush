@@ -11,7 +11,9 @@ from src.core.project import ProjectData, ProjectManager
 @pytest.fixture(autouse=True)
 def isolated_registry(tmp_path, monkeypatch):
     """Keep the recent-projects registry inside tmp_path, not APPDATA."""
-    monkeypatch.setattr(ProjectManager, "_registry_path", lambda: tmp_path / "registry.json")
+    monkeypatch.setattr(
+        ProjectManager, "_registry_path", lambda: tmp_path / "registry.json"
+    )
     yield
 
 

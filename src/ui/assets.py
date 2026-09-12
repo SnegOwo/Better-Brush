@@ -32,6 +32,11 @@ def ico_path() -> Path:
     return asset_path("icons", "BetterBrush.ico")
 
 
+def bbproj_ico_path() -> Path:
+    """Icon shown on .bbproj files in Windows Explorer."""
+    return asset_path("icons", "bbproj.ico")
+
+
 def app_icon() -> str:
     """String path usable by QIcon, preferring the Windows ICO when present."""
     ico = ico_path()

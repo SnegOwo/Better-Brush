@@ -47,7 +47,7 @@ def _canvas_with_frame() -> VideoCanvas:
 
 def _img_center(canvas: VideoCanvas, ix: int, iy: int) -> QPoint:
     """Widget coords for an image pixel (using the current mapping)."""
-    ox, oy = canvas._offset.x(), canvas._offset.y()  # noqa: SLF001
+    ox, oy = canvas._offset.x(), canvas._offset.y()
     return QPoint(int(ox + ix * canvas._scale), int(oy + iy * canvas._scale))
 
 
@@ -126,11 +126,11 @@ def test_preview_mode_fallback() -> None:
     _app()
     canvas = VideoCanvas()
     canvas.set_preview_mode("cutout")
-    assert canvas._preview_mode == "cutout"  # noqa: SLF001
+    assert canvas._preview_mode == "cutout"
     canvas.set_preview_mode("frame")
-    assert canvas._preview_mode == "frame"  # noqa: SLF001
+    assert canvas._preview_mode == "frame"
     canvas.set_preview_mode("bogus")
-    assert canvas._preview_mode == "mask"  # noqa: SLF001  invalid -> fallback
+    assert canvas._preview_mode == "mask"
 
 
 def test_main_window_toolbar_wiring() -> None:
@@ -168,8 +168,12 @@ def test_segment_bounds() -> None:
         win._current_frame_idx = 4
         win._keyframes = {0, 3, 8}
         win._video_reader = type("Stub", (), {"total_frames": 12})()
-        assert win._segment_bounds(1) == (4, 7), "forward must stop before next keyframe"
-        assert win._segment_bounds(-1) == (4, 4), "backward must stop after prev keyframe"
+        assert win._segment_bounds(1) == (4, 7), (
+            "forward must stop before next keyframe"
+        )
+        assert win._segment_bounds(-1) == (4, 4), (
+            "backward must stop after prev keyframe"
+        )
 
         win._current_frame_idx = 11
         assert win._segment_bounds(1) == (11, 11), "forward at the end stays put"
@@ -197,5 +201,7 @@ if __name__ == "__main__":
         except Exception as exc:  # noqa: BLE001
             failed += 1
             print(f"  [FAIL] {t.__name__}: {exc}")
-    print("All brush/toolbar tests passed." if not failed else f"{failed} test(s) failed.")
+    print(
+        "All brush/toolbar tests passed." if not failed else f"{failed} test(s) failed."
+    )
     raise SystemExit(1 if failed else 0)

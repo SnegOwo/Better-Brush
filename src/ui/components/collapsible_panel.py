@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
@@ -27,9 +27,7 @@ class CollapsibleSection(QWidget):
         header.setCheckable(True)
         header.setChecked(expanded)
         header.setProperty("cssClass", "section-header")
-        header.setStyleSheet(
-            "QPushButton { text-align: left; }"
-        )
+        header.setStyleSheet("QPushButton { text-align: left; }")
         self._header = header
         self._title_label = title.upper()
 
@@ -37,7 +35,7 @@ class CollapsibleSection(QWidget):
         header_layout.setContentsMargins(8, 0, 8, 0)
         header_layout.setSpacing(6)
 
-        self._arrow = QLabel("\u25BE")
+        self._arrow = QLabel("\u25be")
         self._arrow.setStyleSheet("color: #8b8b94; font-size: 10px; border: none;")
         header_layout.addWidget(self._arrow)
 
@@ -81,7 +79,7 @@ class CollapsibleSection(QWidget):
         self.toggled.emit(checked)
 
     def _set_arrow(self, expanded: bool) -> None:
-        self._arrow.setText("\u25BE" if expanded else "\u25B8")
+        self._arrow.setText("\u25be" if expanded else "\u25b8")
 
 
 class Separator(QWidget):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
@@ -38,10 +37,10 @@ class WelcomeDialog(QDialog):
     def __init__(
         self,
         parent: QWidget | None = None,
-        recent: Optional[list[dict]] = None,
+        recent: list[dict] | None = None,
     ) -> None:
         super().__init__(parent)
-        self.choice: tuple[str, Optional[Path]] = ("blank", None)
+        self.choice: tuple[str, Path | None] = ("blank", None)
 
         self.setWindowTitle("Better Brush")
         self.setModal(True)
@@ -70,15 +69,11 @@ class WelcomeDialog(QDialog):
         else:
             logo.setText("BB")
             logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            logo.setStyleSheet(
-                "color: #4a9eff; font-size: 40px; font-weight: 700;"
-            )
+            logo.setStyleSheet("color: #4a9eff; font-size: 40px; font-weight: 700;")
         root.addWidget(logo)
 
         title = QLabel("Better Brush")
-        title.setStyleSheet(
-            "font-size: 22px; font-weight: 700; color: #d4d4d8;"
-        )
+        title.setStyleSheet("font-size: 22px; font-weight: 700; color: #d4d4d8;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(title)
 
@@ -137,15 +132,15 @@ class WelcomeDialog(QDialog):
             "QPushButton:hover { color: #60adff; }"
         )
         self._btn_open_project.clicked.connect(self._on_open_project)
-        link_row.addWidget(self._btn_open_project, alignment=Qt.AlignmentFlag.AlignCenter)
+        link_row.addWidget(
+            self._btn_open_project, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         root.addLayout(link_row)
 
         # Thin divider + tutorial link
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.HLine)
-        divider.setStyleSheet(
-            "background: #2e2e33; color: #2e2e33; max-height: 1px;"
-        )
+        divider.setStyleSheet("background: #2e2e33; color: #2e2e33; max-height: 1px;")
         root.addWidget(divider)
 
         self._btn_tutorial = QPushButton("Quick tutorial (first time here?)")
@@ -179,7 +174,9 @@ class WelcomeDialog(QDialog):
 
     def _on_import(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open Video", "",
+            self,
+            "Open Video",
+            "",
             "Videos (*.mp4 *.mov *.avi *.mkv *.webm);;All Files (*)",
         )
         if not path:

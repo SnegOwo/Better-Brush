@@ -96,7 +96,7 @@ _version_info = VSVersionInfo(
     ],
 )
 
-_a = Analysis(
+_a = Analysis(  # noqa: F821 -- injected global by PyInstaller
     ["src/main.py"],
     pathex=[str(PROJECT_ROOT)],
     binaries=binaries,
@@ -131,9 +131,9 @@ _a = Analysis(
     ],
     noarchive=False,
 )
-_pyz = PYZ(_a.pure)
+_pyz = PYZ(_a.pure)  # noqa: F821 -- injected global by PyInstaller
 
-_exe = EXE(
+_exe = EXE(  # noqa: F821 -- injected global by PyInstaller
     _pyz,
     _a.scripts,
     [],
@@ -153,7 +153,7 @@ _exe = EXE(
     version=_version_info,
 )
 
-_coll = COLLECT(
+_coll = COLLECT(  # noqa: F821 -- injected global by PyInstaller
     _exe,
     _a.binaries,
     _a.datas,

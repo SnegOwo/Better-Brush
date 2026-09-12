@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -19,45 +18,59 @@ _STEPS = [
     ),
     (
         "2 · Choose a Preset (AMV / Human / Object)",
-        "In the Content panel, pick a preset that matches your footage:\n"
-        "• AMV — anime / cartoon outlines, emphasises hard edges.\n"
-        "• Human — faces and people, preserves skin detail.\n"
-        "• Object — general objects, good starting point for anything.",
+        (
+            "In the Content panel, pick a preset that matches your footage:\n"
+            "• AMV — anime / cartoon outlines, emphasises hard edges.\n"
+            "• Human — faces and people, preserves skin detail.\n"
+            "• Object — general objects, good starting point for anything."
+        ),
     ),
     (
         "3 · Add points on your subject",
-        "With the Points tool, left-click places a green marker (include) on the "
-        "subject you want to cut out. Right-click places a red marker (exclude) "
-        "on stuff SAM 2 should ignore.",
+        (
+            "With the Points tool, left-click places a green marker (include) on the "
+            "subject you want to cut out. Right-click places a red marker (exclude) "
+            "on stuff SAM 2 should ignore."
+        ),
     ),
     (
         "4 · Create the first mask",
-        "Press Segment Frame. SAM 2 turns your points into a crisp alpha matte "
-        "for the current frame.",
+        (
+            "Press Segment Frame. SAM 2 turns your points into a crisp alpha matte "
+            "for the current frame."
+        ),
     ),
     (
         "5 · Propagate across the timeline",
-        "Use the Prop buttons (◀ Prop / Prop ▶) to step one frame at a time, "
-        "or click Propagate to End to extend the mask through the entire video. "
-        "Jump between keyframes and correct any that look off.",
+        (
+            "Use the Prop buttons (◀ Prop / Prop ▶) to step one frame at a time, "
+            "or click Propagate to End to extend the mask through the entire video. "
+            "Jump between keyframes and correct any that look off."
+        ),
     ),
     (
         "6 · Refine with the brush",
-        "Press B to switch to the Brush tool: paint to add to the mask. "
-        "Hold Shift while painting to erase. "
-        "Space or P plays and pauses the clip.",
+        (
+            "Press B to switch to the Brush tool: paint to add to the mask. "
+            "Hold Shift while painting to erase. "
+            "Space or P plays and pauses the clip."
+        ),
     ),
     (
         "7 · Export and save",
-        "Ctrl+E opens the export dialog — H.264 MP4 with a solid "
-        "background (green-screen, blue, etc.) is great for compositing. "
-        "Ctrl+S saves your project, keeping every point and mask for later.",
+        (
+            "Ctrl+E opens the export dialog — H.264 MP4 with a solid "
+            "background (green-screen, blue, etc.) is great for compositing. "
+            "Ctrl+S saves your project, keeping every point and mask for later."
+        ),
     ),
     (
         "8 · Library & recode",
-        "File → Media Library (Ctrl+L) shows all your exports. "
-        "Right-click any video to recode it to a different format (MP4 → MOV ProRes, "
-        "WebM, etc.) without re-rendering the mask.",
+        (
+            "File → Media Library (Ctrl+L) shows all your exports. "
+            "Right-click any video to recode it to a different format (MP4 → MOV ProRes, "
+            "WebM, etc.) without re-rendering the mask."
+        ),
     ),
 ]
 
@@ -76,9 +89,7 @@ class TutorialDialog(QDialog):
         root.setSpacing(12)
 
         self._title = QLabel("")
-        self._title.setStyleSheet(
-            "font-size: 16px; font-weight: 600; color: #d4d4d8;"
-        )
+        self._title.setStyleSheet("font-size: 16px; font-weight: 600; color: #d4d4d8;")
         root.addWidget(self._title)
 
         self._body = QLabel("")

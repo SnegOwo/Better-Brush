@@ -39,7 +39,9 @@ def main() -> int:
     print(f"Python        : {profile.python_version}")
     print(f"PyTorch       : {profile.torch_version}")
     print(f"CPU           : {profile.cpu_name}")
-    print(f"CPU cores     : {profile.cpu_count_physical} physical / {profile.cpu_count_logical} logical")
+    print(
+        f"CPU cores     : {profile.cpu_count_physical} physical / {profile.cpu_count_logical} logical"
+    )
     print(f"RAM total     : {profile.ram_total_mb:,} MB")
     print(f"RAM available : {profile.ram_available_mb:,} MB")
     print(f"Best backend  : {profile.best_backend.value}")
@@ -85,12 +87,18 @@ def main() -> int:
                 "physical": profile.cpu_count_physical,
                 "logical": profile.cpu_count_logical,
             },
-            "ram_mb": {"total": profile.ram_total_mb, "available": profile.ram_available_mb},
+            "ram_mb": {
+                "total": profile.ram_total_mb,
+                "available": profile.ram_available_mb,
+            },
             "gpus": [
                 {
                     "index": g.index,
                     "name": g.name,
-                    "vram_mb": {"total": g.total_vram_mb, "available": g.available_vram_mb},
+                    "vram_mb": {
+                        "total": g.total_vram_mb,
+                        "available": g.available_vram_mb,
+                    },
                     "backend": g.backend.value,
                     "compute_capability": g.compute_capability,
                 }
@@ -102,7 +110,9 @@ def main() -> int:
         "recommendations": {
             cp.value: {
                 "model": profiler.recommend(profile, content=cp).model_size.value,
-                "mixed_precision": profiler.recommend(profile, content=cp).mixed_precision,
+                "mixed_precision": profiler.recommend(
+                    profile, content=cp
+                ).mixed_precision,
                 "device": profiler.recommend(profile, content=cp).device,
             }
             for cp in ContentProfile

@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import sys
 import textwrap
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Ensure the repo root is on the path.
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from src.core.licensing import issue_key  # noqa: E402
+from src.core.licensing import issue_key
 
 
 def _parse_expiry(exp: str) -> int:
@@ -27,7 +27,7 @@ def _parse_expiry(exp: str) -> int:
     exp = (exp or "").strip().lower().removeprefix("expires:").strip()
     if not exp or exp in ("never", "0"):
         return 0
-    return int(datetime.strptime(exp, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+    return int(datetime.strptime(exp, "%Y-%m-%d").replace(tzinfo=UTC).timestamp())
 
 
 def main() -> None:
@@ -50,7 +50,8 @@ def main() -> None:
             positional.append(a)
 
     if not positional:
-        print(textwrap.dedent("""\
+        print(
+            textwrap.dedent("""\
             Usage:  python tools/make_license.py "Owner Name" [expires:YYYY-MM-DD] [--count N]
 
             Args:
@@ -60,7 +61,8 @@ def main() -> None:
 
             Example:
               python tools/make_license.py "Buyer" --count 10     # names "Buyer 1".."Buyer 10"
-        """))
+        """)
+        )
         sys.exit(2)
 
     name = positional[0].strip()

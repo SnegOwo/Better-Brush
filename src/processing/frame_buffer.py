@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
-from typing import Optional
 
 import numpy as np
 
@@ -30,14 +29,12 @@ class FrameBuffer:
         self.max_bytes = max_mb * 1024 * 1024
         self._cache: OrderedDict[int, np.ndarray] = OrderedDict()
         self._current_size_bytes = 0
-        logger.info(
-            "FrameBuffer: max_frames=%d max_mb=%d", max_frames, max_mb
-        )
+        logger.info("FrameBuffer: max_frames=%d max_mb=%d", max_frames, max_mb)
 
     # ------------------------------------------------------------------ #
     # Cache API
     # ------------------------------------------------------------------ #
-    def get(self, idx: int) -> Optional[np.ndarray]:
+    def get(self, idx: int) -> np.ndarray | None:
         """Return frame *idx* from cache or read it."""
         if idx in self._cache:
             self._cache.move_to_end(idx)
@@ -55,7 +52,7 @@ class FrameBuffer:
                 if frame is not None:
                     self._put(idx, frame)
 
-    def invalidate(self, idx: Optional[int] = None) -> None:
+    def invalidate(self, idx: int | None = None) -> None:
         """Clear entire cache or drop a specific frame."""
         if idx is None:
             self._cache.clear()

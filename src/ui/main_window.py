@@ -6,11 +6,16 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
-from PySide6.QtCore import QThread, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QIcon, QKeySequence, QPixmap
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QIcon,
+    QKeySequence,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -31,29 +36,34 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.core import licensing
 from src.core.config import AppConfig
 from src.core.project import PROJECT_EXT, ObjectRecord, ProjectData, ProjectManager
-from src.core.scene import OBJECT_PALETTE, SceneObject, next_object_color, next_object_name
+from src.core.scene import (
+    OBJECT_PALETTE,
+    SceneObject,
+    next_object_color,
+    next_object_name,
+)
 from src.core.undo import UndoManager
-from src.ui.assets import app_icon, logo_path
-from src.ui.components.tutorial_dialog import TutorialDialog
-from src.ui.components.welcome_dialog import WelcomeDialog
+from src.export.exporter import Exporter
 from src.hardware import ContentProfile, HardwareDetector, ModelSize, SAM2Profiler
 from src.models.sam2_manager import MaskResult, PointPrompt, SAM2Manager
 from src.processing.frame_buffer import FrameBuffer
-from src.core import constants, licensing
 from src.processing.inference_worker import InferenceWorker, PropagationWorker
 from src.processing.video_reader import VideoReader
-from src.ui.timeline import Timeline
-from src.ui.video_canvas import VideoCanvas
+from src.ui.assets import app_icon, logo_path
 from src.ui.components import CollapsibleSection, Separator
 from src.ui.components.activation_dialog import ActivationDialog
 from src.ui.components.edition import LiteNoticeDialog, ProFeaturesDialog
 from src.ui.components.export_dialog import ExportDialog
 from src.ui.components.export_progress import ExportProgressDialog
-from src.ui.components.loading_overlay import LoadingOverlay
 from src.ui.components.library_panel import LibraryDialog
-from src.export.exporter import Exporter
+from src.ui.components.loading_overlay import LoadingOverlay
+from src.ui.components.tutorial_dialog import TutorialDialog
+from src.ui.components.welcome_dialog import WelcomeDialog
+from src.ui.timeline import Timeline
+from src.ui.video_canvas import VideoCanvas
 
 logger = logging.getLogger(__name__)
 
@@ -69,16 +79,16 @@ class ExportWorker(QThread):
         exporter: Exporter,
         kind: str,
         masks: dict[int, np.ndarray],
-        parent: Optional[QWidget] = None,
-        frames: Optional[dict[int, np.ndarray]] = None,
+        parent: QWidget | None = None,
+        frames: dict[int, np.ndarray] | None = None,
         fps: float = 30.0,
         base_name: str = "output",
-        resolution: Optional[tuple[int, int]] = None,
+        resolution: tuple[int, int] | None = None,
         range_mode: str = "all",
         start_frame: int = 0,
         end_frame: int = 0,
-        audio_source: Optional[Path] = None,
-        background: Optional[tuple[int, int, int]] = None,
+        audio_source: Path | None = None,
+        background: tuple[int, int, int] | None = None,
     ) -> None:
         super().__init__(parent)
         self._exporter = exporter
@@ -105,11 +115,13 @@ class ExportWorker(QThread):
             frames = dict(self._frames)
             if self._range_mode == "range":
                 masks = {
-                    i: m for i, m in masks.items()
+                    i: m
+                    for i, m in masks.items()
                     if self._start_frame <= i <= self._end_frame
                 }
                 frames = {
-                    i: f for i, f in frames.items()
+                    i: f
+                    for i, f in frames.items()
                     if self._start_frame <= i <= self._end_frame
                 }
             if not masks:
@@ -120,7 +132,9 @@ class ExportWorker(QThread):
                 dest = self._exporter.export_png_sequence(
                     masks,
                     base_name=self._base_name,
-                    on_progress=lambda c, t: self.progress.emit("Writing PNG masks", c, t),
+                    on_progress=lambda c, t: self.progress.emit(
+                        "Writing PNG masks", c, t
+                    ),
                     cancel_event=self._cancel,
                 )
             else:
@@ -134,7 +148,9 @@ class ExportWorker(QThread):
                     base_name=self._base_name,
                     fmt=self._kind,
                     resolution=self._resolution,
-                    on_progress=lambda c, t: self.progress.emit("Encoding frames", c, t),
+                    on_progress=lambda c, t: self.progress.emit(
+                        "Encoding frames", c, t
+                    ),
                     cancel_event=self._cancel,
                     audio_source=self._audio_source,
                     background=self._background,
@@ -148,7 +164,7 @@ class ExportWorker(QThread):
 class MainWindow(QMainWindow):
     """Better Brush main window."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Better Brush")
         self.resize(1400, 900)
@@ -156,8 +172,8 @@ class MainWindow(QMainWindow):
 
         # State
         self._config = AppConfig()
-        self._video_reader: Optional[VideoReader] = None
-        self._frame_buffer: Optional[FrameBuffer] = None
+        self._video_reader: VideoReader | None = None
+        self._frame_buffer: FrameBuffer | None = None
         self._current_frame_idx = 0
         self._is_playing = False
         self._play_timer = QTimer(self)
@@ -165,16 +181,16 @@ class MainWindow(QMainWindow):
         self._points: list[PointPrompt] = []
         self._masks: dict[int, np.ndarray] = {}
         self._keyframes: set[int] = set()
-        self._sam_manager: Optional[SAM2Manager] = None
-        self._inference_worker: Optional[InferenceWorker] = None
-        self._propagation_worker: Optional[PropagationWorker] = None
-        self._export_worker: Optional[ExportWorker] = None
+        self._sam_manager: SAM2Manager | None = None
+        self._inference_worker: InferenceWorker | None = None
+        self._propagation_worker: PropagationWorker | None = None
+        self._export_worker: ExportWorker | None = None
         self._export_progress_dlg = None
         self._export_started = 0.0
-        self._timeline_selection: Optional[tuple[int, int]] = None
+        self._timeline_selection: tuple[int, int] | None = None
         self._play_start = 0
         self._syncing = False
-        self._project_path: Optional[Path] = None
+        self._project_path: Path | None = None
         self._project_dirty = False
         self._welcome_shown = False
         self._undo_manager = UndoManager()
@@ -184,12 +200,14 @@ class MainWindow(QMainWindow):
         # Multi-object scene state. ``self._points/_masks/_keyframes`` are
         # aliases into the active object's data.
         self._objects: list[SceneObject] = []
-        self._active_object_id: Optional[int] = None
+        self._active_object_id: int | None = None
 
         # Automatic save
         project_settings = ProjectManager.load_user_settings()
         self._auto_save_enabled = bool(project_settings.get("auto_save_enabled", True))
-        self._auto_save_interval_s = int(project_settings.get("auto_save_interval_s", 60))
+        self._auto_save_interval_s = int(
+            project_settings.get("auto_save_interval_s", 60)
+        )
         self._auto_save_timer = QTimer(self)
         self._auto_save_timer.timeout.connect(self._on_auto_save_tick)
 
@@ -217,18 +235,23 @@ class MainWindow(QMainWindow):
         self._auto_detect_hardware()
 
     # ── Drag and drop ─────────────────────────────────────────────────────
-    def dragEnterEvent(self, event) -> None:  # noqa: N802
+    def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 path = url.toLocalFile().lower()
-                if any(path.endswith(e) for e in (".mp4", ".mov", ".avi", ".mkv", ".webm")):
+                if any(
+                    path.endswith(e) for e in (".mp4", ".mov", ".avi", ".mkv", ".webm")
+                ):
                     event.acceptProposedAction()
                     return
 
-    def dropEvent(self, event) -> None:  # noqa: N802
+    def dropEvent(self, event) -> None:
         for url in event.mimeData().urls():
             path = url.toLocalFile()
-            if any(path.lower().endswith(e) for e in (".mp4", ".mov", ".avi", ".mkv", ".webm")):
+            if any(
+                path.lower().endswith(e)
+                for e in (".mp4", ".mov", ".avi", ".mkv", ".webm")
+            ):
                 if self._confirm_discard():
                     self._load_video(Path(path))
                 return
@@ -338,7 +361,8 @@ class MainWindow(QMainWindow):
             logo_lbl = QLabel()
             logo_lbl.setPixmap(
                 QPixmap(str(logo_path_)).scaled(
-                    18, 18,
+                    18,
+                    18,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -505,7 +529,9 @@ class MainWindow(QMainWindow):
 
         # Tools hint: brush add/erase via Shift
         hint_nav = QLabel("Brush: paint to add · hold Shift while painting to erase")
-        hint_nav.setStyleSheet("color: #7a7a84; font-size: 10px; background: transparent;")
+        hint_nav.setStyleSheet(
+            "color: #7a7a84; font-size: 10px; background: transparent;"
+        )
         hint_nav.setWordWrap(True)
         sec_tools.add_widget(hint_nav)
 
@@ -546,20 +572,20 @@ class MainWindow(QMainWindow):
 
         kf_row = QHBoxLayout()
         kf_row.setSpacing(4)
-        btn_prev_kf = QPushButton("\u25C0 Key")
+        btn_prev_kf = QPushButton("\u25c0 Key")
         btn_prev_kf.clicked.connect(lambda: self._goto_keyframe(-1))
         kf_row.addWidget(btn_prev_kf)
-        btn_next_kf = QPushButton("Key \u25B6")
+        btn_next_kf = QPushButton("Key \u25b6")
         btn_next_kf.clicked.connect(lambda: self._goto_keyframe(1))
         kf_row.addWidget(btn_next_kf)
         sec_prop.add_layout(kf_row)
 
         prop_row = QHBoxLayout()
         prop_row.setSpacing(4)
-        btn_prop_back = QPushButton("\u25C0 Prop")
+        btn_prop_back = QPushButton("\u25c0 Prop")
         btn_prop_back.clicked.connect(lambda: self._run_propagation(-1))
         prop_row.addWidget(btn_prop_back)
-        btn_prop_fwd = QPushButton("Prop \u25B6")
+        btn_prop_fwd = QPushButton("Prop \u25b6")
         btn_prop_fwd.clicked.connect(lambda: self._run_propagation(1))
         prop_row.addWidget(btn_prop_fwd)
         sec_prop.add_layout(prop_row)
@@ -581,7 +607,9 @@ class MainWindow(QMainWindow):
         sec_export.add_widget(self._btn_export)
 
         lbl_export_hint = QLabel("PNG alpha, ProRes 4444, H.264")
-        lbl_export_hint.setStyleSheet("color: #555560; font-size: 10px; background: transparent;")
+        lbl_export_hint.setStyleSheet(
+            "color: #555560; font-size: 10px; background: transparent;"
+        )
         lbl_export_hint.setWordWrap(True)
         sec_export.add_widget(lbl_export_hint)
 
@@ -598,7 +626,9 @@ class MainWindow(QMainWindow):
 
         self._lbl_hw = QLabel("Hardware: detecting...")
         self._lbl_hw.setWordWrap(True)
-        self._lbl_hw.setStyleSheet("color: #8b8b94; font-size: 10px; background: transparent;")
+        self._lbl_hw.setStyleSheet(
+            "color: #8b8b94; font-size: 10px; background: transparent;"
+        )
         sec_hw.add_widget(self._lbl_hw)
 
         pl.addWidget(sec_hw)
@@ -654,7 +684,9 @@ class MainWindow(QMainWindow):
         tl.addStretch()
 
         lbl_view = QLabel("View:")
-        lbl_view.setStyleSheet("color: #8b8b94; font-size: 11px; background: transparent; border: none;")
+        lbl_view.setStyleSheet(
+            "color: #8b8b94; font-size: 11px; background: transparent; border: none;"
+        )
         tl.addWidget(lbl_view)
 
         self._combo_preview = QComboBox()
@@ -688,7 +720,9 @@ class MainWindow(QMainWindow):
             "border-radius: 9px; color: #ffb454; font-size: 10px; padding: 2px 8px; }"
             "QPushButton:hover { border-color: #4a9eff; color: #ffd18a; }"
         )
-        self._btn_edition.setToolTip("You are on the free Lite edition. See what Pro adds.")
+        self._btn_edition.setToolTip(
+            "You are on the free Lite edition. See what Pro adds."
+        )
         self._btn_edition.clicked.connect(self._show_pro_features)
         self._status.addPermanentWidget(self._btn_edition)
         self._on_edition_changed()  # hide the pill entirely for Pro users
@@ -712,7 +746,7 @@ class MainWindow(QMainWindow):
         h = int(total_s // 3600)
         m = int((total_s % 3600) // 60)
         s = int(total_s % 60)
-        f = int(frame_idx % int(round(fps)))
+        f = int(frame_idx % round(fps))
         return f"{h:02d}:{m:02d}:{s:02d}:{f:02d}"
 
     def _update_transport(self) -> None:
@@ -757,7 +791,7 @@ class MainWindow(QMainWindow):
     # ──────────────────────────────────────────────────────────────────────
     # Scene / multi-object management
     # ──────────────────────────────────────────────────────────────────────
-    def _active_object(self) -> Optional[SceneObject]:
+    def _active_object(self) -> SceneObject | None:
         """The currently active object, or None if the scene is empty."""
         for obj in self._objects:
             if obj.obj_id == self._active_object_id:
@@ -918,7 +952,9 @@ class MainWindow(QMainWindow):
         if direction > 0:
             target = next((k for k in kfs if k > self._current_frame_idx), kfs[0])
         else:
-            target = next((k for k in reversed(kfs) if k < self._current_frame_idx), kfs[-1])
+            target = next(
+                (k for k in reversed(kfs) if k < self._current_frame_idx), kfs[-1]
+            )
         self._set_frame(target)
 
     # ──────────────────────────────────────────────────────────────────────
@@ -955,11 +991,11 @@ class MainWindow(QMainWindow):
         try:
             self._recommend_now()
             self._sync_combos()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - best-effort auto-detect, logged below
             logger.error("Hardware detection failed: %s", exc)
             self._status.showMessage(f"HW detection failed: {exc}")
 
-    def _recommend_now(self, force_model: Optional[ModelSize] = None) -> None:
+    def _recommend_now(self, force_model: ModelSize | None = None) -> None:
         profile = HardwareDetector().detect()
         rec = SAM2Profiler().recommend(
             profile, content=self._config.content_profile, force_model=force_model
@@ -978,11 +1014,15 @@ class MainWindow(QMainWindow):
                 self._lbl_gpu.setText(name)
             else:
                 self._lbl_gpu.setText(rec.device.upper())
-        self._status.showMessage(f"Hardware OK - {rec.model_size.value} on {rec.device}")
+        self._status.showMessage(
+            f"Hardware OK - {rec.model_size.value} on {rec.device}"
+        )
         logger.info("Hardware recommendation updated: %s", rec)
 
-    def _selected_force_model(self) -> Optional[ModelSize]:
-        data = self._combo_model.currentData() if hasattr(self, "_combo_model") else None
+    def _selected_force_model(self) -> ModelSize | None:
+        data = (
+            self._combo_model.currentData() if hasattr(self, "_combo_model") else None
+        )
         return data if isinstance(data, ModelSize) else None
 
     def _set_content_mode(self, cp: ContentProfile) -> None:
@@ -1049,7 +1089,7 @@ class MainWindow(QMainWindow):
         """Public hook called by the app bootstrap to open the launcher."""
         self._show_welcome()
 
-    def _on_welcome_result(self, choice: tuple[str, Optional[Path]]) -> None:
+    def _on_welcome_result(self, choice: tuple[str, Path | None]) -> None:
         kind, path = choice
         if kind == "import" and path is not None:
             self._load_video(path)
@@ -1085,7 +1125,7 @@ class MainWindow(QMainWindow):
         if dlg is not None and hasattr(dlg, "panel"):
             dlg.panel._apply_edition()
 
-    def _show_tutorial(self, parent: Optional[QWidget] = None) -> None:
+    def _show_tutorial(self, parent: QWidget | None = None) -> None:
         TutorialDialog(parent or self).exec()
 
     def _on_about(self) -> None:
@@ -1093,9 +1133,8 @@ class MainWindow(QMainWindow):
             edition = "Pro (licensed to %s)" % (licensing.current_licensee() or "you")
         else:
             edition = (
-                "Lite (free, forever) — one-time €%s upgrade at %s unlocks "
+                f"Lite (free, forever) — one-time €{licensing.PRO_PRICE_EUR} upgrade at {licensing.PRO_URL} unlocks "
                 "multi-object, 4K, audio & no watermark. See Help → Pro vs Lite."
-                % (licensing.PRO_PRICE_EUR, licensing.PRO_URL)
             )
         QMessageBox.about(
             self,
@@ -1133,7 +1172,10 @@ class MainWindow(QMainWindow):
     def _reset_to_blank(self) -> None:
         """Close any loaded video / project and return to a blank state."""
         self._pause_playback()
-        if self._propagation_worker is not None and self._propagation_worker.isRunning():
+        if (
+            self._propagation_worker is not None
+            and self._propagation_worker.isRunning()
+        ):
             self._propagation_worker.cancel()
             self._propagation_worker.wait(3000)
         for worker in (self._inference_worker, self._export_worker):
@@ -1161,7 +1203,9 @@ class MainWindow(QMainWindow):
         self._timeline.clear_selection()
         self.setWindowTitle("Better Brush")
         self._update_transport()
-        self._status.showMessage("New project - import a video or drag and drop one here")
+        self._status.showMessage(
+            "New project - import a video or drag and drop one here"
+        )
 
     def _on_new_project(self) -> None:
         if not self._confirm_discard():
@@ -1258,7 +1302,7 @@ class MainWindow(QMainWindow):
             f"{len(self._points)} point(s)"
         )
 
-    def _resolve_video_path(self, data: ProjectData) -> Optional[Path]:
+    def _resolve_video_path(self, data: ProjectData) -> Path | None:
         """Return the video path, asking the user if the original is missing."""
         if data.video_path:
             p = Path(data.video_path)
@@ -1277,7 +1321,10 @@ class MainWindow(QMainWindow):
         if ret != QMessageBox.StandardButton.Yes:
             return None
         path, _ = QFileDialog.getOpenFileName(
-            self, "Locate Video", start, "Videos (*.mp4 *.mov *.avi *.mkv *.webm);;All Files (*)"
+            self,
+            "Locate Video",
+            start,
+            "Videos (*.mp4 *.mov *.avi *.mkv *.webm);;All Files (*)",
         )
         return Path(path) if path else None
 
@@ -1315,9 +1362,7 @@ class MainWindow(QMainWindow):
                 "height": self._video_reader.height,
                 "total_frames": self._video_reader.total_frames,
             },
-            points=[
-                {"x": p.x, "y": p.y, "label": p.label} for p in self._points
-            ],
+            points=[{"x": p.x, "y": p.y, "label": p.label} for p in self._points],
             keyframes=sorted(self._keyframes),
             masks=dict(self._masks),
             current_frame=self._current_frame_idx,
@@ -1350,9 +1395,7 @@ class MainWindow(QMainWindow):
             ProjectManager.add_recent(project_path, self._video_reader.path)
             self._project_path = project_path
             self._project_dirty = False
-            self.setWindowTitle(
-                f"Better Brush - {data.video_name} (project)"
-            )
+            self.setWindowTitle(f"Better Brush - {data.video_name} (project)")
             self._status.showMessage(
                 f"Project saved - {project_path.name} "
                 f"({len(data.masks)} frame(s), {len(data.points)} point(s))"
@@ -1364,7 +1407,9 @@ class MainWindow(QMainWindow):
     # ── Automatic save ────────────────────────────────────────────────────
     def _on_auto_save_toggled(self, enabled: bool) -> None:
         self._auto_save_enabled = bool(enabled)
-        ProjectManager.save_user_settings({"auto_save_enabled": self._auto_save_enabled})
+        ProjectManager.save_user_settings(
+            {"auto_save_enabled": self._auto_save_enabled}
+        )
         self._update_auto_save_timer()
         if enabled:
             if self._video_reader is not None:
@@ -1405,7 +1450,10 @@ class MainWindow(QMainWindow):
     # ──────────────────────────────────────────────────────────────────────
     def _on_open_video(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open Video", "", "Videos (*.mp4 *.mov *.avi *.mkv *.webm);;All Files (*)"
+            self,
+            "Open Video",
+            "",
+            "Videos (*.mp4 *.mov *.avi *.mkv *.webm);;All Files (*)",
         )
         if not path:
             return
@@ -1440,7 +1488,7 @@ class MainWindow(QMainWindow):
                 f"Loaded {path.name} - {self._video_reader.width}x{self._video_reader.height} "
                 f"@ {self._video_reader.fps:.2f} fps"
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - shown to the user in the dialog below
             logger.error("Failed to load video: %s", exc)
             QMessageBox.critical(self, "Error", f"Cannot load video:\n{exc}")
 
@@ -1481,7 +1529,9 @@ class MainWindow(QMainWindow):
             self._btn_play.setChecked(False)
             return
         self._play_start = self._current_frame_idx
-        interval_ms = int(1000 / self._video_reader.fps) if self._video_reader.fps > 0 else 33
+        interval_ms = (
+            int(1000 / self._video_reader.fps) if self._video_reader.fps > 0 else 33
+        )
         self._play_timer.start(interval_ms)
         self._is_playing = True
         self._btn_play.setText("Pause")
@@ -1518,14 +1568,17 @@ class MainWindow(QMainWindow):
         self._mark_dirty()
         self._undo_manager.push(self._points, self._masks, self._keyframes)
         if label:
-            self._status.showMessage(f"Include point added ({x},{y}) - green. "
-                                     "Right-click to add an exclude point.")
+            self._status.showMessage(
+                f"Include point added ({x},{y}) - green. "
+                "Right-click to add an exclude point."
+            )
         else:
             self._status.showMessage(f"Exclude point added ({x},{y}) - red")
 
     def _on_canvas_point_removed(self, removed: PointPrompt) -> None:
         self._points[:] = [
-            p for p in self._points
+            p
+            for p in self._points
             if not (p.x == removed.x and p.y == removed.y and p.label == removed.label)
         ]
         self._canvas.set_points(self._points)
@@ -1534,7 +1587,9 @@ class MainWindow(QMainWindow):
         self._status.showMessage(f"Point deleted ({removed.x},{removed.y})")
 
     def _on_canvas_point_selected(self, _idx: int) -> None:
-        self._status.showMessage("Point selected - press Delete or use the button to remove it")
+        self._status.showMessage(
+            "Point selected - press Delete or use the button to remove it"
+        )
 
     def _delete_selected_point(self) -> None:
         if not self._canvas.delete_selected_point():
@@ -1627,7 +1682,9 @@ class MainWindow(QMainWindow):
         self.setEnabled(False)
 
         self._inference_worker = InferenceWorker(
-            self._config.recommendation, sam_manager=self._ensure_sam_manager(), parent=self
+            self._config.recommendation,
+            sam_manager=self._ensure_sam_manager(),
+            parent=self,
         )
         self._inference_worker.set_task(frame, self._points)
         self._inference_worker.progress.connect(
@@ -1677,7 +1734,10 @@ class MainWindow(QMainWindow):
                 "(Brush tool) before propagating.",
             )
             return
-        if self._propagation_worker is not None and self._propagation_worker.isRunning():
+        if (
+            self._propagation_worker is not None
+            and self._propagation_worker.isRunning()
+        ):
             QMessageBox.warning(self, "Busy", "A propagation is already running.")
             return
 
@@ -1730,7 +1790,9 @@ class MainWindow(QMainWindow):
             self._status.showMessage(stage)
             self._loading_overlay.set_progress(stage)
 
-    def _on_propagation_frame_ready(self, frame_idx: int, _obj_id: int, mask: np.ndarray) -> None:
+    def _on_propagation_frame_ready(
+        self, frame_idx: int, _obj_id: int, mask: np.ndarray
+    ) -> None:
         self._masks[frame_idx] = mask
         self._keyframes.add(frame_idx)
         self._mark_dirty()
@@ -1757,7 +1819,7 @@ class MainWindow(QMainWindow):
         self._show_current_frame()
         self._undo_manager.push(self._points, self._masks, self._keyframes)
         self._propagating = False
-        n_frames = len(set(f for f, _, _, _ in results))
+        n_frames = len({f for f, _, _, _ in results})
         self._status.showMessage(f"Propagation complete - {n_frames} frames masked")
 
     # ──────────────────────────────────────────────────────────────────────
@@ -1773,8 +1835,7 @@ class MainWindow(QMainWindow):
         total_frames = self._video_reader.total_frames if self._video_reader else 0
         fallback_frames = self._frame_buffer.max_frames if self._frame_buffer else 0
         objects_payload = [
-            {"id": o.obj_id, "name": o.name, "color": o.color}
-            for o in self._objects
+            {"id": o.obj_id, "name": o.name, "color": o.color} for o in self._objects
         ]
         dlg = ExportDialog(
             self,
@@ -1811,7 +1872,7 @@ class MainWindow(QMainWindow):
         end_frame = settings.get("end_frame", 0)
         include_audio = settings.get("include_audio", False)
         background = settings.get("background")
-        audio_source: Optional[Path] = None
+        audio_source: Path | None = None
         if include_audio and fmt != "png" and self._video_reader is not None:
             audio_source = self._video_reader.path
 
@@ -1973,19 +2034,26 @@ class MainWindow(QMainWindow):
     # ──────────────────────────────────────────────────────────────────────
     # Close
     # ──────────────────────────────────────────────────────────────────────
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if hasattr(self, "_loading_overlay") and self._loading_overlay.is_active():
             self._loading_overlay.reposition_overlay()
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:
         # Preserve unsaved work even if the user chooses to discard the project.
-        if self._auto_save_enabled and self._project_dirty and self._video_reader is not None:
+        if (
+            self._auto_save_enabled
+            and self._project_dirty
+            and self._video_reader is not None
+        ):
             self._perform_autosave()
         if not self._confirm_discard():
             event.ignore()
             return
-        if self._propagation_worker is not None and self._propagation_worker.isRunning():
+        if (
+            self._propagation_worker is not None
+            and self._propagation_worker.isRunning()
+        ):
             self._propagation_worker.cancel()
             self._propagation_worker.wait(5000)
         for worker in (self._inference_worker, self._export_worker):

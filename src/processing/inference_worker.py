@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import threading
 import traceback
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
 from src.hardware.profiler import SAM2Recommendation
-from src.models.sam2_manager import MaskResult, PointPrompt, SAM2Manager
+from src.models.sam2_manager import PointPrompt, SAM2Manager
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +30,16 @@ class InferenceWorker(QThread):
     def __init__(
         self,
         recommendation: SAM2Recommendation,
-        sam_manager: Optional[SAM2Manager] = None,
-        parent: Optional[Any] = None,
+        sam_manager: SAM2Manager | None = None,
+        parent: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self.rec = recommendation
-        self._sam: Optional[SAM2Manager] = sam_manager
+        self._sam: SAM2Manager | None = sam_manager
         self._owns_manager = sam_manager is None
-        self._frame: Optional[np.ndarray] = None
+        self._frame: np.ndarray | None = None
         self._points: list[PointPrompt] = []
-        self._mask: Optional[np.ndarray] = None
+        self._mask: np.ndarray | None = None
 
     def set_task(self, frame: np.ndarray, points: list[PointPrompt]) -> None:
         self._frame = frame
@@ -69,7 +69,7 @@ class InferenceWorker(QThread):
             self.progress.emit("Running inference...")
             results = self._sam.predict_frame(self._frame, self._points)
             self.finished.emit(results)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - surfaced via finished().emit(exc)
             logger.error("Inference failed: %s\n%s", exc, traceback.format_exc())
             self.finished.emit(exc)
 
@@ -95,17 +95,17 @@ class PropagationWorker(QThread):
         self,
         recommendation: SAM2Recommendation,
         sam_manager: SAM2Manager,
-        parent: Optional[Any] = None,
+        parent: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self.rec = recommendation
         self._sam = sam_manager
-        self._video_path: Optional[str] = None
+        self._video_path: str | None = None
         self._start_frame = 0
         self._points: list[PointPrompt] = []
-        self._mask: Optional[np.ndarray] = None
+        self._mask: np.ndarray | None = None
         self._total_frames = 0
-        self._max_frames: Optional[int] = None
+        self._max_frames: int | None = None
         self._reverse = False
         self._cancel = threading.Event()
 
@@ -113,9 +113,9 @@ class PropagationWorker(QThread):
         self,
         video_path: str,
         start_frame: int = 0,
-        points: Optional[list[PointPrompt]] = None,
+        points: list[PointPrompt] | None = None,
         total_frames: int = 0,
-        mask: Optional[np.ndarray] = None,
+        mask: np.ndarray | None = None,
     ) -> None:
         self._video_path = video_path
         self._start_frame = start_frame
@@ -123,7 +123,7 @@ class PropagationWorker(QThread):
         self._total_frames = total_frames
         self._mask = mask
 
-    def set_range(self, max_frames: Optional[int] = None, reverse: bool = False) -> None:
+    def set_range(self, max_frames: int | None = None, reverse: bool = False) -> None:
         """Restrict propagation to a segment (for partial corrections).
 
         Args:
@@ -175,7 +175,7 @@ class PropagationWorker(QThread):
                 cancel_event=self._cancel,
             )
             self.finished.emit(results)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - surfaced via finished().emit(exc)
             logger.error("Propagation failed: %s\n%s", exc, traceback.format_exc())
             self.finished.emit(exc)
 

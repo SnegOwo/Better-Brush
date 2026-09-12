@@ -58,17 +58,22 @@ def _win() -> MainWindow:
     return win
 
 
-def _wheel(canvas: VideoCanvas, delta: int = 120, pos: QPoint | None = None,
-           ctrl: bool = False) -> None:
+def _wheel(
+    canvas: VideoCanvas, delta: int = 120, pos: QPoint | None = None, ctrl: bool = False
+) -> None:
     p = pos or QPoint(canvas.width() // 2, canvas.height() // 2)
     mods = (
-        Qt.KeyboardModifier.ControlModifier
-        if ctrl
-        else Qt.KeyboardModifier.NoModifier
+        Qt.KeyboardModifier.ControlModifier if ctrl else Qt.KeyboardModifier.NoModifier
     )
     ev = QWheelEvent(
-        QPointF(p), QPointF(p), QPoint(), QPoint(0, delta),
-        Qt.MouseButton.NoButton, mods, Qt.ScrollPhase.NoScrollPhase, False,
+        QPointF(p),
+        QPointF(p),
+        QPoint(),
+        QPoint(0, delta),
+        Qt.MouseButton.NoButton,
+        mods,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
         Qt.MouseEventSource.MouseEventSynthesizedByApplication,
     )
     QCoreApplication.sendEvent(canvas, ev)
@@ -76,8 +81,8 @@ def _wheel(canvas: VideoCanvas, delta: int = 120, pos: QPoint | None = None,
 
 def _img_point(canvas: VideoCanvas, wx: int, wy: int) -> tuple[float, float]:
     return (
-        (wx - canvas._offset.x()) / canvas._scale,  # noqa: SLF001
-        (wy - canvas._offset.y()) / canvas._scale,  # noqa: SLF001
+        (wx - canvas._offset.x()) / canvas._scale,
+        (wy - canvas._offset.y()) / canvas._scale,
     )
 
 
@@ -85,15 +90,15 @@ def test_fit_frame_state() -> None:
     _app()
     c = _canvas()
     dividend = min(c.width() / 160, c.height() / 100)
-    assert c._scale > 0  # noqa: SLF001
-    assert abs(c._scale - dividend) < 1e-6  # noqa: SLF001
+    assert c._scale > 0
+    assert abs(c._scale - dividend) < 1e-6
 
 
 def test_ctrl_scroll_zooms_in_points_mode() -> None:
     _app()
     c = _canvas()
     c.set_edit_mode("points")
-    before = c._zoom  # noqa: SLF001
+    before = c._zoom
     _wheel(c, delta=120, ctrl=True)
     assert c._zoom > before, "Ctrl+scroll up must zoom in"
 
@@ -102,7 +107,7 @@ def test_ctrl_scroll_zooms_in_brush_mode() -> None:
     _app()
     c = _canvas()
     c.set_edit_mode("brush")
-    before = c._zoom  # noqa: SLF001
+    before = c._zoom
     _wheel(c, delta=120, ctrl=True)
     assert c._zoom > before, "Ctrl+scroll up must zoom in (brush mode)"
 
@@ -113,7 +118,7 @@ def test_ctrl_scroll_zoom_out_clamped() -> None:
     c.set_edit_mode("points")
     for _ in range(80):
         _wheel(c, delta=-120, ctrl=True)
-    assert c._zoom >= 0.05, "zoom must clamp at the lower bound"  # noqa: SLF001
+    assert c._zoom >= 0.05, "zoom must clamp at the lower bound"
 
 
 def test_plain_scroll_navigates_frames() -> None:
@@ -152,11 +157,15 @@ def test_ctrl_scroll_does_not_navigate() -> None:
 def test_middle_drag_pans() -> None:
     _app()
     c = _canvas()
-    pan0 = c._pan  # noqa: SLF001
-    QTest.mousePress(c, Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier, QPoint(100, 100))
+    pan0 = c._pan
+    QTest.mousePress(
+        c, Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier, QPoint(100, 100)
+    )
     QTest.mouseMove(c, QPoint(132, 70))
-    QTest.mouseRelease(c, Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier, QPoint(132, 70))
-    assert c._pan == pan0 + QPoint(32, -30), "drag did not pan"  # noqa: SLF001
+    QTest.mouseRelease(
+        c, Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier, QPoint(132, 70)
+    )
+    assert c._pan == pan0 + QPoint(32, -30), "drag did not pan"
 
 
 def test_zoom_keeps_cursor_point_stable() -> None:

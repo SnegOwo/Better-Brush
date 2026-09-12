@@ -5,10 +5,9 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Optional
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QMouseEvent, QPainter, QColor, QPen, QBrush, QFont, QPolygon
+from PySide6.QtGui import QBrush, QColor, QFont, QMouseEvent, QPainter, QPen, QPolygon
 from PySide6.QtWidgets import QWidget
 
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ class Timeline(QWidget):
     playhead_moved = Signal(int)  # frame index dragged
     selection_changed = Signal(int, int)  # inclusive [start, end]; (-1, -1) = cleared
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setMinimumHeight(72)
         self.setMaximumHeight(100)
@@ -54,9 +53,9 @@ class Timeline(QWidget):
         self._keyframes: set[int] = set()
         self._masked_frames: set[int] = set()
         self._dragging = False
-        self._sel_start: Optional[int] = None
-        self._sel_end: Optional[int] = None
-        self._sel_drag: Optional[str] = None  # "create" | "move" | "left" | "right"
+        self._sel_start: int | None = None
+        self._sel_end: int | None = None
+        self._sel_drag: str | None = None  # "create" | "move" | "left" | "right"
         self._drag_anchor_frame = 0
         self._drag_orig = (0, 0)
         self.setStyleSheet("background: transparent;")
@@ -108,7 +107,7 @@ class Timeline(QWidget):
         self.selection_changed.emit(-1, -1)
         self.update()
 
-    def get_selection(self) -> Optional[tuple[int, int]]:
+    def get_selection(self) -> tuple[int, int] | None:
         """Return inclusive (start, end) or None if no selection set."""
         if self._sel_start is None or self._sel_end is None:
             return None
@@ -117,7 +116,7 @@ class Timeline(QWidget):
     # ------------------------------------------------------------------ #
     # Painting
     # ------------------------------------------------------------------ #
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -189,12 +188,14 @@ class Timeline(QWidget):
             for kf in self._keyframes:
                 x = self._frame_to_x(kf, w)
                 cy = track_top + 6
-                diamond = QPolygon([
-                    QPoint(x, cy - diamond_size),
-                    QPoint(x + diamond_size, cy),
-                    QPoint(x, cy + diamond_size),
-                    QPoint(x - diamond_size, cy),
-                ])
+                diamond = QPolygon(
+                    [
+                        QPoint(x, cy - diamond_size),
+                        QPoint(x + diamond_size, cy),
+                        QPoint(x, cy + diamond_size),
+                        QPoint(x - diamond_size, cy),
+                    ]
+                )
                 painter.drawPolygon(diamond)
 
         # ── Playhead ──────────────────────────────────────────────────────
@@ -206,11 +207,13 @@ class Timeline(QWidget):
 
         # Playhead handle (small triangle at top of ruler)
         handle_size = 5
-        handle = QPolygon([
-            QPoint(ph_x - handle_size, 0),
-            QPoint(ph_x + handle_size, 0),
-            QPoint(ph_x, handle_size + 2),
-        ])
+        handle = QPolygon(
+            [
+                QPoint(ph_x - handle_size, 0),
+                QPoint(ph_x + handle_size, 0),
+                QPoint(ph_x, handle_size + 2),
+            ]
+        )
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(_PLAYHEAD_COLOR))
         painter.drawPolygon(handle)
@@ -221,7 +224,8 @@ class Timeline(QWidget):
         painter.setFont(font)
         painter.setPen(_FRAME_TEXT)
         painter.drawText(
-            8, counter_y,
+            8,
+            counter_y,
             f"Frame {self._current_frame} / {self._total_frames - 1}",
         )
 
@@ -263,7 +267,7 @@ class Timeline(QWidget):
 
         for f in range(0, self._total_frames, minor_step):
             x = self._frame_to_x(f, w)
-            is_major = (f % major_step == 0)
+            is_major = f % major_step == 0
 
             if is_major:
                 # Major tick
@@ -288,7 +292,7 @@ class Timeline(QWidget):
     # ------------------------------------------------------------------ #
     # Interaction
     # ------------------------------------------------------------------ #
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._total_frames <= 1 or event.button() != Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
             return
@@ -300,18 +304,18 @@ class Timeline(QWidget):
         self._dragging = True
         self._seek_to(x)
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._sel_drag is not None:
             self._apply_selection_drag(self._frame_at_x(event.pos().x()))
             return
         if self._dragging:
             self._seek_to(event.pos().x())
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._dragging = False
         self._sel_drag = None
 
-    def keyPressEvent(self, event) -> None:  # noqa: N802
+    def keyPressEvent(self, event) -> None:
         key = event.key()
         cur = self._current_frame
         if key == Qt.Key.Key_I:  # set in-point at playhead
@@ -350,7 +354,7 @@ class Timeline(QWidget):
             self.selection_changed.emit(f0, f0)
             self.update()
 
-    def _hit_handle_or_body(self, x: int) -> Optional[str]:
+    def _hit_handle_or_body(self, x: int) -> str | None:
         """Return "left", "right", "move", or None for a click at x."""
         if self._sel_start is None or self._sel_end is None:
             return None

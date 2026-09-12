@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -38,9 +37,9 @@ FORMATS = [
 # Rough bytes-per-pixel-per-frame estimates for size forecasting
 _BPP_ESTIMATE = {
     "prores": 1.2,  # ProRes 4444 ~ compressed
-    "qtrle": 2.5,   # Animation codec is bulky
-    "h264": 0.08,   # heavily compressed
-    "png": 4.0,     # uncompressed RGBA
+    "qtrle": 2.5,  # Animation codec is bulky
+    "h264": 0.08,  # heavily compressed
+    "png": 4.0,  # uncompressed RGBA
 }
 
 # Preset resolutions (excluding "Match Source")
@@ -64,16 +63,18 @@ class ExportDialog(QDialog):
     def __init__(
         self,
         parent: QWidget | None = None,
-        video_reader: Optional[VideoReader] = None,
+        video_reader: VideoReader | None = None,
         num_masks: int = 0,
         num_frames: int = 0,
-        timeline_selection: Optional[tuple[int, int]] = None,
-        objects: Optional[list[dict]] = None,
+        timeline_selection: tuple[int, int] | None = None,
+        objects: list[dict] | None = None,
     ) -> None:
         super().__init__(parent)
         self._video_reader = video_reader
         self._num_masks = num_masks
-        self._num_frames = num_frames or (video_reader.total_frames if video_reader else 0)
+        self._num_frames = num_frames or (
+            video_reader.total_frames if video_reader else 0
+        )
         self._timeline_selection = timeline_selection
         self._objects = objects or []
         self._current_frame = 0
@@ -281,10 +282,7 @@ class ExportDialog(QDialog):
         single_row.addStretch()
         root.addLayout(single_row)
 
-        self._rb_separate = QRadioButton(
-            "Separate files (one file per object)" if len(self._objects) > 1
-            else "Separate files (one file per object)"
-        )
+        self._rb_separate = QRadioButton("Separate files (one file per object)")
         root.addWidget(self._rb_separate)
 
         self._rb_single.toggled.connect(self._on_object_mode_changed)
@@ -306,7 +304,9 @@ class ExportDialog(QDialog):
         else:
             self._rb_timeline = QRadioButton("Timeline Selection")
             self._rb_timeline.setEnabled(False)
-            self._rb_timeline.setToolTip("Select a range on the timeline (Shift+drag) first.")
+            self._rb_timeline.setToolTip(
+                "Select a range on the timeline (Shift+drag) first."
+            )
 
         self._rb_all = QRadioButton("All Masked Frames")
         if self._timeline_selection is None:
@@ -366,9 +366,7 @@ class ExportDialog(QDialog):
     @staticmethod
     def _label(text: str) -> QLabel:
         lbl = QLabel(text)
-        lbl.setStyleSheet(
-            "color: #8b8b94; font-size: 11px; background: transparent;"
-        )
+        lbl.setStyleSheet("color: #8b8b94; font-size: 11px; background: transparent;")
         lbl.setFixedWidth(90)
         return lbl
 
@@ -505,7 +503,7 @@ class ExportDialog(QDialog):
     def _update_estimates(self) -> None:
         fmt = self._combo_format.currentData() or "prores"
         w, h = self._spin_w.value(), self._spin_h.value()
-        fps = self._spin_fps.value()
+        self._spin_fps.value()
 
         if self._rb_timeline.isChecked() and self._timeline_selection is not None:
             n = self._timeline_selection[1] - self._timeline_selection[0] + 1
@@ -542,11 +540,7 @@ class ExportDialog(QDialog):
             and self._video_reader is not None
             and _pro
         )
-        resolution = (
-            (self._spin_w.value(), self._spin_h.value())
-            if not match
-            else None
-        )
+        resolution = (self._spin_w.value(), self._spin_h.value()) if not match else None
         if not _pro and resolution:
             w, h = resolution
             resolution = (

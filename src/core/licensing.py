@@ -25,9 +25,9 @@ import base64
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
+from pathlib import Path
 
 from src.core.project import ProjectManager
 
@@ -79,7 +79,7 @@ def issue_key(licensee: str, edition: str = "pro", expires: int = 0) -> str:
         "n": licensee.strip(),
         "e": edition,
         "x": int(expires),
-        "i": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "i": datetime.now(UTC).strftime("%Y-%m-%d"),
     }
     payload = json.dumps(payload_obj, separators=(",", ":")).encode("utf-8")
     sig = _b32(_digest(payload))
@@ -104,13 +104,17 @@ def validate_key(key: str) -> dict:
         raise _LicenseError("This does not look like a Better Brush Pro key.")
     body = text[len(_PREFIX) :].replace("-", "")
     if len(body) <= _SIG_B32_LEN:
-        raise _LicenseError("The key has the wrong length — check it was copied in full.")
+        raise _LicenseError(
+            "The key has the wrong length — check it was copied in full."
+        )
     sig_raw, payload_b32 = body[-_SIG_B32_LEN:], body[:-_SIG_B32_LEN]
     try:
         payload = _b32decode(payload_b32)
         sig = _b32decode(sig_raw)
     except (ValueError, TypeError) as exc:
-        raise _LicenseError("The key looks corrupted — re-check the characters.") from exc
+        raise _LicenseError(
+            "The key looks corrupted — re-check the characters."
+        ) from exc
     if not hmac.compare_digest(sig, _digest(payload)):
         raise _LicenseError("This key is not valid for this copy of Better Brush.")
     try:
@@ -122,7 +126,7 @@ def validate_key(key: str) -> dict:
     if not data.get("n"):
         raise _LicenseError("The key is missing its owner field.")
     exp = int(data.get("x", 0) or 0)
-    if exp and exp < int(datetime.now(timezone.utc).timestamp()):
+    if exp and exp < int(datetime.now(UTC).timestamp()):
         raise _LicenseError("This key has expired.")
     return data
 
@@ -147,7 +151,7 @@ def activate(key: str) -> tuple[bool, str]:
     record = {
         "licensee": data["n"],
         "payload": _b32(payload),
-        "activated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "activated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "expires": int(data.get("x", 0) or 0),
     }
     _activation_path().write_text(json.dumps(record, indent=2), encoding="utf-8")
@@ -170,7 +174,7 @@ def is_pro() -> bool:
     if not isinstance(data, dict) or data.get("e") != "pro":
         return False
     exp = int(record.get("expires", 0) or 0)
-    if exp and exp < int(datetime.now(timezone.utc).timestamp()):
+    if exp and exp < int(datetime.now(UTC).timestamp()):
         return False
     return str(record.get("licensee", "")).strip() == str(data.get("n", "")).strip()
 
@@ -179,15 +183,15 @@ def entitlement() -> Entitlement:
     return Entitlement.PRO if is_pro() else Entitlement.LITE
 
 
-def current_licensee() -> Optional[str]:
+def current_licensee() -> str | None:
     return _read_activation().get("licensee") if is_pro() else None
 
 
-def activated_at() -> Optional[str]:
+def activated_at() -> str | None:
     return _read_activation().get("activated_at") if is_pro() else None
 
 
-def _read_activation() -> Optional[dict]:
+def _read_activation() -> dict | None:
     path = _activation_path()
     if not path.is_file():
         return None

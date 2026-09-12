@@ -47,7 +47,7 @@ def _win() -> MainWindow:
 
 
 def _img_center(canvas, ix: int, iy: int) -> QPoint:
-    ox, oy = canvas._offset.x(), canvas._offset.y()  # noqa: SLF001
+    ox, oy = canvas._offset.x(), canvas._offset.y()
     return QPoint(int(ox + ix * canvas._scale), int(oy + iy * canvas._scale))
 
 
@@ -148,7 +148,9 @@ def test_new_action_clears_redo() -> None:
         _click_point(win._canvas, 40, 30)
         QTest.keyClick(win._canvas, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
         assert not win._points
-        assert win._undo_manager.can_redo, "redo should be available before a new action"
+        assert win._undo_manager.can_redo, (
+            "redo should be available before a new action"
+        )
         win._on_canvas_point(50, 60, 1)
         assert not win._undo_manager.can_redo, "new action must clear redo history"
     finally:

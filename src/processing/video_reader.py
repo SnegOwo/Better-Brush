@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -33,8 +32,8 @@ class VideoReader:
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(f"Video not found: {self.path}")
-        self._cap: Optional[cv2.VideoCapture] = None
-        self._metadata: Optional[VideoMetadata] = None
+        self._cap: cv2.VideoCapture | None = None
+        self._metadata: VideoMetadata | None = None
         self._open()
 
     # ------------------------------------------------------------------ #
@@ -61,7 +60,12 @@ class VideoReader:
         )
         logger.info(
             "Video opened: %s (%dx%d @ %.2f fps, %d frames, %.1f s)",
-            self.path.name, w, h, fps, total, duration,
+            self.path.name,
+            w,
+            h,
+            fps,
+            total,
+            duration,
         )
 
     def close(self) -> None:
@@ -98,12 +102,14 @@ class VideoReader:
     # ------------------------------------------------------------------ #
     # Frame access
     # ------------------------------------------------------------------ #
-    def read_frame(self, idx: int) -> Optional[np.ndarray]:
+    def read_frame(self, idx: int) -> np.ndarray | None:
         """Read a single frame by index. Returns RGB uint8 array or None."""
         if self._cap is None:
             return None
         if idx < 0 or idx >= self.metadata.total_frames:
-            logger.warning("Frame index %d out of range [0, %d)", idx, self.metadata.total_frames)
+            logger.warning(
+                "Frame index %d out of range [0, %d)", idx, self.metadata.total_frames
+            )
             return None
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ok, frame = self._cap.read()
@@ -112,7 +118,7 @@ class VideoReader:
             return None
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    def read_next(self) -> Optional[np.ndarray]:
+    def read_next(self) -> np.ndarray | None:
         """Read next frame sequentially (for playback)."""
         if self._cap is None:
             return None
@@ -125,7 +131,7 @@ class VideoReader:
         self,
         dest_dir: Path | str,
         quality: int = 95,
-        on_progress: Optional[callable] = None,
+        on_progress: callable | None = None,
     ) -> Path:
         """Dump every frame as ``%05d.jpg`` into *dest_dir*.
 

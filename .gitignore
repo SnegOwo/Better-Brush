@@ -9,7 +9,8 @@ venv/
 env/
 build/
 dist/
-dist_public/
+dist_public*/
+*.zip
 *.egg-info/
 
 # PyTorch / checkpoints

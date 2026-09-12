@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 from src.hardware.profiler import ModelSize
 
@@ -13,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 # SAM 2.1 official Meta URLs (092824 release)
 _BASE_CKPT = "https://dl.fbaipublicfiles.com/segment_anything_2/092824"
-_BASE_CFG = "https://raw.githubusercontent.com/facebookresearch/sam2/main/sam2/configs/sam2.1"
+_BASE_CFG = (
+    "https://raw.githubusercontent.com/facebookresearch/sam2/main/sam2/configs/sam2.1"
+)
 
 _CHECKPOINT_URLS: dict[ModelSize, str] = {
     ModelSize.TINY: f"{_BASE_CKPT}/sam2.1_hiera_tiny.pt",
@@ -33,8 +34,10 @@ _CONFIG_URLS: dict[ModelSize, str] = {
 class CheckpointManager:
     """Handle downloading and caching of SAM 2 weights and configs."""
 
-    def __init__(self, checkpoints_dir: Optional[Path] = None) -> None:
-        self.checkpoints_dir = checkpoints_dir or Path(__file__).resolve().parents[3] / "checkpoints"
+    def __init__(self, checkpoints_dir: Path | None = None) -> None:
+        self.checkpoints_dir = (
+            checkpoints_dir or Path(__file__).resolve().parents[3] / "checkpoints"
+        )
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
         self.configs_dir = self.checkpoints_dir / "configs"
         self.configs_dir.mkdir(parents=True, exist_ok=True)
@@ -48,7 +51,9 @@ class CheckpointManager:
         filename = _CHECKPOINT_URLS[size].split("/")[-1]
         local = self.checkpoints_dir / filename
         if not local.exists():
-            self._download(_CHECKPOINT_URLS[size], local, desc=f"Checkpoint {size.value}")
+            self._download(
+                _CHECKPOINT_URLS[size], local, desc=f"Checkpoint {size.value}"
+            )
         return local
 
     def get_config_path(self, size: ModelSize) -> Path:

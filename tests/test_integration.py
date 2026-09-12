@@ -14,16 +14,17 @@ logger = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.hardware import HardwareDetector, SAM2Profiler, ContentProfile
-from src.models.checkpoint_manager import CheckpointManager
-from src.models.sam2_manager import SAM2Manager, PointPrompt
-from src.processing.video_reader import VideoReader
-from src.processing.frame_buffer import FrameBuffer
 from src.export.exporter import Exporter
+from src.hardware import ContentProfile, HardwareDetector, SAM2Profiler
+from src.models.sam2_manager import PointPrompt, SAM2Manager
+from src.processing.frame_buffer import FrameBuffer
+from src.processing.video_reader import VideoReader
 from src.utils.logging_config import configure_logging
 
 
-def create_synthetic_video(path: Path, frames: int = 10, size: tuple[int, int] = (256, 256)) -> None:
+def create_synthetic_video(
+    path: Path, frames: int = 10, size: tuple[int, int] = (256, 256)
+) -> None:
     """Create a synthetic video with a moving circle for testing."""
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(str(path), fourcc, 10.0, size)
@@ -62,7 +63,9 @@ def main() -> int:
         # 3. Video reader
         print("\n[3/7] Video reader...")
         reader = VideoReader(video_path)
-        print(f"  {reader.width}x{reader.height}, {reader.fps} fps, {reader.total_frames} frames")
+        print(
+            f"  {reader.width}x{reader.height}, {reader.fps} fps, {reader.total_frames} frames"
+        )
         buf = FrameBuffer(reader, max_frames=10)
 
         if not SAM2Manager(rec).is_available:
@@ -86,7 +89,6 @@ def main() -> int:
             buf.close()
             return 1
         best = max(results, key=lambda m: m.score)
-        mask = best.mask
         print(f"  {len(results)} candidate mask(s), best score={best.score:.3f}")
         if best.score < 0.5:
             print(f"  WARNING: low IoU prediction score ({best.score:.3f} < 0.5)")
@@ -106,7 +108,9 @@ def main() -> int:
         for f_idx, _obj, m, _s in propagated:
             masks_per_frame[f_idx] = m
         covered = sum(1 for m in masks_per_frame.values() if m.any())
-        print(f"  {len(masks_per_frame)} frame(s) returned, {covered} with non-empty mask")
+        print(
+            f"  {len(masks_per_frame)} frame(s) returned, {covered} with non-empty mask"
+        )
         if covered < reader.total_frames:
             print(f"  WARNING: only {covered}/{reader.total_frames} frames have a mask")
             buf.close()

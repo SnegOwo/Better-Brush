@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import ClassVar
 
 from src.hardware.detector import Backend, GPUInfo, HardwareProfile
 
@@ -62,7 +62,7 @@ class SAM2Profiler:
     # Minimum VRAM REQUIRED (MB) to run a tier *comfortably* in video
     # propagation mode (weights + activations + SAM 2's per-frame memory
     # bank). Deliberately higher than the raw checkpoint size on disk.
-    _VRAM_THRESHOLDS: dict[ModelSize, int] = {
+    _VRAM_THRESHOLDS: ClassVar[dict[ModelSize, int]] = {
         ModelSize.TINY: 2_800,
         ModelSize.SMALL: 5_000,
         ModelSize.BASE_PLUS: 8_500,
@@ -73,7 +73,7 @@ class SAM2Profiler:
     # threshold above (keeps ~35 % of VRAM free at runtime).
     _VRAM_SAFETY_FACTOR: float = 0.65
 
-    _CONFIG_MAP: dict[ModelSize, str] = {
+    _CONFIG_MAP: ClassVar[dict[ModelSize, str]] = {
         ModelSize.LARGE: "sam2.1_hiera_l.yaml",
         ModelSize.BASE_PLUS: "sam2.1_hiera_b+.yaml",
         ModelSize.SMALL: "sam2.1_hiera_s.yaml",
@@ -84,14 +84,14 @@ class SAM2Profiler:
         "https://dl.fbaipublicfiles.com/segment_anything_2/092824/{checkpoint}"
     )
 
-    _CHECKPOINT_MAP: dict[ModelSize, str] = {
+    _CHECKPOINT_MAP: ClassVar[dict[ModelSize, str]] = {
         ModelSize.LARGE: "sam2.1_hiera_large.pt",
         ModelSize.BASE_PLUS: "sam2.1_hiera_base_plus.pt",
         ModelSize.SMALL: "sam2.1_hiera_small.pt",
         ModelSize.TINY: "sam2.1_hiera_tiny.pt",
     }
 
-    _PROFILE_PRESETS: dict[ContentProfile, dict[str, float | int]] = {
+    _PROFILE_PRESETS: ClassVar[dict[ContentProfile, dict[str, float | int]]] = {
         # Anime / AMV: crisp outlines, flat colours — thinner line art needs
         # a slightly lower IoU bar, long clips deserve a generous memory bank.
         ContentProfile.ANIME: {
@@ -121,7 +121,7 @@ class SAM2Profiler:
         self,
         profile: HardwareProfile,
         content: ContentProfile = ContentProfile.GENERAL,
-        force_model: Optional[ModelSize] = None,
+        force_model: ModelSize | None = None,
     ) -> SAM2Recommendation:
         target_gpu = self._pick_target_gpu(profile)
         model_size = force_model or self._pick_model(target_gpu)
@@ -147,7 +147,7 @@ class SAM2Profiler:
         )
 
     @staticmethod
-    def _pick_target_gpu(profile: HardwareProfile) -> Optional[GPUInfo]:
+    def _pick_target_gpu(profile: HardwareProfile) -> GPUInfo | None:
         cuda = [g for g in profile.gpus if g.backend == Backend.CUDA]
         if cuda:
             return max(cuda, key=lambda g: g.total_vram_mb)
@@ -156,7 +156,7 @@ class SAM2Profiler:
             return dml[0]
         return None
 
-    def _pick_model(self, gpu: Optional[GPUInfo]) -> ModelSize:
+    def _pick_model(self, gpu: GPUInfo | None) -> ModelSize:
         if gpu is None or gpu.total_vram_mb == 0:
             logger.warning("No GPU detected — falling back to TINY on CPU")
             return ModelSize.TINY
@@ -174,7 +174,12 @@ class SAM2Profiler:
             effective,
             self._VRAM_SAFETY_FACTOR,
         )
-        for size in (ModelSize.LARGE, ModelSize.BASE_PLUS, ModelSize.SMALL, ModelSize.TINY):
+        for size in (
+            ModelSize.LARGE,
+            ModelSize.BASE_PLUS,
+            ModelSize.SMALL,
+            ModelSize.TINY,
+        ):
             if effective >= self._VRAM_THRESHOLDS[size]:
                 logger.info(
                     "Recommended %s (threshold %d MB, effective %d MB)",
@@ -187,12 +192,10 @@ class SAM2Profiler:
         return ModelSize.TINY
 
     @staticmethod
-    def _supports_amp(backend: Backend, gpu: Optional[GPUInfo]) -> bool:
+    def _supports_amp(backend: Backend, gpu: GPUInfo | None) -> bool:
         if backend != Backend.CUDA or gpu is None:
             return False
-        if gpu.compute_capability and gpu.compute_capability[0] >= 8:
-            return True
-        return False
+        return bool(gpu.compute_capability and gpu.compute_capability[0] >= 8)
 
     def _url_for(self, size: ModelSize) -> str:
         ckpt = self._CHECKPOINT_MAP[size]
@@ -200,7 +203,7 @@ class SAM2Profiler:
 
     @staticmethod
     def _build_user_message(
-        model: ModelSize, backend: Backend, amp: bool, gpu: Optional[GPUInfo]
+        model: ModelSize, backend: Backend, amp: bool, gpu: GPUInfo | None
     ) -> str:
         # The model pick is deliberately conservative: staying well under the
         # GPU's limits prevents overheating (black screen) on modest cards.

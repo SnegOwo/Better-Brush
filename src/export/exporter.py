@@ -8,8 +8,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -36,7 +36,7 @@ def _resolve_ffmpeg() -> str:
 class Exporter:
     """Handle export of mask sequences to PNG alpha and video via FFmpeg."""
 
-    def __init__(self, output_dir: Optional[Path] = None) -> None:
+    def __init__(self, output_dir: Path | None = None) -> None:
         self.output_dir = output_dir or Path.cwd() / "exports"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._ffmpeg_path = _resolve_ffmpeg()
@@ -48,8 +48,8 @@ class Exporter:
         self,
         masks: dict[int, np.ndarray],
         base_name: str = "mask",
-        on_progress: Optional[Callable[[int, int], None]] = None,
-        cancel_event: Optional[threading.Event] = None,
+        on_progress: Callable[[int, int], None] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """Save each mask as PNG with alpha channel directly into output_dir.
 
@@ -82,12 +82,12 @@ class Exporter:
         fps: float,
         base_name: str = "output",
         fmt: str = "prores",
-        resolution: Optional[tuple[int, int]] = None,
-        on_progress: Optional[Callable[[int, int], None]] = None,
-        cancel_event: Optional[threading.Event] = None,
-        audio_source: Optional[Path] = None,
-        background: Optional[tuple[int, int, int]] = None,
-        watermark: Optional[bool] = None,
+        resolution: tuple[int, int] | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
+        cancel_event: threading.Event | None = None,
+        audio_source: Path | None = None,
+        background: tuple[int, int, int] | None = None,
+        watermark: bool | None = None,
     ) -> Path:
         """Compose frames + masks into a video written directly into output_dir.
 
@@ -126,7 +126,9 @@ class Exporter:
                 if capped != (int(w), int(h)):
                     logger.info(
                         "Lite edition: scaling %sx%s -> %sx%s",
-                        w, h, *capped,
+                        w,
+                        h,
+                        *capped,
                     )
                 resolution = capped
             audio_source = None  # original-audio muxing is a Pro feature
@@ -169,15 +171,19 @@ class Exporter:
                 self._ffmpeg_path,
                 "-y",
                 "-nostdin",
-                "-framerate", str(fps),
-                "-i", str(tmp_path / "frm_%06d.png"),
+                "-framerate",
+                str(fps),
+                "-i",
+                str(tmp_path / "frm_%06d.png"),
             ]
             if resolution:
                 w, h = resolution
                 cmd += ["-vf", f"scale={w}:{h}"]
             cmd += [
-                "-c:v", codec,
-                "-pix_fmt", pix_fmt,
+                "-c:v",
+                codec,
+                "-pix_fmt",
+                pix_fmt,
                 "-an",
                 str(out_file),
             ]
@@ -217,11 +223,16 @@ class Exporter:
                 self._ffmpeg_path,
                 "-y",
                 "-nostdin",
-                "-i", str(video_file),
-                "-i", str(audio_source),
-                "-map", "0:v:0",
-                "-map", "1:a:0?",
-                "-c:v", "copy",
+                "-i",
+                str(video_file),
+                "-i",
+                str(audio_source),
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0?",
+                "-c:v",
+                "copy",
                 *audio_args,
                 "-shortest",
                 str(tmp),
@@ -236,14 +247,22 @@ class Exporter:
                 tmp.replace(video_file)
                 return video_file
             # Log detail, then fall through to the next strategy.
-            tail = " | ".join(stderr.strip().splitlines()[-4:]) if stderr.strip() else "no stderr"
+            tail = (
+                " | ".join(stderr.strip().splitlines()[-4:])
+                if stderr.strip()
+                else "no stderr"
+            )
             logger.warning(
                 "Audio mux attempt failed (code %s, args %s): %s",
-                proc.returncode, " ".join(audio_args), tail,
+                proc.returncode,
+                " ".join(audio_args),
+                tail,
             )
             tmp.unlink(missing_ok=True)
 
-        logger.warning("Could not mux original audio; keeping export silent: %s", video_file)
+        logger.warning(
+            "Could not mux original audio; keeping export silent: %s", video_file
+        )
         return video_file
 
     def export_transparent_video(
@@ -256,20 +275,24 @@ class Exporter:
         pix_fmt: str = "yuva444p10le",
     ) -> Path:
         """Backwards-compatible wrapper — exports ProRes 4444 (alpha)."""
-        return self.export_video(
-            frames, masks, fps, base_name=base_name, fmt="prores"
-        )
+        return self.export_video(frames, masks, fps, base_name=base_name, fmt="prores")
 
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
     @staticmethod
     def _compose_rgba(
-        frame: np.ndarray, mask: np.ndarray, background: Optional[tuple[int, int, int]] = None
+        frame: np.ndarray,
+        mask: np.ndarray,
+        background: tuple[int, int, int] | None = None,
     ) -> np.ndarray:
         h, w = frame.shape[:2]
         rgba = np.zeros((h, w, 4), dtype=np.uint8)
-        rgb = frame[:, :, :3] if frame.shape[2] >= 3 else np.stack([frame[:, :, 0]] * 3, axis=-1)
+        rgb = (
+            frame[:, :, :3]
+            if frame.shape[2] >= 3
+            else np.stack([frame[:, :, 0]] * 3, axis=-1)
+        )
         if background is not None:
             # Flatten the alpha channel into a solid chroma-key background
             # (kept fully opaque for yuv420p): subject pixels keep their color,
@@ -286,11 +309,12 @@ class Exporter:
 
     @staticmethod
     def _draw_watermark(rgba: np.ndarray) -> np.ndarray:
-        """Burn a small 'Better Brush · Lite' mark into the bottom-right.
+        """Burn a large, soft 'Better Brush' mark into the bottom-right.
 
         Text is drawn over the subject only (masked pixels), so transparent
         exports keep a clean alpha channel while every Lite video still
-        carries a modest, non-destructive watermark.
+        carries a visible, watermark. No shadow/outline — just translucent
+        type so it reads clearly but never hides the footage.
         """
         h, w = rgba.shape[:2]
         if h < 60 or w < 120:
@@ -298,20 +322,18 @@ class Exporter:
         img = Image.fromarray(rgba, mode="RGBA")
         overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
-        size = max(9, min(14, h // 60))
+        size = max(24, min(96, h // 8))
         try:
             font = ImageFont.truetype("arial.ttf", size)
         except Exception:  # noqa: BLE001 - fall back to the default bitmap font
             font = ImageFont.load_default()
         text = "Better Brush"
         text_w = draw.textlength(text, font=font)
-        pad = max(6, h // 40)
-        top = h - size - pad
-        left = w - int(text_w) - pad - 8
-        shadow = (0, 0, 0, 160)
-        white = (235, 235, 238, 200)
-        draw.text((left + 1, top + 1), text, font=font, fill=shadow)
-        draw.text((left, top), text, font=font, fill=white)
+        pad = max(16, h // 14)
+        top = h - int(size * 1.35) - pad
+        left = w - int(text_w) - pad
+        translucent = (235, 235, 238, 100)
+        draw.text((left, top), text, font=font, fill=translucent)
         return np.asarray(Image.alpha_composite(img, overlay), dtype=np.uint8)
 
     def _ffmpeg_available(self) -> bool:
@@ -321,6 +343,7 @@ class Exporter:
         try:
             result = subprocess.run(
                 [self._ffmpeg_path, "-codecs"],
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=10,

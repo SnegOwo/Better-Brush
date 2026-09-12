@@ -24,7 +24,6 @@ from PySide6.QtWidgets import QApplication
 from src.core import licensing
 from src.core.project import ObjectRecord, ProjectData, ProjectManager, mask_to_b64
 from src.core.scene import OBJECT_PALETTE
-from src.models.sam2_manager import PointPrompt
 from src.ui.main_window import MainWindow
 
 _APP = None
@@ -53,7 +52,7 @@ def _stub_video(win: MainWindow, tmp_path: Path, name: str = "clip.mp4") -> None
     video = SimpleNamespace(
         path=tmp_path / name, fps=30.0, width=160, height=100, total_frames=10
     )
-    win._video_reader = video  # noqa: SLF001
+    win._video_reader = video
 
 
 @pytest.fixture(autouse=True)
@@ -71,15 +70,15 @@ def isolated_settings(tmp_path, monkeypatch):
 def test_initial_single_object():
     win = _win()
     try:
-        assert len(win._objects) == 1  # noqa: SLF001
+        assert len(win._objects) == 1
         obj = win._active_object()
         assert obj.name == "Object 1"
         assert obj.color == OBJECT_PALETTE[0]
-        assert win._active_object_id == obj.obj_id  # noqa: SLF001
+        assert win._active_object_id == obj.obj_id
         # Aliasing: main-window fields point at the active object's data.
-        assert win._points is obj.points  # noqa: SLF001
-        assert win._masks is obj.masks  # noqa: SLF001
-        assert win._keyframes is obj.keyframes  # noqa: SLF001
+        assert win._points is obj.points
+        assert win._masks is obj.masks
+        assert win._keyframes is obj.keyframes
     finally:
         win.close()
 
@@ -88,16 +87,16 @@ def test_add_object_switches_active():
     win = _win()
     try:
         win._add_object()
-        assert len(win._objects) == 2  # noqa: SLF001
+        assert len(win._objects) == 2
         obj2 = win._active_object()
         assert obj2.name == "Object 2"
         assert obj2.color == OBJECT_PALETTE[1]
-        assert win._masks is obj2.masks  # noqa: SLF001
+        assert win._masks is obj2.masks
 
         # Editing goes to the active object only.
         win._on_canvas_point(10, 20, 1)
         assert len(obj2.points) == 1
-        assert len(win._objects[0].points) == 0  # noqa: SLF001
+        assert len(win._objects[0].points) == 0
     finally:
         win.close()
 
@@ -105,19 +104,15 @@ def test_add_object_switches_active():
 def test_switch_object_aliases_and_color():
     win = _win()
     try:
-        first = win._objects[0]  # noqa: SLF001
+        first = win._objects[0]
         win._add_object()
         second = win._active_object()
         win._set_active_object(first.obj_id)
-        assert win._masks is first.masks  # noqa: SLF001
-        assert win._points is first.points  # noqa: SLF001
-        assert (
-            win._canvas._mask_color.name().lower() == first.color.lower()  # noqa: SLF001
-        )
+        assert win._masks is first.masks
+        assert win._points is first.points
+        assert win._canvas._mask_color.name().lower() == first.color.lower()
         win._set_active_object(second.obj_id)
-        assert (
-            win._canvas._mask_color.name().lower() == second.color.lower()  # noqa: SLF001
-        )
+        assert win._canvas._mask_color.name().lower() == second.color.lower()
     finally:
         win.close()
 
@@ -126,7 +121,7 @@ def test_cannot_delete_last_object():
     win = _win()
     try:
         win._delete_active_object()
-        assert len(win._objects) == 1  # noqa: SLF001
+        assert len(win._objects) == 1
         assert win._active_object() is not None
     finally:
         win.close()
@@ -135,13 +130,13 @@ def test_cannot_delete_last_object():
 def test_delete_object_switches_to_remaining():
     win = _win()
     try:
-        first = win._objects[0]  # noqa: SLF001
+        first = win._objects[0]
         win._add_object()
         win._masks[0] = np.ones((100, 160), dtype=bool)  # mask on object 2
         win._delete_active_object()
-        assert len(win._objects) == 1  # noqa: SLF001
-        assert win._objects[0].obj_id == first.obj_id  # noqa: SLF001
-        assert 0 not in win._masks, "deleted object masks must not leak"  # noqa: SLF001
+        assert len(win._objects) == 1
+        assert win._objects[0].obj_id == first.obj_id
+        assert 0 not in win._masks, "deleted object masks must not leak"
         assert win._active_object() is first
     finally:
         win.close()
@@ -154,7 +149,7 @@ def test_combined_masks_unions_objects():
         a[0:3, 0:3] = True
         b = np.zeros((10, 10), dtype=bool)
         b[6:9, 6:9] = True
-        win._objects[0].masks[0] = a  # noqa: SLF001
+        win._objects[0].masks[0] = a
         win._add_object()
         second = win._active_object()
         second.masks[0] = b
@@ -172,10 +167,10 @@ def test_combo_reflects_objects():
     win = _win()
     try:
         assert win._combo_object.count() == 1
-        assert win._combo_object.currentData() == win._active_object_id  # noqa: SLF001
+        assert win._combo_object.currentData() == win._active_object_id
         win._add_object()
         assert win._combo_object.count() == 2
-        assert win._combo_object.currentData() == win._active_object_id  # noqa: SLF001
+        assert win._combo_object.currentData() == win._active_object_id
         assert win._btn_delete_object.isEnabled()
     finally:
         win.close()
@@ -189,13 +184,17 @@ def test_v2_project_roundtrip(tmp_path):
         brush_size=14,
         objects=[
             ObjectRecord(
-                obj_id=1, name="Hero", color="#00b4f0",
+                obj_id=1,
+                name="Hero",
+                color="#00b4f0",
                 points=[{"x": 1, "y": 2, "label": 1}],
                 keyframes=[0],
                 masks={0: np.array([[True, False], [False, True]], dtype=bool)},
             ),
             ObjectRecord(
-                obj_id=2, name="Sidekick", color="#f4b400",
+                obj_id=2,
+                name="Sidekick",
+                color="#f4b400",
                 points=[],
                 keyframes=[4],
                 masks={4: np.ones((4, 5), dtype=bool)},

@@ -12,13 +12,15 @@ import logging
 import sys
 import threading
 import time
+from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
 from src.ui.assets import logo_path
 from src.ui.theme import STYLESHEET
+from src.utils.file_assoc import register as register_file_assoc
 from src.utils.logging_config import configure_logging, init_stdio
 
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ class SplashScreen(QWidget):
         self._frac = frac
         self.update()
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), _BG)
@@ -56,7 +58,9 @@ class SplashScreen(QWidget):
         logo = logo_path()
         if logo.is_file():
             icon = QPixmap(str(logo)).scaled(
-                72, 72, Qt.AspectRatioMode.KeepAspectRatio,
+                72,
+                72,
+                Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             painter.drawPixmap((self.width() - icon.width()) // 2, 28, icon)
@@ -104,15 +108,25 @@ class SplashScreen(QWidget):
 
 def _load_heavy_deps() -> None:
     """Warm the model stack off the GUI thread while the splash animates."""
-    import src.models.sam2_manager  # noqa: F401  (torch, SAM2)
+    import src.export.exporter
+    import src.hardware.detector
+    import src.models.sam2_manager
     import src.processing.video_reader  # noqa: F401  (OpenCV)
-    import src.hardware.detector  # noqa: F401     (torchvision, PyNvML)
-    import src.export.exporter  # noqa: F401        (ffmpeg helper)
+
+
+def _cli_project_arg() -> Path | None:
+    """Return the .bbproj path the app was double-clicked with, if any."""
+    for arg in sys.argv[1:]:
+        path = Path(arg)
+        if path.suffix.lower() == ".bbproj" and path.is_file():
+            return path
+    return None
 
 
 def run() -> int:
     init_stdio()
     configure_logging()
+    register_file_assoc()
     app = QApplication(sys.argv)
     app.setApplicationName("Better Brush")
     app.setApplicationVersion("0.1.0")
@@ -149,6 +163,7 @@ def run() -> int:
     if splash is not None:
         # 'Liquid' handoff: fade the splash out over the now-visible window.
         splash.raise_()  # keep it above the main window during the fade
+
         def _fade(step: int = 0) -> None:
             if step >= 8:
                 splash.close()
@@ -160,7 +175,13 @@ def run() -> int:
         QTimer.singleShot(120, _fade)
 
     # Welcome launcher once the window is visible (blocking modal on purpose).
-    QTimer.singleShot(200, window.show_welcome)
+    # A .bbproj passed on the command line (double-clicked file association)
+    # is opened instead of the welcome launcher.
+    _project_arg = _cli_project_arg()
+    if _project_arg is None:
+        QTimer.singleShot(200, window.show_welcome)
+    else:
+        QTimer.singleShot(200, lambda: window._open_project(_project_arg))
     return app.exec()
 
 

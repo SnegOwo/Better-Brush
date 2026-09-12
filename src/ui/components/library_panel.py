@@ -8,7 +8,6 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -33,7 +32,7 @@ from PySide6.QtWidgets import (
 class LibraryDialog(QDialog):
     """Wraps :class:`LibraryPanel` in a standalone dialog for the menu bar."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Media Library")
         self.setMinimumSize(560, 440)
@@ -53,8 +52,10 @@ class LibraryDialog(QDialog):
     def panel(self) -> LibraryPanel:
         return self._panel
 
-from src.core import constants
-from src.core import licensing
+
+from datetime import UTC
+
+from src.core import constants, licensing
 from src.core.project import ProjectManager
 from src.export.exporter import _resolve_ffmpeg
 
@@ -64,12 +65,21 @@ VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg", 
 
 # Recode presets: (label, ext, video args)
 RECODE_PRESETS = [
-    ("MP4 (H.264) — universal sharing", ".mp4",
-     ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p"]),
-    ("MOV (ProRes 422 HQ)", ".mov",
-     ["-c:v", "prores_ks", "-profile:v", "2", "-pix_fmt", "yuv422p10le"]),
-    ("WebM (VP9) — web", ".webm",
-     ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-pix_fmt", "yuv420p"]),
+    (
+        "MP4 (H.264) — universal sharing",
+        ".mp4",
+        ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p"],
+    ),
+    (
+        "MOV (ProRes 422 HQ)",
+        ".mov",
+        ["-c:v", "prores_ks", "-profile:v", "2", "-pix_fmt", "yuv422p10le"],
+    ),
+    (
+        "WebM (VP9) — web",
+        ".webm",
+        ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-pix_fmt", "yuv420p"],
+    ),
 ]
 
 
@@ -97,7 +107,7 @@ class RecodeWorker(threading.Thread):
         self._dst = dst
         self._video_args = video_args
         self._preserve_audio = preserve_audio
-        self.result: Optional[str] = None  # None = ok, else error message
+        self.result: str | None = None  # None = ok, else error message
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -115,12 +125,14 @@ class RecodeWorker(threading.Thread):
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
-            stdout, stderr = proc.communicate(timeout=7200)
+            _stdout, stderr = proc.communicate(timeout=7200)
         except Exception as exc:  # noqa: BLE001
             self.result = f"Failed to launch ffmpeg: {exc}"
             return
         if proc.returncode != 0:
-            tail = " | ".join(stderr.strip().splitlines()[-4:]) if stderr.strip() else ""
+            tail = (
+                " | ".join(stderr.strip().splitlines()[-4:]) if stderr.strip() else ""
+            )
             self.result = f"ffmpeg exited with code {proc.returncode}. {tail}"
             self._dst.unlink(missing_ok=True)
 
@@ -128,7 +140,7 @@ class RecodeWorker(threading.Thread):
 class RecodeDialog(QDialog):
     """Small modal to pick a target codec and recode a single video."""
 
-    def __init__(self, parent: Optional[QWidget], src: Path) -> None:
+    def __init__(self, parent: QWidget | None, src: Path) -> None:
         super().__init__(parent)
         self._src = src
         self.setWindowTitle(f"Recode: {src.name}")
@@ -178,7 +190,7 @@ class RecodeDialog(QDialog):
         self._bar.hide()
         root.addWidget(self._bar)
 
-        self._worker: Optional[RecodeWorker] = None
+        self._worker: RecodeWorker | None = None
 
     def _on_recode(self) -> None:
         label = self._combo.currentText()
@@ -209,7 +221,7 @@ class RecodeDialog(QDialog):
             self.accept()
             QMessageBox.information(self, "Recode OK", f"Saved to:\n{dst}")
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:
         if self._worker is not None and self._worker.is_alive():
             self._worker.cancel()
         super().closeEvent(event)
@@ -218,7 +230,7 @@ class RecodeDialog(QDialog):
 class LibraryPanel(QWidget):
     """Lists video files from an export folder with a simple recode action."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._dir = self._load_dir()
 
@@ -298,12 +310,16 @@ class LibraryPanel(QWidget):
             modified = path.stat().st_mtime
             from datetime import datetime
 
-            when = datetime.fromtimestamp(modified).strftime("%Y-%m-%d %H:%M")
+            when = (
+                datetime.fromtimestamp(modified, tz=UTC)
+                .astimezone()
+                .strftime("%Y-%m-%d %H:%M")
+            )
             item = QListWidgetItem(f"{path.name}  ({_size_label(path)}, {when})")
             item.setToolTip(str(path))
             self._list.addItem(item)
 
-    def current_path(self) -> Optional[Path]:
+    def current_path(self) -> Path | None:
         item = self._list.currentItem()
         if item is None:
             return None
@@ -312,7 +328,9 @@ class LibraryPanel(QWidget):
 
     # ── Handlers ───────────────────────────────────────────────────────────
     def _choose_folder(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Choose Library Folder", str(self._dir))
+        path = QFileDialog.getExistingDirectory(
+            self, "Choose Library Folder", str(self._dir)
+        )
         if path:
             self._dir = Path(path)
             self._save_dir()

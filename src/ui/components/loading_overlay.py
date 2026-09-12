@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QWidget
 
 _BG_OVERLAY = QColor(12, 12, 16, 175)
 _TRACK = QColor(60, 60, 70)
@@ -78,7 +78,7 @@ class LoadingOverlay(QWidget):
         self._sub.adjustSize()
         self._sub.move(cx - self._sub.width() // 2, base + 30)
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), _BG_OVERLAY)
 

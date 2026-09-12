@@ -7,7 +7,6 @@ import os
 import platform
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import psutil
 import torch
@@ -32,8 +31,8 @@ class GPUInfo:
     total_vram_mb: int
     available_vram_mb: int
     backend: Backend
-    compute_capability: Optional[tuple[int, int]] = None
-    driver_version: Optional[str] = None
+    compute_capability: tuple[int, int] | None = None
+    driver_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -143,7 +142,6 @@ class HardwareDetector:
         for i in range(torch.cuda.device_count()):
             name = torch.cuda.get_device_name(i)
             cc = torch.cuda.get_device_capability(i)
-            driver = torch.cuda.get_device_properties(i).major  # dummy placeholder
 
             if nvml_available:
                 try:
@@ -179,7 +177,7 @@ class HardwareDetector:
         return gpus
 
     @staticmethod
-    def _fallback_vram(device_index: int) -> tuple[int, int, Optional[str]]:
+    def _fallback_vram(device_index: int) -> tuple[int, int, str | None]:
         """Use torch.cuda properties when NVML is unreachable."""
         props = torch.cuda.get_device_properties(device_index)
         total_mb = int(props.total_memory // (1024 * 1024))

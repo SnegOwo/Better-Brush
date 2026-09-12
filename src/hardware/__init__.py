@@ -10,10 +10,10 @@ from src.hardware.profiler import (
 
 __all__ = [
     "Backend",
+    "ContentProfile",
     "GPUInfo",
     "HardwareDetector",
     "HardwareProfile",
-    "ContentProfile",
     "ModelSize",
     "SAM2Profiler",
     "SAM2Recommendation",

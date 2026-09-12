@@ -25,7 +25,7 @@ def buy_url() -> QUrl:
 # Feature matrix used by the comparison dialog (and only the comparison).
 _FEATURES = [
     ("SAM 2 segmentation, brush & keyframes", True, True),
-    ("Propagate to end / multi-object projects", False, True),
+    ("Multi-object projects", False, True),
     ("H.264 MP4 export with chroma-key backgrounds", True, True),
     ("PNG alpha sequence export", True, True),
     ("ProRes 4444 & QuickTime Animation (MOV)", True, True),
@@ -67,7 +67,9 @@ class ProFeaturesDialog(QDialog):
             row = QHBoxLayout()
             row.setSpacing(10)
             lbl = QLabel(name)
-            lbl.setStyleSheet("color: #c4c4cc; font-size: 12px; background: transparent;")
+            lbl.setStyleSheet(
+                "color: #c4c4cc; font-size: 12px; background: transparent;"
+            )
             lbl.setWordWrap(True)
             row.addWidget(lbl, 1)
             row.addWidget(self._mark(lite), 0, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -84,7 +86,7 @@ class ProFeaturesDialog(QDialog):
             f"Prices: <b>€{licensing.PRO_PRICE_EUR} one-time</b> per machine. Offline "
             "activation, no account. Buy at <b>sneg.dev/BetterBrush</b>."
             if not licensing.is_pro()
-            else f"Your copy is <b>Pro</b> — every feature is unlocked. "
+            else "Your copy is <b>Pro</b> — every feature is unlocked. "
             "Activation is offline and stays on this machine."
         )
         note.setWordWrap(True)
@@ -96,7 +98,9 @@ class ProFeaturesDialog(QDialog):
         if not licensing.is_pro():
             btn_buy = QPushButton(f"Buy Pro (€{licensing.PRO_PRICE_EUR})")
             btn_buy.setToolTip("https://sneg.dev/BetterBrush")
-            btn_buy.clicked.connect(lambda: (QDesktopServices.openUrl(buy_url()), self.accept()))
+            btn_buy.clicked.connect(
+                lambda: (QDesktopServices.openUrl(buy_url()), self.accept())
+            )
             btn_row.addWidget(btn_buy)
         btn_ok = QPushButton("Close")
         btn_ok.setDefault(True)

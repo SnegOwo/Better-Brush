@@ -17,15 +17,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox
 
-from src.export.exporter import Exporter  # noqa: E402
-from src.processing.inference_worker import (  # noqa: E402
+from src.export.exporter import Exporter
+from src.processing.inference_worker import (
     InferenceWorker,
     PropagationWorker,
 )
-from src.ui.main_window import ExportWorker, MainWindow  # noqa: E402
-from tests.test_integration import create_synthetic_video  # noqa: E402
+from src.ui.main_window import ExportWorker, MainWindow
+from tests.test_integration import create_synthetic_video
 
 
 def _defuse_dialogs() -> None:
@@ -43,7 +43,7 @@ def _defuse_dialogs() -> None:
 
 def main() -> int:
     _defuse_dialogs()
-    app = QApplication.instance() or QApplication(sys.argv)
+    QApplication.instance() or QApplication(sys.argv)
 
     print("=" * 60)
     print("Better Brush — GUI smoke test (offscreen)")
@@ -96,7 +96,9 @@ def main() -> int:
             print(f"[5/6] Propagation worker -> {len(win._masks)}/4 frames masked")
 
             exp_dir = Path(tmp) / "exp"
-            eworker = ExportWorker(Exporter(output_dir=exp_dir), "png", dict(win._masks))
+            eworker = ExportWorker(
+                Exporter(output_dir=exp_dir), "png", dict(win._masks)
+            )
             eworker.run()
             pngs = list(exp_dir.rglob("*.png"))
             if len(pngs) != len(win._masks):

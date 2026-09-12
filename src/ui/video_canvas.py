@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import logging
-import math
-from typing import Optional
 
 import numpy as np
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
-    QFont,
     QImage,
     QMouseEvent,
     QPainter,
@@ -27,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 # ── Visual constants ──────────────────────────────────────────────────────
 _BG = QColor(20, 20, 24)
-_POINT_POS = QColor(72, 199, 142)    # muted green
-_POINT_NEG = QColor(230, 80, 80)     # muted red
+_POINT_POS = QColor(72, 199, 142)  # muted green
+_POINT_NEG = QColor(230, 80, 80)  # muted red
 _POINT_RING = QColor(255, 255, 255, 200)
 _BRUSH_ADD = QColor(255, 255, 255, 180)
 _BRUSH_ERASE = QColor(240, 90, 90, 180)
@@ -40,7 +37,7 @@ _CHECKER_B = QColor(40, 40, 44)
 class VideoCanvas(QWidget):
     """Widget that shows a video frame with mask overlay and interactive points."""
 
-# Point prompting
+    # Point prompting
     point_added = Signal(int, int, int)  # x, y, label (1=pos, 0=neg)
     point_removed = Signal(object)  # PointPrompt that was deleted
     point_selected = Signal(int)  # index of selected point
@@ -51,10 +48,10 @@ class VideoCanvas(QWidget):
     brush_press = Signal()  # emitted at the start of a brush stroke
     mask_edited = Signal()  # emitted after a brush stroke modified the mask
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._frame: Optional[np.ndarray] = None
-        self._mask: Optional[np.ndarray] = None  # bool HxW
+        self._frame: np.ndarray | None = None
+        self._mask: np.ndarray | None = None  # bool HxW
         self._points: list[PointPrompt] = []
         self._scale = 1.0
         self._offset = QPoint(0, 0)
@@ -71,10 +68,10 @@ class VideoCanvas(QWidget):
         self._brush_erase = False
         self._shift_held = False
         self._preview_mode = "mask"  # "frame" | "mask" | "cutout"
-        self._brush_hover: Optional[tuple[int, int]] = None
+        self._brush_hover: tuple[int, int] | None = None
         self._painting = False
         self._painted = False
-        self._selected_point: Optional[int] = None  # index into _points
+        self._selected_point: int | None = None  # index into _points
         self.setMinimumSize(480, 320)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -83,17 +80,19 @@ class VideoCanvas(QWidget):
     # ------------------------------------------------------------------ #
     # Setters
     # ------------------------------------------------------------------ #
-    def set_frame(self, frame: Optional[np.ndarray]) -> None:
+    def set_frame(self, frame: np.ndarray | None) -> None:
         self._frame = frame
         self.update()
 
-    def set_mask(self, mask: Optional[np.ndarray]) -> None:
+    def set_mask(self, mask: np.ndarray | None) -> None:
         self._mask = mask.astype(bool) if mask is not None else None
         self.update()
 
     def set_points(self, points: list[PointPrompt]) -> None:
         self._points = list(points)
-        if self._selected_point is not None and self._selected_point >= len(self._points):
+        if self._selected_point is not None and self._selected_point >= len(
+            self._points
+        ):
             self._selected_point = None
         self.update()
 
@@ -106,7 +105,7 @@ class VideoCanvas(QWidget):
         self._selected_point = None
         self.update()
 
-    def get_mask(self) -> Optional[np.ndarray]:
+    def get_mask(self) -> np.ndarray | None:
         """Return a copy of the current mask (bool HxW) or None."""
         return None if self._mask is None else self._mask.copy()
 
@@ -168,7 +167,7 @@ class VideoCanvas(QWidget):
     # ------------------------------------------------------------------ #
     # Painting
     # ------------------------------------------------------------------ #
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -215,7 +214,7 @@ class VideoCanvas(QWidget):
                 cx = int(off_x + pt.x * self._scale)
                 cy = int(off_y + pt.y * self._scale)
                 color = _POINT_POS if pt.label == 1 else _POINT_NEG
-                selected = (i == self._selected_point)
+                selected = i == self._selected_point
                 radius = 8 if selected else 6
                 # Outer ring
                 ring = _POINT_RING if not selected else QColor(255, 255, 255, 255)
@@ -260,7 +259,7 @@ class VideoCanvas(QWidget):
     # ------------------------------------------------------------------ #
     # Interaction
     # ------------------------------------------------------------------ #
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._frame is None:
             return
         # Pan with the middle button from any mode
@@ -271,7 +270,10 @@ class VideoCanvas(QWidget):
             return
         if self._edit_mode == "brush":
             pos = event.position().toPoint()
-            if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):
+            if event.button() in (
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.RightButton,
+            ):
                 self._painting = True
                 self._painted = False
                 self._shift_held = bool(
@@ -297,7 +299,7 @@ class VideoCanvas(QWidget):
         elif event.button() == Qt.MouseButton.RightButton:
             self.point_added.emit(img_x, img_y, 0)
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._frame is None:
             return
         pos = event.position().toPoint()
@@ -317,7 +319,7 @@ class VideoCanvas(QWidget):
             return
         self._brush_hover = None
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._panning:
             self._panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -329,11 +331,11 @@ class VideoCanvas(QWidget):
                 self.mask_edited.emit()
             self.update()
 
-    def mouseLeaveEvent(self, event) -> None:  # noqa: N802
+    def mouseLeaveEvent(self, event) -> None:
         self._brush_hover = None
         self.update()
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+    def wheelEvent(self, event: QWheelEvent) -> None:
         delta = event.angleDelta().y()
         if delta == 0:
             return
@@ -344,7 +346,7 @@ class VideoCanvas(QWidget):
         direction = 1 if delta < 0 else -1
         self.frame_navigate.emit(direction)
 
-    def keyPressEvent(self, event) -> None:  # noqa: N802
+    def keyPressEvent(self, event) -> None:
         key = event.key()
         if key == Qt.Key.Key_Space:
             self.play_pause.emit()
@@ -365,12 +367,12 @@ class VideoCanvas(QWidget):
         else:
             super().keyPressEvent(event)
 
-    def _hit_point(self, img_x: int, img_y: int) -> Optional[int]:
+    def _hit_point(self, img_x: int, img_y: int) -> int | None:
         """Return the index of a prompt point near (img_x, img_y) or None."""
         if not self._points:
             return None
         threshold = max(2.0, 8.0 / self._scale)
-        best: Optional[int] = None
+        best: int | None = None
         best_d = threshold
         for i, pt in enumerate(self._points):
             d = ((pt.x - img_x) ** 2 + (pt.y - img_y) ** 2) ** 0.5
@@ -417,7 +419,7 @@ class VideoCanvas(QWidget):
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
-    def _widget_to_image(self, wx: int, wy: int) -> tuple[Optional[int], Optional[int]]:
+    def _widget_to_image(self, wx: int, wy: int) -> tuple[int | None, int | None]:
         if self._scale == 0:
             return None, None
         ix = int((wx - self._offset.x()) / self._scale)

@@ -4,7 +4,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def init_stdio() -> None:
@@ -33,8 +32,8 @@ def init_stdio() -> None:
 
 def configure_logging(
     level: int = logging.INFO,
-    fmt: Optional[str] = None,
-    stream: Optional[object] = None,
+    fmt: str | None = None,
+    stream: object | None = None,
 ) -> None:
     """Set up a tidy root logger for the application."""
     if fmt is None:

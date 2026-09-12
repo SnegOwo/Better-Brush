@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -34,16 +33,26 @@ class UndoManager:
         self._stack: list[StateSnapshot] = []
         self._index: int = -1  # points at the current state
 
-    def reset(self, points: list[PointPrompt], masks: dict[int, np.ndarray], keyframes: set[int]) -> None:
+    def reset(
+        self,
+        points: list[PointPrompt],
+        masks: dict[int, np.ndarray],
+        keyframes: set[int],
+    ) -> None:
         """Start a fresh session with the given state as the baseline."""
         self._stack.clear()
         self._push_snapshot(points, masks, keyframes)
         self._index = 0
 
-    def push(self, points: list[PointPrompt], masks: dict[int, np.ndarray], keyframes: set[int]) -> None:
+    def push(
+        self,
+        points: list[PointPrompt],
+        masks: dict[int, np.ndarray],
+        keyframes: set[int],
+    ) -> None:
         """Save the current state after a mutation. Discards any redo history."""
         # Discard redo history first so the freshly pushed state is not removed
-        del self._stack[self._index + 1:]
+        del self._stack[self._index + 1 :]
         self._push_snapshot(points, masks, keyframes)
         self._index = len(self._stack) - 1
         # Enforce max depth (keep the baseline at index 0 if possible)
@@ -52,7 +61,12 @@ class UndoManager:
             self._stack = self._stack[overflow:]
             self._index -= overflow
 
-    def _push_snapshot(self, points: list[PointPrompt], masks: dict[int, np.ndarray], keyframes: set[int]) -> None:
+    def _push_snapshot(
+        self,
+        points: list[PointPrompt],
+        masks: dict[int, np.ndarray],
+        keyframes: set[int],
+    ) -> None:
         """Copy the live state into a snapshot and append it."""
         snap = StateSnapshot(
             points=tuple(copy.deepcopy(points)),
@@ -61,21 +75,36 @@ class UndoManager:
         )
         self._stack.append(snap)
 
-    def undo(self, points: list[PointPrompt], masks: dict[int, np.ndarray], keyframes: set[int]) -> Optional[StateSnapshot]:
+    def undo(
+        self,
+        points: list[PointPrompt],
+        masks: dict[int, np.ndarray],
+        keyframes: set[int],
+    ) -> StateSnapshot | None:
         """Revert to the previous state. Returns the restored snapshot or None."""
         if self._index <= 0:
             return None
         self._index -= 1
         return self._restore(points, masks, keyframes)
 
-    def redo(self, points: list[PointPrompt], masks: dict[int, np.ndarray], keyframes: set[int]) -> Optional[StateSnapshot]:
+    def redo(
+        self,
+        points: list[PointPrompt],
+        masks: dict[int, np.ndarray],
+        keyframes: set[int],
+    ) -> StateSnapshot | None:
         """Advance to the next state. Returns the restored snapshot or None."""
         if self._index >= len(self._stack) - 1:
             return None
         self._index += 1
         return self._restore(points, masks, keyframes)
 
-    def _restore(self, points: list[PointPrompt], masks: dict[int, np.ndarray], keyframes: set[int]) -> StateSnapshot:
+    def _restore(
+        self,
+        points: list[PointPrompt],
+        masks: dict[int, np.ndarray],
+        keyframes: set[int],
+    ) -> StateSnapshot:
         """Copy the current snapshot into the live state containers."""
         snap = self._stack[self._index]
         points.clear()
