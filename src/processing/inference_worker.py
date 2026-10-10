@@ -192,6 +192,18 @@ class PropagationWorker(QThread):
                     obj_id=1,
                     mask=self._mask,
                 )
+                # A painted mask and points are not exclusive: the mask is
+                # the user's latest correction, the points refine it. Using
+                # one and dropping the other is how brush work used to
+                # disappear the moment a point existed.
+                if self._points:
+                    stage("Applying prompts...")
+                    self._sam.add_points_to_video(
+                        frame_idx=self._start_frame,
+                        obj_id=1,
+                        points=self._points,
+                        clear_old_points=False,
+                    )
             elif self._points:
                 stage("Applying prompts...")
                 self._sam.add_points_to_video(
@@ -441,6 +453,16 @@ class PostProcessWorker(QThread):
                 f = self._frame_loader(idx)
                 if f is not None:
                     frames[idx] = f
+            if self._refine_edges or self._temporal_smooth:
+                from src.processing.mask_refine import fill_mask_holes
+
+                # Hole filling runs before any edge work: the guided filter
+                # and the temporal smoother both treat an interior gap as
+                # real background and would keep it stable.
+                idxs = sorted(result)
+                for idx in idxs:
+                    result[idx] = fill_mask_holes(result[idx])
+
             if self._temporal_smooth:
                 from src.processing.temporal_smooth import temporal_smooth_masks
 
@@ -772,10 +794,12 @@ class MattingWorker(QThread):
         settings: object,
         device: str = "cuda",
         model: str = "matanyone2",
+        mask_getter: Callable[[int], np.ndarray] | None = None,
         parent: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self._video_path = str(video_path)
+        self._mask_getter = mask_getter
         self._indices = list(indices)
         self._prompt_masks = dict(prompt_masks)
         self._settings = settings
@@ -805,6 +829,7 @@ class MattingWorker(QThread):
             runner = MattingRunner(
                 model=self._model, device=self._device, cancel_event=self._cancel
             )
+            mask_getter = self._mask_getter
             total = len(self._indices)
             done = 0
 
@@ -820,6 +845,7 @@ class MattingWorker(QThread):
                 self._prompt_masks,
                 self._settings,
                 on_alpha=on_alpha,
+                mask_getter=mask_getter,
             )
             runner.unload()
             if self._cancel.is_set():

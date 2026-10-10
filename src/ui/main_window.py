@@ -672,6 +672,7 @@ class MainWindow(QMainWindow):
             self._on_matting_setting_changed
         )
         self._spin_matting_grow.valueChanged.connect(self._on_matting_setting_changed)
+        self._chk_matting_clamp.toggled.connect(self._on_matting_setting_changed)
 
         # Populate the objects dropdown once the widget tree exists
         self._refresh_objects_ui()
@@ -1274,6 +1275,15 @@ class MainWindow(QMainWindow):
         )
         mgrow_row.addWidget(self._spin_matting_grow, stretch=1)
         sec_matte.add_layout(mgrow_row)
+
+        self._chk_matting_clamp = QCheckBox('Keep matte inside the mask')
+        self._chk_matting_clamp.setChecked(True)
+        self._chk_matting_clamp.setToolTip(
+            'Constrains the soft matte to the segmentation mask plus a\n'
+            'small margin. Off = the network may matte background it finds\n'
+            'plausible (hair, cloth, scenery).'
+        )
+        sec_matte.add_widget(self._chk_matting_clamp)
 
         self._btn_run_matting = QPushButton("Run Matting")
         self._btn_run_matting.setProperty("cssClass", "primary")
@@ -2169,6 +2179,7 @@ class MainWindow(QMainWindow):
             "matting_resolution": int(self._combo_matting_res.currentData()),
             "matting_gamma": float(self._spin_matting_gamma.value()),
             "matting_grow": int(self._spin_matting_grow.value()),
+            "matting_clamp": bool(self._chk_matting_clamp.isChecked()),
         }
         self._apply_shot_setting(values)
 
@@ -2316,6 +2327,7 @@ class MainWindow(QMainWindow):
             settings,
             device="cuda",
             model=settings.model,
+            mask_getter=self._combined_mask_at if profile.matting_clamp else None,
             parent=self,
         )
         self._matting_worker.progress.connect(self._on_matting_progress)
@@ -3984,16 +3996,18 @@ class MainWindow(QMainWindow):
         if recommendation is None:
             QMessageBox.warning(self, "No model", "Run hardware detection first.")
             return
-        # Brush mode: the painted mask is used as a prompt — SAM 2 adapts it
-        # into a clean silhouette (like point prompts refine a region).
-        if self._canvas.get_edit_mode() == "brush":
-            mask = self._masks.get(self._current_frame_idx)
-            if mask is None:
-                self._status.showMessage(
-                    "Brush mode - paint an outline on the frame, then press "
-                    "Segment to make SAM 2 adapt it."
-                )
-                return
+        # A mask painted on this frame is the source of truth: Segment
+        # refines it instead of replacing it with a bare point prompt, which
+        # is how brush corrections used to vanish on the next click.
+        existing_mask = self._masks.get(self._current_frame_idx)
+        mask = existing_mask
+        if mask is None and self._canvas.get_edit_mode() == "brush":
+            self._status.showMessage(
+                "Brush mode - paint an outline on the frame, then press "
+                "Segment to make SAM 2 adapt it."
+            )
+            return
+        if mask is not None:
             if self._frame_buffer is None:
                 return
             frame = self._frame_buffer.get(self._current_frame_idx)
@@ -4129,7 +4143,9 @@ class MainWindow(QMainWindow):
             start_frame=start,
             points=list(self._points) or None,
             total_frames=self._video_reader.total_frames,
-            mask=prompt_mask if not self._points else None,
+            # Both are passed: a painted mask survives alongside points
+            # instead of being discarded.
+            mask=prompt_mask,
         )
         self._propagation_worker.set_segments(segments)
         self._propagation_worker.set_range(reverse=direction < 0)

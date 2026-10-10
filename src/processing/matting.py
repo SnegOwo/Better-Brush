@@ -52,6 +52,10 @@ class MattingSettings:
     resolution: int = 720
     gamma: float = 1.0
     grow: int = 0
+    #: Constrain the matte to the segmentation mask (+ ``mask_clamp_pad``).
+    clamp_to_mask: bool = True
+    #: Radius of the dilated mask used as the clamp boundary.
+    mask_clamp_pad: int = 6
 
     def __post_init__(self) -> None:
         model = str(self.model or "matanyone2").strip().lower()
@@ -117,6 +121,9 @@ class MattingRunner:
         self.device = device
         self._cancel = cancel_event or threading.Event()
         self._core = None
+        # Filled by matte(): returns the animator's segmentation mask for a
+        # frame, used to keep the learned matte off background.
+        self._mask_getter: Callable[[int], np.ndarray] | None = None
 
     # ------------------------------------------------------------------ #
     # Model lifecycle
@@ -192,6 +199,7 @@ class MattingRunner:
         prompt_masks: dict[int, np.ndarray],
         settings: MattingSettings,
         on_alpha: Callable[[int, np.ndarray], None] | None = None,
+        mask_getter: Callable[[int], np.ndarray] | None = None,
     ) -> dict[int, np.ndarray]:
         """Produce a soft alpha matte for every frame index.
 
@@ -204,11 +212,14 @@ class MattingRunner:
             prompt_masks: Bool subject masks at the prompt frames.
             settings: Matting parameters.
             on_alpha: Optional callback(index, float32 alpha in [0, 1]).
+            mask_getter: Optional callback returning the segmentation
+                mask for a frame; when present the matte is clamped to it.
 
         Returns:
             Mapping of frame index -> float32 alpha (H, W) at source size.
         """
         self.load()
+        self._mask_getter = mask_getter
         frames = list(indices)
         prompts = [p for p in sorted(prompt_masks) if p in set(frames)]
         if not frames or not prompts:
@@ -280,7 +291,7 @@ class MattingRunner:
                 core.step(prompt_image, first_frame_pred=True)
                 prob = core.step(prompt_image)
                 results[prompt] = self._postprocess(
-                    prob, settings, source_h, source_w
+                    prob, settings, source_h, source_w, prompt_mask
                 )
                 for index in sequence:
                     self._check_cancel()
@@ -289,9 +300,19 @@ class MattingRunner:
                     image = self._image_tensor(frame_getter(index), height, width)
                     prob = core.step(image)
                     results[index] = self._postprocess(
-                        prob, settings, source_h, source_w
+                        prob, settings, source_h, source_w, self._mask_at(index)
                     )
         return results
+
+    def _mask_at(self, index: int) -> np.ndarray | None:
+        """The animator seg_mask for *index*, when known."""
+        if self._mask_getter is None:
+            return None
+        try:
+            return self._mask_getter(index)
+        except Exception as exc:  # noqa: BLE001 - a miss must not kill the run
+            logger.debug("Matte clamp lookup failed for %s (%s)", index, exc)
+            return None
 
     def _autocast_device(self) -> str:
         return "cuda" if self.device.startswith("cuda") else "cpu"
@@ -343,8 +364,13 @@ class MattingRunner:
         settings: MattingSettings,
         source_h: int,
         source_w: int,
+        seg_mask: np.ndarray | None = None,
     ) -> np.ndarray:
-        """Convert a raw network output to a full-resolution float alpha."""
+        """Convert a raw network output to a full-resolution float alpha.
+
+        *seg_mask* is the animator's binary segmentation mask for this frame;
+        the clamp uses it so the matte cannot wander into background.
+        """
         core = self._core
         assert core is not None
         soft = core.output_prob_to_mask(prob, matting=True)
@@ -358,6 +384,15 @@ class MattingRunner:
             alpha = np.power(np.clip(alpha, 0.0, 1.0), settings.gamma)
         if settings.grow != 0:
             alpha = _grow_alpha(alpha, settings.grow)
+        # The matting network is told only "this character is the subject";
+        # it has no idea where the sized-down SAM mask ended, so it happily
+        # mattes hair, cloth and background it finds plausible. Constrain it
+        # to a slightly dilated version of the segmentation mask: anything
+        # beyond that is background, not matte.
+        if settings.clamp_to_mask:
+            alpha = _clamp_alpha_to_mask(
+                alpha, settings.mask_clamp_pad, seg_mask
+            )
         return np.clip(alpha, 0.0, 1.0).astype(np.float32)
 
 
@@ -369,6 +404,43 @@ def _fit_resolution(height: int, width: int, resolution: int) -> tuple[int, int]
     return out_h, out_w
 
 
+def _clamp_alpha_to_mask(
+    alpha: np.ndarray, pad: int, seg_mask: np.ndarray | None = None
+) -> np.ndarray:
+    """Keep *alpha* inside the segmentation mask, plus a small margin.
+
+    The learned matting network is free to put partial coverage anywhere it
+    likes, which on busy backgrounds pulls in scenery the animator never
+    selected. Intersecting with a dilated copy of the SAM mask bounds the
+    matte to the subject the user actually drew.
+
+    Args:
+        alpha: Soft matte in [0, 1].
+        pad: Dilation radius in pixels, so a matte may still reach slightly
+            outside the segmentation border (where hair really does end).
+        seg_mask: The binary segmentation mask for this frame, when the
+            caller has one. Without it the matte's own 0.5 threshold is used,
+            which cannot distinguish detail from background.
+
+    Returns:
+        The clamped float matte.
+    """
+    if seg_mask is not None and seg_mask.any():
+        # The animator's own mask: an exact boundary, not the network's guess.
+        keep = seg_mask.astype(bool)
+    else:
+        soft = cv2.GaussianBlur(alpha, (0, 0), 1.0)
+        keep = soft > 0.5
+    if not keep.any():
+        return alpha
+    if pad > 0:
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (pad * 2 + 1, pad * 2 + 1)
+        )
+        keep = cv2.dilate(keep.astype(np.uint8), kernel).astype(bool)
+    # Feather the clamp edge so the matte does not get a hard cut.
+    weight = cv2.GaussianBlur(keep.astype(np.float32), (0, 0), 1.5)
+    return np.clip(alpha * weight, 0.0, 1.0)
 def _grow_alpha(alpha: np.ndarray, grow: int) -> np.ndarray:
     """Grow (>0) or shrink (<0) a soft matte, keeping its edge gradients."""
     if grow == 0:

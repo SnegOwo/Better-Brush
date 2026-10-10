@@ -86,6 +86,12 @@ class ShotProfile:
     matting_resolution: int = 480
     matting_gamma: float = 1.0
     matting_grow: int = 0
+    #: Keep the learned matte inside the segmentation mask (plus a small
+    #: margin).  On by default: MatAnyone / VideoMaMa have no notion of where
+    #: the animator's mask ended, so they happily matte hair, cloth and
+    #: plausible-looking background around the subject.
+    matting_clamp: bool = True
+    matting_clamp_pad: int = 6
     matting_overlap: int = 2
     matting_batch: int = 16
     matting_combine_objects: bool = False
@@ -155,6 +161,11 @@ class ShotProfile:
             self.matting_grow = max(-20, min(20, int(self.matting_grow)))
         except (TypeError, ValueError):
             self.matting_grow = 0
+        self.matting_clamp = bool(self.matting_clamp)
+        try:
+            self.matting_clamp_pad = max(0, min(48, int(self.matting_clamp_pad)))
+        except (TypeError, ValueError):
+            self.matting_clamp_pad = 6
         try:
             self.matting_overlap = max(0, min(8, int(self.matting_overlap)))
         except (TypeError, ValueError):
@@ -221,6 +232,8 @@ class ShotProfile:
             "matting_resolution": self.matting_resolution,
             "matting_gamma": self.matting_gamma,
             "matting_grow": self.matting_grow,
+            "matting_clamp": self.matting_clamp,
+            "matting_clamp_pad": self.matting_clamp_pad,
             "matting_overlap": self.matting_overlap,
             "matting_batch": self.matting_batch,
             "matting_combine_objects": self.matting_combine_objects,
@@ -267,6 +280,8 @@ class ShotProfile:
             matting_resolution=values.get("matting_resolution", 480),
             matting_gamma=values.get("matting_gamma", 1.0),
             matting_grow=values.get("matting_grow", 0),
+            matting_clamp=values.get("matting_clamp", True),
+            matting_clamp_pad=values.get("matting_clamp_pad", 6),
             matting_overlap=values.get("matting_overlap", 2),
             matting_batch=values.get("matting_batch", 16),
             matting_combine_objects=values.get("matting_combine_objects", False),

@@ -10,6 +10,65 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def fill_mask_holes(mask: np.ndarray, max_hole_area: int | None = None) -> np.ndarray:
+    """Fill enclosed background regions that sit *inside* the subject.
+
+    SAM 2 only fills holes up to ``fill_hole_area=8`` **low-resolution**
+    pixels (roughly 64 full-res pixels), which leaves the gaps between
+    fingers, the space inside a curled hand, and hair-strand gaps open. A
+    matte with holes inside it composites as see-through patches, which is
+    exactly the "surrounded by mask but a few pixels are missing" defect.
+
+    Only *enclosed* components are filled: a background region that reaches
+    the frame border is outside, never a hole.
+
+    Args:
+        mask: Binary mask (H, W) bool.
+        max_hole_area: Largest enclosed component to fill, in pixels. The
+            default scales with resolution (~64x64 at 1080p, proportionally
+            more at 4K) so a hand-sized gap is filled while a genuine window
+            behind the subject is left alone.
+
+    Returns:
+        The filled bool mask.
+    """
+    if mask is None or not mask.any():
+        return mask
+    binary = mask.astype(np.uint8)
+    if max_hole_area is None:
+        max_hole_area = max(1024, int(4096 * binary.size / (1920 * 1080)))
+    max_hole_area = max(0, int(max_hole_area))
+    if max_hole_area == 0:
+        return mask
+
+    inverted = (1 - binary).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(inverted, connectivity=8)
+    if count <= 1:
+        return mask
+
+    height, width = binary.shape
+    # Background regions touching the frame border are the outside world.
+    border_labels = {
+        int(labels[0, x]) for x in range(width)
+    } | {
+        int(labels[height - 1, x]) for x in range(width)
+    } | {
+        int(labels[y, 0]) for y in range(height)
+    } | {
+        int(labels[y, width - 1]) for y in range(height)
+    }
+    border_labels.discard(0)
+
+    filled = binary
+    for label in range(1, count):
+        if label in border_labels:
+            continue
+        if int(stats[label, cv2.CC_STAT_AREA]) > max_hole_area:
+            continue
+        filled[labels == label] = 1
+    return filled.astype(bool)
+
+
 def erode_mask(mask: np.ndarray, inset: int) -> np.ndarray:
     """Shrink a binary mask by ``inset`` pixels to trim background bleed.
 
