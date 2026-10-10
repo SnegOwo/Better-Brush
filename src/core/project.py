@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,6 +21,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from src.core.profiles import ShotProfile, ShotProfileRecord
+
 logger = logging.getLogger(__name__)
 
 PROJECT_EXT = ".bbproj"
@@ -27,7 +30,7 @@ RECENTS_FILE = "recent_projects.json"
 USER_SETTINGS_FILE = "user_settings.json"
 AUTOSAVE_DIR_NAME = "autosaves"
 _MAX_RECENT = 8
-_PROJECT_VERSION = 2  # v2 adds multi-object scene support
+_PROJECT_VERSION = 3
 
 
 # ── Serialization helpers ────────────────────────────────────────────────
@@ -43,6 +46,39 @@ def mask_from_b64(data: str) -> np.ndarray:
     """Decode a base64 PNG back into a bool mask."""
     img = Image.open(io.BytesIO(base64.b64decode(data))).convert("L")
     return np.asarray(img) > 127
+
+
+def matte_to_b64(alpha: np.ndarray) -> str:
+    """Encode a float32 soft matte as a base64 grayscale PNG."""
+    values = np.clip(np.asarray(alpha, dtype=np.float32), 0.0, 1.0)
+    img = Image.fromarray((values * 255.0).round().astype(np.uint8), mode="L")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def matte_from_b64(data: str) -> np.ndarray:
+    """Decode a base64 PNG back into a float32 soft matte in [0, 1]."""
+    img = Image.open(io.BytesIO(base64.b64decode(data))).convert("L")
+    return np.asarray(img, dtype=np.float32) / 255.0
+
+
+def _profile_payload(value: ShotProfile | dict | None) -> dict | None:
+    if value is None:
+        return None
+    if isinstance(value, ShotProfile):
+        return value.to_dict()
+    if isinstance(value, dict):
+        return ShotProfile.from_dict(value).to_dict()
+    return ShotProfile().to_dict()
+
+
+def _shot_profile_payload(value: ShotProfileRecord | dict) -> dict:
+    if isinstance(value, ShotProfileRecord):
+        return value.to_dict()
+    if isinstance(value, dict):
+        return ShotProfileRecord.from_dict(value).to_dict()
+    return ShotProfileRecord(1, 0, 0).to_dict()
 
 
 @dataclass
@@ -63,6 +99,9 @@ class ProjectData:
     timeline_selection: list[int] | None = None
     objects: list[ObjectRecord] = field(default_factory=list)
     active_object: int | None = None
+    scene_cuts: list[int] = field(default_factory=list)
+    default_profile: ShotProfile = field(default_factory=ShotProfile)
+    shot_profiles: list[ShotProfileRecord] = field(default_factory=list)
 
     @property
     def video_name(self) -> str:
@@ -81,6 +120,9 @@ class ObjectRecord:
     points: list[dict] = field(default_factory=list)
     keyframes: list[int] = field(default_factory=list)
     masks: dict[int, np.ndarray] = field(default_factory=dict)
+    #: Learned soft mattes per frame (float32 alpha in [0, 1]).
+    mattes: dict[int, np.ndarray] = field(default_factory=dict)
+    profile: ShotProfile | None = None
 
 
 class ProjectManager:
@@ -167,6 +209,9 @@ class ProjectManager:
         defaults = {
             "auto_save_enabled": True,
             "auto_save_interval_s": 60,
+            "post_process_enabled": True,
+            "smooth_strength": 3,
+            "console_shortcut": "F7",
         }
         path = cls.settings_file()
         if not path.is_file():
@@ -178,6 +223,11 @@ class ProjectManager:
         except (OSError, json.JSONDecodeError):
             return defaults
         merged = dict(defaults)
+        if "post_process_enabled" not in data and "smooth_strength" in data:
+            try:
+                merged["post_process_enabled"] = int(data["smooth_strength"]) > 0
+            except (TypeError, ValueError):
+                pass
         merged.update(data)
         return merged
 
@@ -209,9 +259,10 @@ class ProjectManager:
     def save(cls, path: Path, data: ProjectData) -> Path:
         """Serialize a project to disk. Returns the canonical path."""
         path = cls._ensure_ext(path)
+        has_new_state = bool(data.objects or data.shot_profiles)
         payload = {
             "app": "Better Brush",
-            "version": _PROJECT_VERSION if data.objects else int(data.version or 1),
+            "version": _PROJECT_VERSION if has_new_state else int(data.version or 1),
             "saved_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "video_path": data.video_path,
             "video_meta": data.video_meta,
@@ -221,7 +272,9 @@ class ProjectManager:
             "timeline_selection": list(data.timeline_selection)
             if data.timeline_selection
             else None,
-            # Backward-compatible top-level fields reflect the active object.
+            "scene_cuts": sorted(int(c) for c in data.scene_cuts) if data.scene_cuts else [],
+            "default_profile": _profile_payload(data.default_profile) or ShotProfile().to_dict(),
+            "shot_profiles": [_shot_profile_payload(record) for record in (data.shot_profiles or [])],
             "points": [
                 {
                     "x": int(p.get("x", 0)),
@@ -250,12 +303,32 @@ class ProjectManager:
                     "masks": {
                         str(i): mask_to_b64(m) for i, m in sorted(rec.masks.items())
                     },
+                    "mattes": {
+                        str(i): matte_to_b64(a)
+                        for i, a in sorted(rec.mattes.items())
+                    },
+                    "profile": _profile_payload(rec.profile),
                 }
                 for rec in data.objects
             ],
         }
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+                json.dump(payload, handle, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, path)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
         return path
 
     @classmethod
@@ -312,6 +385,15 @@ class ProjectManager:
                         except Exception:  # noqa: BLE001
                             logger.debug("Skipping unreadable mask frame %s", k)
                             continue
+                obj_mattes: dict[int, np.ndarray] = {}
+                obj_mattes_raw = raw.get("mattes", {})
+                if isinstance(obj_mattes_raw, dict):
+                    for k, b64 in obj_mattes_raw.items():
+                        try:
+                            obj_mattes[int(k)] = matte_from_b64(b64)
+                        except Exception:  # noqa: BLE001
+                            logger.debug("Skipping unreadable matte frame %s", k)
+                            continue
                 obj_points = raw.get("points", [])
                 if not isinstance(obj_points, list):
                     obj_points = []
@@ -335,6 +417,12 @@ class ProjectManager:
                             if isinstance(p, dict)
                         ],
                         masks=obj_masks,
+                        mattes=obj_mattes,
+                        profile=(
+                            ShotProfile.from_dict(raw.get("profile"))
+                            if isinstance(raw.get("profile"), dict)
+                            else None
+                        ),
                     )
                 )
             active_object = payload.get("active_object")
@@ -351,6 +439,22 @@ class ProjectManager:
                 points = objects[0].points
                 keyframes = set(objects[0].keyframes)
 
+        default_profile = ShotProfile.from_dict(
+            payload.get("default_profile")
+            if isinstance(payload.get("default_profile"), dict)
+            else {}
+        )
+        shot_profiles: list[ShotProfileRecord] = []
+        raw_profiles = payload.get("shot_profiles", [])
+        if isinstance(raw_profiles, list):
+            for raw_profile in raw_profiles:
+                if not isinstance(raw_profile, dict):
+                    continue
+                try:
+                    shot_profiles.append(ShotProfileRecord.from_dict(raw_profile))
+                except (TypeError, ValueError):
+                    logger.debug("Skipping invalid shot profile")
+
         return ProjectData(
             version=int(payload.get("version", 1) or 1),
             video_path=payload.get("video_path"),
@@ -364,6 +468,13 @@ class ProjectManager:
             timeline_selection=selection,
             objects=objects,
             active_object=active_object,
+            scene_cuts=sorted(
+                int(c)
+                for c in payload.get("scene_cuts", [])
+                if isinstance(c, (int, float))
+            ),
+            default_profile=default_profile,
+            shot_profiles=shot_profiles,
         )
 
     # ── Misc ──────────────────────────────────────────────────────────────

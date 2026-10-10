@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -24,12 +25,22 @@ class ContentProfile(Enum):
 
 
 class ModelSize(Enum):
-    """SAM 2.1 Hiera variants (smaller → faster, less accurate)."""
+    """SAM model variants (smaller → faster, less accurate)."""
 
+    SAM3_1 = "sam3.1_multiplex"
     LARGE = "sam2.1_hiera_large"
     BASE_PLUS = "sam2.1_hiera_base_plus"
     SMALL = "sam2.1_hiera_small"
     TINY = "sam2.1_hiera_tiny"
+    #: A user-supplied fine-tuned checkpoint (see docs/FINE-TUNING.md).
+    #: Checkpoint and config live in ``checkpoints/custom/`` with a JSON
+    #: sidecar; picked manually, never auto-recommended.
+    CUSTOM = "custom_finetune"
+    # Lightweight "track anything" family (EfficientTAM, Meta) — plain ViT
+    # image encoder + efficient memory attention.  Only ~100-140 MB on disk,
+    # runs comfortably on integrated GPUs and old hardware.
+    EFFICIENTTAM_TI = "efficienttam_ti_512x512"
+    EFFICIENTTAM_S = "efficienttam_s_512x512"
 
 
 @dataclass(frozen=True)
@@ -50,8 +61,15 @@ class SAM2Recommendation:
     user_message: str
 
 
+def _sam3_package_available() -> bool:
+    try:
+        return importlib.util.find_spec("sam3") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 class SAM2Profiler:
-    """Map hardware capabilities to safe, *conservative* SAM 2 settings.
+    """Map hardware capabilities to conservative SAM model settings.
 
     Priority is GPU stability over raw speed: a model tier is only
     recommended when the free VRAM leaves ~35 % headroom. This avoids pushing
@@ -63,10 +81,18 @@ class SAM2Profiler:
     # propagation mode (weights + activations + SAM 2's per-frame memory
     # bank). Deliberately higher than the raw checkpoint size on disk.
     _VRAM_THRESHOLDS: ClassVar[dict[ModelSize, int]] = {
+        ModelSize.SAM3_1: 15_000,
         ModelSize.TINY: 2_800,
         ModelSize.SMALL: 5_000,
         ModelSize.BASE_PLUS: 8_500,
         ModelSize.LARGE: 13_500,
+        # A fine-tuned checkpoint inherits its tier's footprint.
+        ModelSize.CUSTOM: 8_500,
+        # EfficientTAM runs at a 512×512 input resolution: the flat ViT encoder
+        # is far cheaper than Hiera at any tier, so it fits where even SAM 2.1
+        # Tiny does not (older GTX cards, integrated graphics, small VRAM).
+        ModelSize.EFFICIENTTAM_S: 1_800,
+        ModelSize.EFFICIENTTAM_TI: 1_100,
     }
 
     # Only recommend a tier when free VRAM × this factor clears the
@@ -74,21 +100,31 @@ class SAM2Profiler:
     _VRAM_SAFETY_FACTOR: float = 0.65
 
     _CONFIG_MAP: ClassVar[dict[ModelSize, str]] = {
+        ModelSize.SAM3_1: "sam3.1_multiplex.pt",
         ModelSize.LARGE: "sam2.1_hiera_l.yaml",
         ModelSize.BASE_PLUS: "sam2.1_hiera_b+.yaml",
         ModelSize.SMALL: "sam2.1_hiera_s.yaml",
         ModelSize.TINY: "sam2.1_hiera_t.yaml",
+        ModelSize.EFFICIENTTAM_TI: "efficienttam_ti_512x512.yaml",
+        ModelSize.EFFICIENTTAM_S: "efficienttam_s_512x512.yaml",
     }
 
     _URL_TEMPLATE = (
         "https://dl.fbaipublicfiles.com/segment_anything_2/092824/{checkpoint}"
     )
 
+    _HF_URL_TEMPLATE = (
+        "https://huggingface.co/yunyangx/efficient-track-anything/resolve/main/{checkpoint}"
+    )
+
     _CHECKPOINT_MAP: ClassVar[dict[ModelSize, str]] = {
+        ModelSize.SAM3_1: "sam3.1_multiplex.pt",
         ModelSize.LARGE: "sam2.1_hiera_large.pt",
         ModelSize.BASE_PLUS: "sam2.1_hiera_base_plus.pt",
         ModelSize.SMALL: "sam2.1_hiera_small.pt",
         ModelSize.TINY: "sam2.1_hiera_tiny.pt",
+        ModelSize.EFFICIENTTAM_TI: "efficienttam_ti_512x512.pt",
+        ModelSize.EFFICIENTTAM_S: "efficienttam_s_512x512.pt",
     }
 
     _PROFILE_PRESETS: ClassVar[dict[ContentProfile, dict[str, float | int]]] = {
@@ -175,11 +211,18 @@ class SAM2Profiler:
             self._VRAM_SAFETY_FACTOR,
         )
         for size in (
+            ModelSize.SAM3_1,
             ModelSize.LARGE,
             ModelSize.BASE_PLUS,
             ModelSize.SMALL,
             ModelSize.TINY,
+            # Light variants are a last resort: only auto-picked when the free
+            # VRAM cannot host even SAM 2.1 Tiny.
+            ModelSize.EFFICIENTTAM_S,
+            ModelSize.EFFICIENTTAM_TI,
         ):
+            if size is ModelSize.SAM3_1 and not _sam3_package_available():
+                continue
             if effective >= self._VRAM_THRESHOLDS[size]:
                 logger.info(
                     "Recommended %s (threshold %d MB, effective %d MB)",
@@ -188,8 +231,30 @@ class SAM2Profiler:
                     effective,
                 )
                 return size
-        logger.info("Free VRAM below the smallest tier — falling back to TINY")
-        return ModelSize.TINY
+        logger.info(
+            "Free VRAM below the smallest tier - falling back to EfficientTAM Ti"
+        )
+        return ModelSize.EFFICIENTTAM_TI
+
+    def largest_model_for_profile(self, profile: HardwareProfile) -> ModelSize | None:
+        """Return the largest tier that fits current GPU memory, if any."""
+        gpus = [gpu for gpu in profile.gpus if gpu.total_vram_mb > 0]
+        if not gpus:
+            return None
+        target = max(gpus, key=lambda gpu: gpu.available_vram_mb or gpu.total_vram_mb)
+        available = target.available_vram_mb or target.total_vram_mb
+        for size in (
+            ModelSize.SAM3_1,
+            ModelSize.LARGE,
+            ModelSize.BASE_PLUS,
+            ModelSize.SMALL,
+            ModelSize.TINY,
+            ModelSize.EFFICIENTTAM_S,
+            ModelSize.EFFICIENTTAM_TI,
+        ):
+            if available >= self._VRAM_THRESHOLDS[size]:
+                return size
+        return None
 
     @staticmethod
     def _supports_amp(backend: Backend, gpu: GPUInfo | None) -> bool:
@@ -198,6 +263,12 @@ class SAM2Profiler:
         return bool(gpu.compute_capability and gpu.compute_capability[0] >= 8)
 
     def _url_for(self, size: ModelSize) -> str:
+        if size is ModelSize.SAM3_1:
+            return "https://huggingface.co/facebook/sam3.1"
+        if size in (ModelSize.EFFICIENTTAM_S, ModelSize.EFFICIENTTAM_TI):
+            return self._HF_URL_TEMPLATE.format(
+                checkpoint=self._CHECKPOINT_MAP[size]
+            )
         ckpt = self._CHECKPOINT_MAP[size]
         return self._URL_TEMPLATE.format(checkpoint=ckpt)
 

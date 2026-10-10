@@ -18,10 +18,11 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
+from src.core.constants import APP_VERSION
 from src.ui.assets import logo_path
 from src.ui.theme import STYLESHEET
 from src.utils.file_assoc import register as register_file_assoc
-from src.utils.logging_config import configure_logging, init_stdio
+from src.utils.logging_config import add_file_handler, configure_logging, init_stdio
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,12 @@ def _cli_project_arg() -> Path | None:
 def run() -> int:
     init_stdio()
     configure_logging()
+    add_file_handler()
+    logger.info("Starting Better Brush v%s", APP_VERSION)
     register_file_assoc()
     app = QApplication(sys.argv)
     app.setApplicationName("Better Brush")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion(APP_VERSION)
     app.setStyleSheet(STYLESHEET)
 
     splash = SplashScreen()

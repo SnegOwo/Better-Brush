@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from src.core.profiles import ShotProfile
 from src.models.sam2_manager import PointPrompt
 
 # Muted palette, cycling when a new object is added.
@@ -34,8 +35,12 @@ class SceneObject:
     name: str
     color: str
     masks: dict[int, np.ndarray] = field(default_factory=dict)  # frame -> bool mask
+    #: Soft alpha mattes (learned matting) per frame, values in [0, 1].
+    #: A matte overrides the binary mask's alpha at display/export time.
+    mattes: dict[int, np.ndarray] = field(default_factory=dict)
     points: list[PointPrompt] = field(default_factory=list)
     keyframes: set[int] = field(default_factory=set)
+    profile: ShotProfile | None = None
 
 
 def next_object_name(objects: list[SceneObject]) -> str:

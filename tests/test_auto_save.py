@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -62,6 +63,81 @@ def test_user_settings_defaults(tmp_path):
     data = ProjectManager.load_user_settings()
     assert data["auto_save_enabled"] is True
     assert data["auto_save_interval_s"] == 60
+    assert data["post_process_enabled"] is True
+    assert data["smooth_strength"] == 3
+    assert data["console_shortcut"] == "F7"
+
+
+def test_legacy_zero_smoothing_stays_disabled(tmp_path):
+    ProjectManager.settings_file().write_text(
+        '{"smooth_strength": 0}', encoding="utf-8"
+    )
+    data = ProjectManager.load_user_settings()
+    assert data["post_process_enabled"] is False
+
+
+def test_post_process_toggle_persists_and_keeps_slider_editable(tmp_path):
+    win = _win()
+    try:
+        assert win._post_process_enabled is True
+        assert win._smooth_slider.isEnabled()
+        win._chk_post_process.setChecked(False)
+        assert win._post_process_enabled is False
+        assert win._smooth_slider.isEnabled()
+        assert ProjectManager.load_user_settings()["post_process_enabled"] is False
+    finally:
+        win.close()
+
+
+def test_console_shortcut_is_configurable(tmp_path):
+    win = _win()
+    try:
+        assert win._act_console.shortcut().toString() == "F7"
+        result = win._console_shortcut(["F8"])
+        assert "F8" in result
+        assert win._act_console.shortcut().toString() == "F8"
+        assert ProjectManager.load_user_settings()["console_shortcut"] == "F8"
+    finally:
+        win.close()
+
+
+def test_f7_opens_diagnostics_console(tmp_path):
+    win = _win()
+    try:
+        QTest.keyClick(win, Qt.Key.Key_F7)
+        assert win._console is not None
+        assert win._console.isVisible()
+    finally:
+        win.close()
+
+
+def test_console_lists_commands_and_reports_unknown_names(tmp_path):
+    win = _win()
+    try:
+        win._show_diagnostics_console()
+        win._console._input.setText("list")
+        win._console._btn_run.click()
+        assert "gpu" in win._console._output.toPlainText()
+        win._console._input.setText("gpui")
+        win._console._btn_run.click()
+        output = win._console._output.toPlainText()
+        assert "unknown command" in output
+        assert "gpu" in output
+    finally:
+        win.close()
+
+
+def test_context_and_title_show_unsaved_work(tmp_path):
+    win = _win()
+    try:
+        _stub_video(win, tmp_path)
+        win._timeline_selection = (3, 8)
+        win._mark_dirty()
+        assert "In 0003-0008 (6f)" in win._lbl_context.text()
+        assert "Unsaved" in win._lbl_context.text()
+        assert win.windowTitle().endswith("*")
+    finally:
+        win.close()
 
 
 def test_user_settings_roundtrip(tmp_path):

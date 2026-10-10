@@ -6,6 +6,53 @@ import sys
 from pathlib import Path
 
 
+def log_dir() -> Path:
+    """Directory where ``better-brush.log`` lives (user-accessible)."""
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
+    else:
+        base = Path(__file__).resolve().parents[2]
+    return base / "logs"
+
+
+def log_file_path() -> Path:
+    """Full path of the on-disk run log."""
+    return log_dir() / "better-brush.log"
+
+
+def add_file_handler(
+    level: int = logging.DEBUG,
+    max_mb: int = 5,
+) -> None:
+    """Attach a rotating file handler to the root logger.
+
+    Everything the app logs is mirrored to ``logs/better-brush.log`` so
+    users (and support) can inspect what happened even when the app runs
+    windowed with no console.
+    """
+    try:
+        import logging.handlers
+
+        log_dir().mkdir(parents=True, exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(
+            log_file_path(),
+            maxBytes=max_mb * 1024 * 1024,
+            backupCount=2,
+            encoding="utf-8",
+        )
+        handler.setLevel(level)
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+        root = logging.getLogger()
+        root.addHandler(handler)
+    except Exception as exc:  # noqa: BLE001 - logging must never crash startup
+        logging.getLogger(__name__).warning("Could not attach file log handler: %s", exc)
+
+
 def init_stdio() -> None:
     """Make sys.stdout / sys.stderr usable in frozen windowed builds.
 

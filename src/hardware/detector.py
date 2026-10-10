@@ -64,6 +64,15 @@ class HardwareProfile:
     def has_cuda(self) -> bool:
         return any(g.backend == Backend.CUDA for g in self.gpus)
 
+    @property
+    def sam3_1_eligible(self) -> bool:
+        """Whether detected hardware clears the conservative SAM 3.1 VRAM floor."""
+        return any(
+            gpu.backend == Backend.CUDA
+            and (gpu.available_vram_mb or gpu.total_vram_mb) >= 15_000
+            for gpu in self.gpus
+        )
+
 
 class HardwareDetector:
     """Detect hardware capabilities and available deep-learning backends."""

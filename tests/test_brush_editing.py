@@ -147,6 +147,9 @@ def test_main_window_toolbar_wiring() -> None:
             "_btn_points",
             "_spin_brush",
             "_chk_erase",
+            "_btn_object_color",
+            "_chk_post_process",
+            "_smooth_slider",
         ):
             assert hasattr(win, attr), f"missing toolbar widget: {attr}"
 
@@ -157,6 +160,54 @@ def test_main_window_toolbar_wiring() -> None:
         from src.hardware.profiler import ContentProfile
 
         assert win._combo_mode.count() == len(list(ContentProfile))
+        assert win._smooth_slider.minimum() == 1
+        assert win._smooth_slider.maximum() == 10
+        assert win._chk_post_process.isChecked() == win._post_process_enabled
+        assert win._smooth_slider.isEnabled() == win._post_process_enabled
+    finally:
+        win.close()
+
+
+def test_tool_shortcuts_sync_sidebar_controls() -> None:
+    _app()
+    win = MainWindow()
+    try:
+        QTest.keyClick(win._canvas, Qt.Key.Key_B)
+        assert win._canvas.get_edit_mode() == "brush"
+        assert win._btn_brush.isChecked()
+        assert not win._btn_points.isChecked()
+        assert not win._brush_size_widget.isHidden()
+
+        QTest.keyClick(win._canvas, Qt.Key.Key_BracketRight)
+        assert win._spin_brush.value() == 22
+        QTest.keyClick(win._canvas, Qt.Key.Key_BracketLeft)
+        assert win._spin_brush.value() == 20
+    finally:
+        win.close()
+
+
+def test_playback_button_reflects_play_state() -> None:
+    _app()
+    win = MainWindow()
+    try:
+        win._video_reader = type("Stub", (), {"fps": 30.0, "total_frames": 10})()
+        win._toggle_play()
+        assert win._btn_play.isChecked()
+        assert win._btn_play.text() == "Pause"
+        win._pause_playback()
+        assert not win._btn_play.isChecked()
+        assert win._btn_play.text() == "Play"
+    finally:
+        win.close()
+
+
+def test_set_frame_clamps_to_video_end() -> None:
+    _app()
+    win = MainWindow()
+    try:
+        win._video_reader = type("Stub", (), {"total_frames": 10})()
+        win._set_frame(99)
+        assert win._current_frame_idx == 9
     finally:
         win.close()
 
@@ -183,6 +234,51 @@ def test_segment_bounds() -> None:
         win.close()
 
 
+def test_brush_size_widget_follows_tool() -> None:
+    _app()
+    win = MainWindow()
+    try:
+        assert win._brush_size_widget.isHidden(), (
+            "brush size hidden by default (points tool active)"
+        )
+        win._set_tool("brush")
+        assert not win._brush_size_widget.isHidden(), (
+            "brush size visible in brush mode"
+        )
+        win._set_tool("points")
+        assert win._brush_size_widget.isHidden(), (
+            "brush size hidden again when switching back to points"
+        )
+    finally:
+        win.close()
+
+
+def test_segment_bounds_stop_at_scene_cuts() -> None:
+    _app()
+    win = MainWindow()
+    try:
+        win._current_frame_idx = 4
+        win._keyframes = {0, 3}
+        win._video_reader = type("Stub", (), {"total_frames": 30})()
+        win._cuts_stop_propagation = True
+        win._scene_cuts = [0, 12, 25]
+
+        # Forward from 4: next cut at 12 -> must stop at 11 (cut - 1)
+        assert win._segment_bounds(1) == (4, 11)
+        # Backward from 4: previous cut at 0 -> must stop at 1 (cut + 1)
+        assert win._segment_bounds(-1) == (4, 4)
+
+        win._current_frame_idx = 13
+        # Forward from 13: keyframe at 3, next cut at 25 -> stop at 24
+        assert win._segment_bounds(1) == (13, 24)
+
+        # Disabling cut-stop restores old behavior (to end of video at 29)
+        win._cuts_stop_propagation = False
+        assert win._segment_bounds(1) == (13, 29)
+    finally:
+        win.close()
+
+
 if __name__ == "__main__":
     _app()
     tests = [
@@ -191,7 +287,12 @@ if __name__ == "__main__":
         test_points_mode_does_not_touch_mask,
         test_preview_mode_fallback,
         test_main_window_toolbar_wiring,
+        test_tool_shortcuts_sync_sidebar_controls,
+        test_playback_button_reflects_play_state,
+        test_set_frame_clamps_to_video_end,
         test_segment_bounds,
+        test_brush_size_widget_follows_tool,
+        test_segment_bounds_stop_at_scene_cuts,
     ]
     failed = 0
     for t in tests:

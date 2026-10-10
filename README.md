@@ -1,34 +1,34 @@
 <p align="center">
-  <img src="assets/icons/LogoBetterBrush.png" alt="Better Brush" width="128" />
+  <img src="assets/icons/LogoBetterBrush.png" alt="Better Brush" width="120" />
 </p>
 
 <h1 align="center">Better Brush</h1>
 
 <p align="center">
-  <b>AI rotoscoping studio</b> for video editors · Windows desktop app
-  <br/>
-  Click. Segment. Propagate. Correct. Export.
+  <b>The AI rotoscoping studio for video editors.</b><br/>
+  Click. Segment. Matte. Propagate. Remove. Export.
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-BUSL--1.1-blue" alt="License: BUSL-1.1" /></a>
-  <a href="https://sneg.dev/BetterBrush"><img src="https://img.shields.io/badge/get%20pro-%E2%82%AC5-green" alt="Get Pro" /></a>
+  <a href="https://sneg.dev/BetterBrush"><img src="https://img.shields.io/badge/get%20pro-%E2%82%AC5%20one--time-green" alt="Get Pro" /></a>
   <img src="https://img.shields.io/badge/platform-Windows-informational" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python: 3.11+" />
+  <img src="https://img.shields.io/badge/tests-350%20passing-brightgreen" alt="Tests" />
+</p>
+
+<p align="center">
+  Everything runs locally — your footage never leaves your machine.
 </p>
 
 ---
 
-Better Brush is a professional AI rotoscoping tool from **Sneg HQ**. It turns any
-video clip into production-ready alpha mattes with a few clicks: prompt SAM 2 to
-segment your subject, propagate the mask across the timeline, refine edges with
-the brush, and export transparent ProRes 4444 or PNG sequences.
+## What it does
 
-Everything runs locally — images never leave your machine.
-
----
-
-## Editions
+Better Brush turns any clip into a production-ready alpha matte with a few
+clicks: prompt SAM 2 to segment your subject, build a **soft matte** around it,
+propagate across the whole timeline, **paint subjects out** of the shot, refine
+edges with the brush, and export transparent ProRes 4444 or PNG sequences.
 
 | | **Lite** — free | **Pro** — €5 one-time |
 |---|---|---|
@@ -44,13 +44,37 @@ Pro keys are issued offline and activated in-app. [Get Pro](https://sneg.dev/Bet
 
 ## Highlights
 
-- **Point-prompt masks** — click to include, right-click to exclude; live SAM 2 inference
-- **Auto model selection** — detects your GPU and picks the best SAM 2.1 model with safe VRAM headroom
-- **Video propagation** — masks follow the subject across the whole clip
-- **Multi-object scenes** — independent layers per subject; export combined, single, or separate
-- **Pro export pipeline** — PNG alpha sequences, ProRes 4444, QuickTime Animation, H.264, audio mux
-- **Project files** — `.bbproj` saves every point, keyframe, mask, and view state
-- **CUI-friendly shortcuts** — full keyboard workflow with undo/redo and zoom/pan
+**Segment**
+- Point-prompt masks — click to include, right-click to exclude, live inference
+- **Five model families** — SAM 2.1 Tiny → Large, SAM 3.1 Object Multiplex,
+  and **EfficientTAM** for machines that cannot host SAM 2.1 Tiny
+- Auto model selection from your GPU's *free* VRAM with a stability-first headroom policy
+- **Train your own anime-tuned model** — Better Brush is the data engine
+  (see [Fine-tuning](docs/FINE-TUNING.md))
+- Face-part prompts (mouth / eyes), scene-cut detection, shot profiles
+
+**Matte**
+- **Learned video matting** — MatAnyone / MatAnyone 2 build soft alpha with
+  hair, motion blur and partial coverage, tracked through the clip
+- Edge gamma and matte grow controls, per shot
+- Optical-flow temporal smoothing, despill, cast neutralization, guided-filter refinement
+
+**Remove**
+- **AI object removal** — a distilled video inpainting model paints the masked
+  subject out and rebuilds the background, in cross-faded windows
+- Auto window sizing from free VRAM, low-VRAM tiled decode, graceful OOM guidance
+- Subtitle / logo cleanup with LaMa inpainting on GPU, plus tracking bands and seeds
+
+**Correct**
+- Brush (add / erase) on any frame, points, boxes derived from painted masks
+- Undo/redo, zoom/pan, overlay / cutout / raw views
+- Matte QC inspector with issue overlays and a coach that answers typed complaints
+
+**Export**
+- ProRes 4444, QuickTime Animation, H.264 with chroma-key backgrounds, PNG alpha
+- Soft mattes flow straight through to the exporter (no double feathering)
+- Batch render queue: persist projects, pause, resume, retry
+- Version history with checksummed, restorable checkpoints
 
 ## Getting Started
 
@@ -66,16 +90,41 @@ pip install -r requirements.txt
 python -m src.main
 ```
 
-The first segmentation downloads a SAM 2.1 checkpoint (~150 MB for the tiny model)
-into `checkpoints/`. For best performance, install CUDA-enabled PyTorch
-(see `requirements.txt`). The release bundle ships with FFmpeg built in.
+The first segmentation downloads a SAM 2.1 checkpoint (~150 MB) into
+`checkpoints/`. For best performance install CUDA-enabled PyTorch; the release
+bundle ships FFmpeg built in. Matting, removal and fine-tuning models download
+on first use.
+
+## Production Workflow
+
+1. **Open a clip** — scene cuts are detected automatically.
+2. **Prompt the subject** — left-click include, right-click exclude, then
+   `Propagate to End` (propagation never crosses a cut).
+3. **Matte it** — Matting → Run Matting for a soft alpha; tune gamma / grow.
+4. **Remove what you don't want** — Object Removal paints masked subjects out.
+5. **Clean up** — subtitles / logos, despill, cast fix, edge softness.
+6. **Inspect** — Matte QC Inspector (`Ctrl+Shift+M`) before you commit a render.
+7. **Export** — `Ctrl+E`, or queue several projects for a batch render.
+
+## Documentation
+
+| Guide | Contents |
+|---|---|
+| [User Guide](docs/USER-GUIDE.md) | The complete editor-facing workflow |
+| [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
+| [Fine-tuning](docs/FINE-TUNING.md) | Train your own anime/AMV SAM 2 model on one GPU |
+| [Roadmap Ideas](docs/ROADMAP-IDEAS.md) | Next-level backlog |
 
 ## Development
 
 ```bash
-python -m pytest tests/ -v     # run the test suite
-pyinstaller --clean better_brush.spec   # build the Windows bundle
+python -m pytest tests/ -v            # 350 tests, no GPU required
+python -m ruff check src/             # lint
+pyinstaller --clean better_brush.spec # build the Windows bundle
 ```
+
+Vendored model packages and their licenses are documented in
+[src/vendor/README.md](src/vendor/README.md).
 
 ## License
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections import OrderedDict
 
 import numpy as np
@@ -81,3 +82,71 @@ class FrameBuffer:
             self._current_size_bytes -= old.nbytes
         self._cache[idx] = frame
         self._current_size_bytes += nbytes
+
+
+class CleanFrameStore:
+    """LRU cache for pre-cleaned ("baked") frames.
+
+    The ``Mask to End`` bake worker writes cleaned frames from a background
+    thread while the GUI reads them during playback, so every mutation is
+    guarded by a lock.  Unlike :class:`FrameBuffer` there is deliberately no
+    fallback read: ``get()`` returns ``None`` for a frame that has been evicted
+    so the caller can re-run the live cleanup as a degraded fallback.
+    """
+
+    def __init__(
+        self,
+        max_frames: int = 256,
+        max_mb: int = 1536,
+    ) -> None:
+        self.max_frames = max_frames
+        self.max_bytes = max_mb * 1024 * 1024
+        self._cache: OrderedDict[int, np.ndarray] = OrderedDict()
+        self._used_bytes = 0
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------ #
+    # API
+    # ------------------------------------------------------------------ #
+    def get(self, idx: int) -> np.ndarray | None:
+        """Return the baked frame, or ``None`` when not cached."""
+        with self._lock:
+            frame = self._cache.get(idx)
+            if frame is not None:
+                self._cache.move_to_end(idx)
+            return frame
+
+    def set(self, idx: int, frame: np.ndarray) -> None:
+        """Store a baked frame, evicting LRU entries over capacity."""
+        with self._lock:
+            old = self._cache.pop(idx, None)
+            if old is not None:
+                self._used_bytes -= old.nbytes
+            nbytes = frame.nbytes
+            while (
+                len(self._cache) >= self.max_frames
+                or (self._used_bytes + nbytes) > self.max_bytes
+            ) and self._cache:
+                _, evicted = self._cache.popitem(last=False)
+                self._used_bytes -= evicted.nbytes
+            self._cache[idx] = frame
+            self._used_bytes += nbytes
+
+    def contains(self, idx: int) -> bool:
+        with self._lock:
+            return idx in self._cache
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+            self._used_bytes = 0
+
+    @property
+    def count(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+    @property
+    def memory_bytes(self) -> int:
+        with self._lock:
+            return self._used_bytes

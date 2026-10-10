@@ -28,14 +28,23 @@ _SUT = SAM2Profiler()
 # base_plus; it must now stay on the much lighter *small* tier.
 _CASES: list[tuple[int, int, ModelSize]] = [
     (0, 0, ModelSize.TINY),  # no GPU / unknown VRAM
-    (3_000, 3_000, ModelSize.TINY),  # 3 GB card
+    (3_000, 3_000, ModelSize.EFFICIENTTAM_S),  # 3 GB card: tiny needs 2.8 GB
     (5_000, 5_000, ModelSize.TINY),  # 5 GB: 3.25 GB effective < 5 GB
     (8_000, 8_000, ModelSize.SMALL),  # 8 GB card -> small (5.2 GB eff.)
     (11_000, 12_288, ModelSize.SMALL),  # RTX 3060 12 GB, idle at launch
     (6_582, 12_288, ModelSize.TINY),  # 3060 while another app uses VRAM
     (14_000, 16_000, ModelSize.BASE_PLUS),  # 16 GB card -> base_plus
     (17_000, 18_000, ModelSize.BASE_PLUS),  # 18 GB card still base_plus
-    (24_000, 24_000, ModelSize.LARGE),  # 24 GB card can take large
+    (24_000, 24_000, ModelSize.LARGE),  # 24 GB card: SAM 3.1 skipped when optional package absent
+    (32_000, 32_000, ModelSize.LARGE),  # same fallback with the optional extra
+]
+
+# Below the SAM 2.1 Tiny threshold the picker falls back to the lightweight
+# EfficientTAM family, which runs on cards that cannot host Tiny at all.
+_LIGHT_CASES: list[tuple[int, int, ModelSize]] = [
+    (2_400, 3_000, ModelSize.EFFICIENTTAM_TI),  # 1.56 GB effective
+    (1_800, 2_400, ModelSize.EFFICIENTTAM_TI),  # 1.17 GB effective
+    (1_200, 1_500, ModelSize.EFFICIENTTAM_TI),  # below every threshold
 ]
 
 
@@ -82,6 +91,26 @@ def test_recommendation_stays_below_vram_limit() -> None:
     assert not _run_cases(), "policy mismatches:\n" + "\n".join(_run_cases())
 
 
+def test_weak_gpus_fall_back_to_efficienttam() -> None:
+    """Cards that cannot host SAM 2.1 Tiny get a lightweight model."""
+    failures: list[str] = []
+    for free_mb, total_mb, expected in _LIGHT_CASES:
+        got = _SUT.recommend(_profile(_gpu(total_mb, free_mb))).model_size
+        if got is not expected:
+            failures.append(
+                f"free={free_mb} MB total={total_mb} MB -> {got.value!r}, "
+                f"expected {expected.value!r}"
+            )
+    assert not failures, "light-model mismatches:\n" + "\n".join(failures)
+
+
+def test_efficienttam_thresholds_are_below_tiny() -> None:
+    """The light tiers must always fit where Tiny does not."""
+    thresholds = _SUT._VRAM_THRESHOLDS
+    assert thresholds[ModelSize.EFFICIENTTAM_S] < thresholds[ModelSize.TINY]
+    assert thresholds[ModelSize.EFFICIENTTAM_TI] < thresholds[ModelSize.EFFICIENTTAM_S]
+
+
 def test_effective_vram_keeps_headroom() -> None:
     """effective VRAM = free × 0.65, i.e. ~35 % headroom is kept."""
     assert int(11_000 * _SUT._VRAM_SAFETY_FACTOR) == 7_150
@@ -94,6 +123,24 @@ def test_cpu_fallback_is_tiny() -> None:
 def test_force_model_is_respected() -> None:
     rec = _SUT.recommend(_profile(_gpu(8_000, 8_000)), force_model=ModelSize.LARGE)
     assert rec.model_size is ModelSize.LARGE
+
+
+def test_hardware_reports_sam3_eligibility() -> None:
+    assert _profile(_gpu(12_000, 12_000)).sam3_1_eligible is False
+    assert _profile(_gpu(24_000, 24_000)).sam3_1_eligible is True
+
+
+def test_sam3_1_can_be_forced_and_recommended(monkeypatch) -> None:
+    import src.hardware.profiler as profiler_module
+
+    monkeypatch.setattr(profiler_module, "_sam3_package_available", lambda: True)
+    forced = _SUT.recommend(
+        _profile(_gpu(8_000, 8_000)), force_model=ModelSize.SAM3_1
+    )
+    automatic = _SUT.recommend(_profile(_gpu(24_000, 24_000)))
+    assert forced.model_size is ModelSize.SAM3_1
+    assert automatic.model_size is ModelSize.SAM3_1
+    assert "huggingface.co/facebook/sam3.1" in automatic.checkpoint_url
 
 
 def test_user_message_mentions_conservative_choice() -> None:

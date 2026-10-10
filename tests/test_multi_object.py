@@ -205,7 +205,7 @@ def test_v2_project_roundtrip(tmp_path):
     out = ProjectManager.save(tmp_path / "proj.bbproj", data)
     loaded = ProjectManager.load(out)
 
-    assert loaded.version == 2
+    assert loaded.version == 3
     assert loaded.active_object == 2
     assert len(loaded.objects) == 2
     hero = next(r for r in loaded.objects if r.name == "Hero")

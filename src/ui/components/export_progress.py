@@ -29,7 +29,6 @@ class ExportProgressDialog(QDialog):
         self.setFixedSize(380, 170)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
-            | Qt.WindowType.WindowStaysOnTopHint
         )
         self._cancelled = False
 
@@ -152,15 +151,26 @@ class ExportProgressDialog(QDialog):
         else:
             self._lbl_eta.setText("Remaining  —")
 
-    def set_finished(self, success: bool = True) -> None:
-        """Mark the export as finished and auto-close."""
-        if success:
-            self._lbl_title.setText("Export complete")
+    def set_finished(self, success: bool = True, cancelled: bool = False) -> None:
+        """Mark the export as finished and auto-close.
+
+        A cancelled run is not a failure: it keeps its last progress value and
+        says so, so the dialog never claims "Export failed" for a run the user
+        stopped on purpose.
+        """
+        if cancelled:
+            self._lbl_title.setText("Export cancelled")
             self._lbl_stage.setText("")
             self._lbl_eta.setText("")
         else:
-            self._lbl_title.setText("Export failed")
-        self._bar.setValue(100 if success else 0)
+            if success:
+                self._lbl_title.setText("Export complete")
+                self._lbl_stage.setText("")
+                self._lbl_eta.setText("")
+            else:
+                self._lbl_title.setText("Export failed")
+            self._bar.setValue(100 if success else 0)
+        self._btn_cancel.setEnabled(True)
         self._btn_cancel.setText("Close")
         self._btn_cancel.clicked.disconnect()
         self._btn_cancel.clicked.connect(self.accept)

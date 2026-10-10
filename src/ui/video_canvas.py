@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 # ── Visual constants ──────────────────────────────────────────────────────
 _BG = QColor(20, 20, 24)
+#: Half-width of the patch the spill eyedropper medians over.
+_SPILL_PICK_RADIUS = 2
 _POINT_POS = QColor(72, 199, 142)  # muted green
 _POINT_NEG = QColor(230, 80, 80)  # muted red
 _POINT_RING = QColor(255, 255, 255, 200)
@@ -44,9 +46,17 @@ class VideoCanvas(QWidget):
     frame_navigate = Signal(int)  # delta frames (wheel)
     request_segment = Signal()  # requested via the Segment Frame button
     play_pause = Signal()  # user pressed Space/P or clicked Play/Pause
+    edit_mode_changed = Signal(str)
+    brush_size_changed = Signal(int)
     # Brush editing
     brush_press = Signal()  # emitted at the start of a brush stroke
     mask_edited = Signal()  # emitted after a brush stroke modified the mask
+    # Region picking (Clean Up guide)
+    region_selected = Signal(int, int, int, int)  # x, y, w, h (image coords)
+    region_cancelled = Signal()
+    # Eyedropper (spill cleaner)
+    color_picked = Signal(int, int, int)  # r, g, b
+    color_pick_cancelled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -72,6 +82,13 @@ class VideoCanvas(QWidget):
         self._painting = False
         self._painted = False
         self._selected_point: int | None = None  # index into _points
+        # Region picking (Clean Up guide)
+        self._picking_region = False
+        self._pick_start: tuple[int, int] | None = None
+        self._pick_rect: tuple[int, int, int, int] | None = None  # image coords
+        self._region_hint = "Drag a rectangle over the region"
+        # Eyedropper (spill cleaner)
+        self._picking_color = False
         self.setMinimumSize(480, 320)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -85,7 +102,13 @@ class VideoCanvas(QWidget):
         self.update()
 
     def set_mask(self, mask: np.ndarray | None) -> None:
-        self._mask = mask.astype(bool) if mask is not None else None
+        """Set the matte: bool for binary masks, float32 0..1 for soft alpha."""
+        if mask is None:
+            self._mask = None
+        elif mask.dtype == bool:
+            self._mask = mask
+        else:
+            self._mask = np.clip(mask.astype(np.float32), 0.0, 1.0)
         self.update()
 
     def set_points(self, points: list[PointPrompt]) -> None:
@@ -113,8 +136,12 @@ class VideoCanvas(QWidget):
     # Tools / preview
     # ------------------------------------------------------------------ #
     def set_edit_mode(self, mode: str) -> None:
-        self._edit_mode = mode if mode in ("points", "brush") else "points"
+        mode = mode if mode in ("points", "brush") else "points"
+        if mode == self._edit_mode:
+            return
+        self._edit_mode = mode
         self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.edit_mode_changed.emit(mode)
         self.update()
 
     def get_edit_mode(self) -> str:
@@ -122,7 +149,11 @@ class VideoCanvas(QWidget):
         return self._edit_mode
 
     def set_brush_size(self, size: int) -> None:
-        self._brush_size = max(1, min(int(size), 500))
+        size = max(1, min(int(size), 500))
+        if size == self._brush_size:
+            return
+        self._brush_size = size
+        self.brush_size_changed.emit(size)
         self.update()
 
     def set_brush_erase(self, erase: bool) -> None:
@@ -136,6 +167,74 @@ class VideoCanvas(QWidget):
         c.setAlpha(min(c.alpha(), 80))
         self._mask_color = c
         self.update()
+
+    # ------------------------------------------------------------------ #
+    # Region picking (Clean Up guide)
+    # ------------------------------------------------------------------ #
+    def begin_region_pick(self, hint: str = "") -> None:
+        """Enter 'drag a rectangle' mode (no point/brush interactions)."""
+        self._picking_region = True
+        self._pick_start = None
+        self._pick_rect = None
+        if hint:
+            self._region_hint = hint
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.update()
+
+    def end_region_pick(self) -> None:
+        self._picking_region = False
+        self._pick_start = None
+        self._pick_rect = None
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.update()
+
+    def is_picking_region(self) -> bool:
+        return self._picking_region
+
+    # ------------------------------------------------------------------ #
+    # Eyedropper (spill cleaner)
+    # ------------------------------------------------------------------ #
+    def begin_color_pick(self) -> None:
+        """Enter eyedropper mode: the next click samples a frame pixel."""
+        self._picking_color = True
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.update()
+
+    def end_color_pick(self) -> None:
+        """Leave eyedropper mode and restore the normal cursor."""
+        self._picking_color = False
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.update()
+
+    def is_picking_color(self) -> bool:
+        """Return whether the eyedropper is waiting for a click."""
+        return self._picking_color
+
+    def pixel_at(self, img_x: int, img_y: int) -> tuple[int, int, int] | None:
+        """Return the RGB value at image coordinates, or ``None`` if outside.
+
+        A 5x5 neighbourhood is reduced by its per-channel median rather than
+        reading the single pixel: video is full of compression speckle and
+        mosquito noise, and one stray pixel is enough to aim the spill cleaner
+        at the wrong hue. The median ignores both without smearing edges the way
+        an average would.
+        """
+        if self._frame is None:
+            return None
+        height, width = self._frame.shape[:2]
+        if not 0 <= img_x < width or not 0 <= img_y < height:
+            return None
+        radius = _SPILL_PICK_RADIUS
+        x0, x1 = max(0, img_x - radius), min(width, img_x + radius + 1)
+        y0, y1 = max(0, img_y - radius), min(height, img_y + radius + 1)
+        patch = self._frame[y0:y1, x0:x1, :3].reshape(-1, 3)
+        if patch.size == 0:
+            return None
+        return (
+            int(np.median(patch[:, 0])),
+            int(np.median(patch[:, 1])),
+            int(np.median(patch[:, 2])),
+        )
 
     # ------------------------------------------------------------------ #
     # View transform (zoom / pan)
@@ -231,7 +330,46 @@ class VideoCanvas(QWidget):
         if self._edit_mode == "brush" and self._brush_hover is not None:
             self._draw_brush_cursor(painter)
 
+        # Region-picking overlay (Clean Up guide)
+        if self._picking_region:
+            self._draw_region_pick(painter, off_x, off_y)
+
+        # Eyedropper hint (spill cleaner)
+        if self._picking_color:
+            self._draw_color_pick_hint(painter, off_x, off_y)
+
         painter.end()
+
+    def _draw_color_pick_hint(self, painter: QPainter, off_x: int, off_y: int) -> None:
+        """Draw the eyedropper hint while the user is choosing a spill color."""
+        painter.setPen(QPen(QColor(255, 255, 255, 235)))
+        painter.drawText(
+            QRect(off_x + 10, off_y + 10, max(220, int(self.width() * 0.6)), 24),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            "Click the color fringe to sample it  (Esc to cancel)",
+        )
+
+    def _draw_region_pick(self, painter: QPainter, off_x: int, off_y: int) -> None:
+        """Draw the dotted rectangle + hint while the user drags a region."""
+        # Hint text pinned to the top-left of the frame.
+        painter.setPen(QPen(QColor(255, 255, 255, 235)))
+        painter.drawText(
+            QRect(off_x + 10, off_y + 10, max(200, int(self.width() * 0.6)), 24),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self._region_hint,
+        )
+        if self._pick_rect is None:
+            return
+        ax0, ay0, ax1, ay1 = self._pick_rect
+        x0 = int(off_x + ax0 * self._scale)
+        y0 = int(off_y + ay0 * self._scale)
+        x1 = int(off_x + (ax1 + 1) * self._scale)
+        y1 = int(off_y + (ay1 + 1) * self._scale)
+        painter.setPen(QPen(QColor(120, 190, 255, 255), 2, Qt.PenStyle.DashLine))
+        painter.setBrush(QColor(120, 190, 255, 40))
+        painter.drawRect(x0, y0, x1 - x0, y1 - y0)
+        painter.setBrush(QColor(120, 190, 255, 255))
+        painter.drawEllipse(x0 - 3, y0 - 3, 6, 6)
 
     def _draw_brush_cursor(self, painter: QPainter) -> None:
         """Draw a professional brush cursor: circle + center dot."""
@@ -261,6 +399,25 @@ class VideoCanvas(QWidget):
     # ------------------------------------------------------------------ #
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._frame is None:
+            return
+        if self._picking_color:
+            if event.button() == Qt.MouseButton.LeftButton:
+                pos = event.position().toPoint()
+                img_x, img_y = self._widget_to_image(pos.x(), pos.y())
+                if img_x is not None:
+                    rgb = self.pixel_at(img_x, img_y)
+                    if rgb is not None:
+                        self.end_color_pick()
+                        self.color_picked.emit(*rgb)
+            return
+        if self._picking_region:
+            if event.button() == Qt.MouseButton.LeftButton:
+                pos = event.position().toPoint()
+                img = self._widget_to_image(pos.x(), pos.y())
+                if img[0] is not None:
+                    self._pick_start = (img[0], img[1])
+                    self._pick_rect = (img[0], img[1], img[0], img[1])
+                    self.update()
             return
         # Pan with the middle button from any mode
         if event.button() == Qt.MouseButton.MiddleButton:
@@ -303,6 +460,19 @@ class VideoCanvas(QWidget):
         if self._frame is None:
             return
         pos = event.position().toPoint()
+        if self._picking_region:
+            if self._pick_start is not None:
+                img = self._widget_to_image(pos.x(), pos.y())
+                if img[0] is not None:
+                    sx, sy = self._pick_start
+                    self._pick_rect = (
+                        min(sx, img[0]),
+                        min(sy, img[1]),
+                        max(sx, img[0]),
+                        max(sy, img[1]),
+                    )
+                    self.update()
+            return
         if self._panning:
             delta = pos - self._pan_start
             self._pan_start = pos
@@ -320,6 +490,15 @@ class VideoCanvas(QWidget):
         self._brush_hover = None
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._picking_region:
+            rect = self._pick_rect
+            self._pick_start = None
+            if rect is not None and event.button() == Qt.MouseButton.LeftButton:
+                ax0, ay0, ax1, ay1 = rect
+                # Ignore accidental clicks / tiny drags.
+                if ax1 - ax0 >= 8 and ay1 - ay0 >= 8:
+                    self.region_selected.emit(ax0, ay0, ax1 - ax0 + 1, ay1 - ay0 + 1)
+            return
         if self._panning:
             self._panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -348,7 +527,15 @@ class VideoCanvas(QWidget):
 
     def keyPressEvent(self, event) -> None:
         key = event.key()
-        if key == Qt.Key.Key_Space:
+        if key == Qt.Key.Key_Escape and self._picking_color:
+            self.end_color_pick()
+            self.color_pick_cancelled.emit()
+        elif key == Qt.Key.Key_Escape and self._picking_region:
+            self._pick_start = None
+            self._pick_rect = None
+            self.region_cancelled.emit()
+            self.update()
+        elif key == Qt.Key.Key_Space:
             self.play_pause.emit()
         elif key == Qt.Key.Key_Left:
             self.frame_navigate.emit(-1)
@@ -443,12 +630,22 @@ class VideoCanvas(QWidget):
     def _mask_to_pixmap(self, mask: np.ndarray) -> QPixmap:
         h, w = mask.shape
         rgba = np.zeros((h, w, 4), dtype=np.uint8)
-        rgba[mask] = [
-            self._mask_color.red(),
-            self._mask_color.green(),
-            self._mask_color.blue(),
-            self._mask_color.alpha(),
-        ]
+        if mask.dtype == bool:
+            rgba[mask] = [
+                self._mask_color.red(),
+                self._mask_color.green(),
+                self._mask_color.blue(),
+                self._mask_color.alpha(),
+            ]
+        else:
+            # Soft matte: partial coverage becomes partial colour alpha.
+            coverage = mask.astype(np.float32)
+            rgba[:, :, 0] = int(self._mask_color.red())
+            rgba[:, :, 1] = int(self._mask_color.green())
+            rgba[:, :, 2] = int(self._mask_color.blue())
+            rgba[:, :, 3] = (
+                coverage * self._mask_color.alpha()
+            ).astype(np.uint8)
         bytes_per_line = 4 * w
         image = QImage(rgba.data, w, h, bytes_per_line, QImage.Format.Format_ARGB32)
         return QPixmap.fromImage(image.copy())
@@ -466,7 +663,8 @@ class VideoCanvas(QWidget):
         g = np.where(checker, _CHECKER_A.green(), _CHECKER_B.green())
         b = np.where(checker, _CHECKER_A.blue(), _CHECKER_B.blue())
         bg = np.stack([r, g, b], axis=-1).astype(np.uint8)
-        keep = mask[..., None]
-        cut = rgb * keep.astype(np.uint8) + bg * (~keep).astype(np.uint8)
-        pix = self._np_to_pixmap(cut)
+        # Soft mattes blend partially-covered pixels against the checkerboard.
+        keep = mask.astype(np.float32)[..., None]
+        cut = rgb * keep + bg * (1.0 - keep)
+        pix = self._np_to_pixmap(cut.astype(np.uint8))
         painter.drawPixmap(target, pix, pix.rect())

@@ -114,6 +114,29 @@ QPushButton[cssClass="accent"] {
 QPushButton[cssClass="accent"]:hover {
     background-color: #2d5f8f;
 }
+/* The main action inside a sidebar section. Deliberately much quieter than
+   "accent": the sidebar stacks a dozen buttons, and filling several of them
+   with the loud accent turns the panel into a pile of blue. This gives one
+   per section enough weight to be findable without shouting. */
+QPushButton[cssClass="primary"] {
+    background-color: #23394f;
+    border-color: #3a6ea5;
+    color: #cfe3ff;
+    font-weight: 600;
+}
+QPushButton[cssClass="primary"]:hover {
+    background-color: #2a4763;
+    border-color: #4a9eff;
+    color: #e8f2ff;
+}
+QPushButton[cssClass="primary"]:pressed {
+    background-color: #1f3143;
+}
+QPushButton[cssClass="primary"]:disabled {
+    background-color: #1e1e22;
+    border-color: #28282c;
+    color: #555560;
+}
 QPushButton[cssClass="danger"] {
     background-color: #3a1a1a;
     border-color: #f87171;
@@ -125,22 +148,33 @@ QPushButton[cssClass="danger"]:hover {
 QPushButton[cssClass="section-header"] {
     background-color: transparent;
     border: none;
-    border-radius: 0px;
-    padding: 6px 8px;
+    border-radius: 5px;
+    padding: 7px 8px;
     text-align: left;
     font-weight: 600;
     font-size: 11px;
-    color: #8b8b94;
+    color: #9a9aa4;
     text-transform: uppercase;
     letter-spacing: 1px;
 }
 QPushButton[cssClass="section-header"]:hover {
-    color: #b0b0b8;
-    background-color: transparent;
+    color: #e6e6ea;
+    background-color: #2a2a30;
 }
 QPushButton[cssClass="section-header"]:checked {
     color: #d4d4d8;
     background-color: transparent;
+}
+QPushButton[cssClass="section-header"]:focus-visible {
+    color: #e6e6ea;
+    background-color: #2a2a30;
+}
+QPushButton[cssClass="tool"] {
+    padding: 5px 10px;
+}
+QPushButton[cssClass="tool"]:checked {
+    background-color: #264f78;
+    border-color: #4a9eff;
 }
 QPushButton[cssClass="transport"] {
     background-color: #222226;
@@ -333,6 +367,12 @@ QSlider::sub-page:horizontal {
     background: #4a9eff;
     border-radius: 2px;
 }
+QSlider:disabled::sub-page:horizontal {
+    background: #3a3a40;
+}
+QSlider:disabled::handle:horizontal {
+    background: #555560;
+}
 
 /* ── Message box / dialogs ─────────────────────────────────────────────── */
 QMessageBox, QDialog {
@@ -344,10 +384,169 @@ QMessageBox QLabel, QDialog QLabel {
 
 /* ── Tooltips ──────────────────────────────────────────────────────────── */
 QToolTip {
-    background-color: #2a2a2f;
+    background-color: #26262b;
+    color: #e0e0e6;
+    border: 1px solid #45454c;
+    padding: 6px 9px;
+    border-radius: 5px;
+}
+
+/* ─── Keyboard focus ────────────────────────────────────────────────
+   Tab navigation used to be invisible: focusing a control changed nothing
+   on screen, so keyboard users had no idea where they were. The ring is
+   drawn on the border colour so it does not reflow the control, and it is
+   scoped to :focus-visible so a mouse click does not leave one behind. */
+QPushButton:focus, QComboBox:focus, QSpinBox:focus, QLineEdit:focus,
+QCheckBox:focus, QListWidget:focus, QTreeWidget:focus, QTextEdit:focus {
+    outline: none;
+}
+QPushButton:focus-visible, QComboBox:focus-visible, QSpinBox:focus-visible,
+QLineEdit:focus-visible, QCheckBox:focus-visible, QListWidget:focus-visible,
+QTextEdit:focus-visible {
+    border-color: #4a9eff;
+}
+QPushButton[cssClass="accent"]:focus-visible,
+QPushButton[cssClass="tool"]:focus-visible,
+QPushButton[cssClass="transport"]:focus-visible {
+    border-color: #8cc4ff;
+}
+
+/* ─── Line edit ─────────────────────────────────────────────────────
+   Was unstyled, so text fields fell back to the platform widget and
+   visibly clashed with the dark panel. */
+QLineEdit {
+    background-color: #232327;
     color: #d4d4d8;
     border: 1px solid #3a3a40;
-    padding: 4px 8px;
     border-radius: 4px;
+    padding: 5px 8px;
+    selection-background-color: #264f78;
+    selection-color: #e8e8ec;
 }
+QLineEdit:hover { border-color: #4a4a50; }
+QLineEdit:focus { border-color: #4a9eff; background-color: #26262b; }
+QLineEdit:disabled {
+    background-color: #1e1e22;
+    color: #555560;
+    border-color: #28282c;
+}
+QLineEdit::placeholder { color: #555560; }
+
+/* ─── Item views (the tutorial rail, history and library lists) ─────── */
+QListWidget, QTreeWidget, QTableWidget, QListView, QTreeView {
+    background-color: #1e1e22;
+    border: 1px solid #2e2e33;
+    border-radius: 4px;
+    outline: none;
+    selection-background-color: #264f78;
+    selection-color: #e8e8ec;
+}
+QListWidget::item, QTreeWidget::item {
+    padding: 4px 6px;
+    border-radius: 3px;
+}
+QListWidget::item:hover, QTreeWidget::item:hover { background-color: #2a2a30; }
+QListWidget::item:selected, QTreeWidget::item:selected { background-color: #264f78; }
+QHeaderView::section {
+    background-color: #26262b;
+    color: #8b8b94;
+    border: none;
+    border-bottom: 1px solid #2e2e33;
+    padding: 5px 6px;
+    font-size: 11px;
+}
+
+/* ─── Text edit ─────────────────────────────────────────────────────── */
+QTextEdit, QPlainTextEdit {
+    background-color: #1e1e22;
+    color: #d4d4d8;
+    border: 1px solid #2e2e33;
+    border-radius: 4px;
+    padding: 6px;
+    selection-background-color: #264f78;
+}
+
+/* ─── Group box / tab bar ───────────────────────────────────────────── */
+QGroupBox {
+    border: 1px solid #2e2e33;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 8px;
+    color: #8b8b94;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 4px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+QTabBar::tab {
+    background: #232327;
+    color: #8b8b94;
+    border: 1px solid #2e2e33;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 5px 12px;
+    margin-right: 2px;
+}
+QTabBar::tab:hover { background: #2e2e33; color: #d4d4d8; }
+QTabBar::tab:selected {
+    background: #2a2a2f;
+    color: #e8e8ec;
+    border-bottom: 1px solid #2a2a2f;
+}
+
+/* ─── Disabled states for the remaining controls ─────────────────────
+   Only the push button had a disabled look, so a greyed-out combo or spin
+   box still looked interactive and invited clicks that did nothing. */
+QComboBox:disabled, QSpinBox:disabled {
+    background-color: #1e1e22;
+    color: #555560;
+    border-color: #28282c;
+}
+QCheckBox:disabled { color: #555560; }
+QCheckBox:disabled::indicator {
+    background-color: #1e1e22;
+    border-color: #28282c;
+}
+QCheckBox:hover { color: #e8e8ec; }
+
+/* ─── Spin box arrows ───────────────────────────────────────────────── */
+QSpinBox::up-arrow, QSpinBox::down-arrow {
+    width: 7px;
+    height: 7px;
+    border-left: 1px solid #8b8b94;
+    border-top: 1px solid #8b8b94;
+}
+QSpinBox::up-arrow:hover, QSpinBox::down-arrow:hover {
+    border-left-color: #d4d4d8;
+    border-top-color: #d4d4d8;
+}
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #2a2a2f;
+    border-left: 1px solid #3a3a40;
+    width: 15px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover { background-color: #333338; }
+
+/* ─── Slider handle ─────────────────────────────────────────────────── */
+QSlider::handle:horizontal {
+    background: #e8e8ec;
+    border: 1px solid #14141a;
+    width: 11px;
+    height: 11px;
+    margin: -4px 0;
+    border-radius: 6px;
+}
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+    border-color: #4a9eff;
+}
+QSlider::groove:horizontal:hover { background: #333338; }
+
+/* ─── Menus ─────────────────────────────────────────────────────────── */
+QMenu { border-radius: 5px; }
+QMenu::item:disabled { color: #555560; }
 """

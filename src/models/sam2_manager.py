@@ -1,4 +1,4 @@
-"""SAM 2 model wrapper: lazy loading, inference, video propagation."""
+"""Model runtime for SAM 2 and the optional SAM 3.1 adapter."""
 
 from __future__ import annotations
 
@@ -10,12 +10,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 import torch
 
 from src.hardware.detector import Backend
 from src.hardware.profiler import ModelSize, SAM2Recommendation
 from src.models.checkpoint_manager import CheckpointManager
+from src.models.sam3_adapter import (
+    Sam3ImageAdapter,
+    Sam3VideoAdapter,
+    sam3_is_available,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +42,61 @@ try:
 except Exception as exc:  # noqa: BLE001
     logger.warning("SAM 2 not available (%s). Running in stub mode.", exc)
 
+if _SAM2_AVAILABLE:
+    from src.models.sam2_compat import install_cc_fallback
+
+    install_cc_fallback()
+
+# EfficientTAM (Meta) — a lightweight "track anything" family vendored under
+# src/vendor/efficienttam/ (Apache-2.0, upstream: yformer/EfficientTAM).
+# The predictor API matches SAM 2's video predictor 1:1.
+_ETAM_AVAILABLE = False
+_BUILD_ETAM_VIDEO = None
+_BUILD_ETAM_IMAGE = None
+_ETAM_IMAGE_PREDICTOR_CLASS = None
+
+try:
+    from src.vendor.efficienttam.build_efficienttam import (
+        build_efficienttam,
+        build_efficienttam_video_predictor,
+    )
+    from src.vendor.efficienttam.efficienttam_image_predictor import (
+        EfficientTAMImagePredictor,
+    )
+
+    _ETAM_AVAILABLE = True
+    _BUILD_ETAM_VIDEO = build_efficienttam_video_predictor
+    _BUILD_ETAM_IMAGE = build_efficienttam
+    _ETAM_IMAGE_PREDICTOR_CLASS = EfficientTAMImagePredictor
+except Exception as exc:  # noqa: BLE001
+    logger.warning("EfficientTAM not available (%s).", exc)
+
+
+def is_efficienttam(size: ModelSize) -> bool:
+    """Return True when *size* is one of the EfficientTAM variants."""
+    return size in (ModelSize.EFFICIENTTAM_S, ModelSize.EFFICIENTTAM_TI)
+
+
+# The upstream EfficientTAM configs enable ``torch.compile(mode="max-autotune")``
+# on the image encoder.  That needs a working C++ toolchain (inductor) and
+# misbehaves inside a frozen Windows bundle, so Better Brush always disables it:
+# the model is small enough that the compile win is marginal.
+_ETAM_DISABLE_COMPILE = ["++model.compile_image_encoder=False"]
+
+
 # Hydra config names *inside the installed sam2 package* (sam2/configs/).
 # build_sam2() resolves them via hydra compose() with the search path that
 # sam2/__init__.py registers — a local file path would NOT work here.
+# EfficientTAM configs are resolved from the vendored package instead.
 _HYDRA_CONFIGS: dict[ModelSize, str] = {
+    ModelSize.SAM3_1: "sam3.1_multiplex.pt",
     ModelSize.TINY: "configs/sam2.1/sam2.1_hiera_t.yaml",
     ModelSize.SMALL: "configs/sam2.1/sam2.1_hiera_s.yaml",
     ModelSize.BASE_PLUS: "configs/sam2.1/sam2.1_hiera_b+.yaml",
     ModelSize.LARGE: "configs/sam2.1/sam2.1_hiera_l.yaml",
+    ModelSize.CUSTOM: "custom",  # resolved from the checkpoints/custom sidecar
+    ModelSize.EFFICIENTTAM_S: "configs/efficienttam/efficienttam_s_512x512.yaml",
+    ModelSize.EFFICIENTTAM_TI: "configs/efficienttam/efficienttam_ti_512x512.yaml",
 }
 
 
@@ -66,13 +119,15 @@ class MaskResult:
 
 
 class SAM2Manager:
-    """High-level wrapper around SAM 2 image and video predictors."""
+    """High-level wrapper around SAM 2 predictors and the SAM 3.1 adapter."""
 
     def __init__(self, recommendation: SAM2Recommendation) -> None:
         self.rec = recommendation
         self._ckpt_mgr = CheckpointManager()
         self._image_predictor: Any | None = None
         self._video_predictor: Any | None = None
+        self._sam3_image: Sam3ImageAdapter | None = None
+        self._sam3_video: Sam3VideoAdapter | None = None
         self._video_state: Any | None = None
         self._current_video_path: Path | None = None
         self._enable_fast_cuda_paths()
@@ -110,34 +165,111 @@ class SAM2Manager:
     # ------------------------------------------------------------------ #
     @property
     def is_available(self) -> bool:
+        if self.rec.model_size is ModelSize.SAM3_1:
+            return sam3_is_available()
+        if is_efficienttam(self.rec.model_size):
+            return _ETAM_AVAILABLE
         return _SAM2_AVAILABLE
 
     @property
     def device(self) -> str:
         return self.rec.device
 
+    def _config_name(self, size: ModelSize) -> str:
+        """Hydra config name for *size*, resolving the custom sidecar."""
+        if size is ModelSize.CUSTOM:
+            return str(self._ckpt_mgr.custom_model().config)
+        return _HYDRA_CONFIGS[size]
+
     # ------------------------------------------------------------------ #
     # Model lifecycle
     # ------------------------------------------------------------------ #
     def load_image_predictor(self) -> None:
+        if is_efficienttam(self.rec.model_size):
+            if self._image_predictor is not None:
+                return
+            if not self.is_available:
+                raise RuntimeError("EfficientTAM is not installed. See requirements.txt")
+            checkpoint = self._ckpt_mgr.get_checkpoint_path(self.rec.model_size)
+            cfg = self._config_name(self.rec.model_size)
+            logger.info("Loading EfficientTAM image predictor: %s", cfg)
+            model = _BUILD_ETAM_IMAGE(  # type: ignore[misc]
+                cfg,
+                str(checkpoint),
+                device=self.device,
+                hydra_overrides_extra=_ETAM_DISABLE_COMPILE,
+            )
+            self._image_predictor = _ETAM_IMAGE_PREDICTOR_CLASS(model)  # type: ignore[misc]
+            logger.info("EfficientTAM image predictor loaded.")
+            return
+        if self.rec.model_size is ModelSize.SAM3_1:
+            if self._image_predictor is not None:
+                return
+            if self.rec.backend is not Backend.CUDA:
+                raise RuntimeError("SAM 3.1 requires a CUDA-capable NVIDIA GPU")
+            if not sam3_is_available():
+                raise RuntimeError(
+                    "SAM 3.1 is selected but the optional sam3 package is not installed. "
+                    "Install it with: pip install -e '.[sam3]'."
+                )
+            checkpoint = self._ckpt_mgr.get_checkpoint_path(ModelSize.SAM3_1)
+            self._sam3_image = Sam3ImageAdapter(
+                checkpoint_path=checkpoint,
+                device=self.device,
+            )
+            self._image_predictor = self._sam3_image
+            return
         if not self.is_available:
             raise RuntimeError("SAM 2 is not installed. See requirements.txt")
         if self._image_predictor is not None:
             return
         ckpt = self._ckpt_mgr.get_checkpoint_path(self.rec.model_size)
-        cfg = _HYDRA_CONFIGS[self.rec.model_size]
+        cfg = self._config_name(self.rec.model_size)
         logger.info("Loading image predictor: %s | %s", cfg, ckpt.name)
         model = _BUILD_SAM2(cfg, str(ckpt), device=self.device)  # type: ignore[misc]
         self._image_predictor = _SAM2_IMAGE_PREDICTOR_CLASS(model)  # type: ignore[misc]
         logger.info("Image predictor loaded.")
 
     def load_video_predictor(self) -> None:
+        if is_efficienttam(self.rec.model_size):
+            if self._video_predictor is not None:
+                return
+            if not self.is_available:
+                raise RuntimeError("EfficientTAM is not installed. See requirements.txt")
+            checkpoint = self._ckpt_mgr.get_checkpoint_path(self.rec.model_size)
+            cfg = self._config_name(self.rec.model_size)
+            logger.info("Loading EfficientTAM video predictor: %s", cfg)
+            self._video_predictor = _BUILD_ETAM_VIDEO(  # type: ignore[misc]
+                cfg,
+                str(checkpoint),
+                device=self.device,
+                hydra_overrides_extra=_ETAM_DISABLE_COMPILE,
+            )
+            logger.info("EfficientTAM video predictor loaded.")
+            return
+        if self.rec.model_size is ModelSize.SAM3_1:
+            if self._video_predictor is not None:
+                return
+            if self.rec.backend is not Backend.CUDA:
+                raise RuntimeError("SAM 3.1 requires a CUDA-capable NVIDIA GPU")
+            if not sam3_is_available():
+                raise RuntimeError(
+                    "SAM 3.1 is selected but the optional sam3 package is not installed. "
+                    "Install it with: pip install -e '.[sam3]'."
+                )
+            checkpoint = self._ckpt_mgr.get_checkpoint_path(ModelSize.SAM3_1)
+            self._sam3_video = Sam3VideoAdapter(
+                checkpoint_path=checkpoint,
+                device=self.device,
+            )
+            self._video_predictor = self._sam3_video
+            return
         if not self.is_available:
             raise RuntimeError("SAM 2 is not installed. See requirements.txt")
         if self._video_predictor is not None:
             return
         ckpt = self._ckpt_mgr.get_checkpoint_path(self.rec.model_size)
-        cfg = _HYDRA_CONFIGS[self.rec.model_size]
+        cfg = self._config_name(self.rec.model_size)
         logger.info("Loading video predictor: %s | %s", cfg, ckpt.name)
         self._video_predictor = _BUILD_SAM2_VIDEO_PREDICTOR(  # type: ignore[misc]
             cfg, str(ckpt), device=self.device
@@ -146,14 +278,25 @@ class SAM2Manager:
 
     def unload(self) -> None:
         """Release model weights and clear CUDA cache."""
+        if self._sam3_video is not None:
+            self._sam3_video.unload()
+        if self._sam3_image is not None:
+            self._sam3_image.unload()
+        self._sam3_video = None
+        self._sam3_image = None
         self._image_predictor = None
         self._video_predictor = None
         self._video_state = None
         self._current_video_path = None
         gc.collect()
         if self.rec.backend == Backend.CUDA and torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+            # A previous failure can leave the CUDA allocator in a state where
+            # these calls themselves raise; unloading must not crash the app.
+            try:
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("CUDA cache clear during unload failed (%s)", exc)
         logger.info("SAM2Manager unloaded.")
 
     # ------------------------------------------------------------------ #
@@ -291,6 +434,23 @@ class SAM2Manager:
     # ------------------------------------------------------------------ #
     _FRAMES_CACHE_DIRNAME = ".better_brush_frames"
 
+    def _video_frame_size(self, source: Path) -> tuple[int, int]:
+        if source.is_dir():
+            frames = sorted(source.glob("*.jpg"))
+            if not frames:
+                raise RuntimeError(f"No JPEG frames found in {source}")
+            image = cv2.imread(str(frames[0]))
+            if image is None:
+                raise RuntimeError(f"Could not read frame {frames[0]}")
+            return int(image.shape[0]), int(image.shape[1])
+        from src.processing.video_reader import VideoReader
+
+        reader = VideoReader(source)
+        try:
+            return int(reader.height), int(reader.width)
+        finally:
+            reader.close()
+
     def init_video(
         self,
         video_path: Path,
@@ -317,6 +477,14 @@ class SAM2Manager:
             frames_dir = src
         else:
             frames_dir = self._ensure_frames_dir(src, progress_cb)
+        if isinstance(self._video_predictor, Sam3VideoAdapter):
+            frame_size = self._video_frame_size(Path(frames_dir))
+            self._video_state = self._video_predictor.init_video(
+                frames_dir,
+                frame_size=frame_size,
+            )
+            self._current_video_path = src
+            return self._video_state
         logger.info("Init video state: %s", frames_dir)
         # NOTE: this SAM 2 version loads video via decord for .mp4 files
         # (unmaintained, no Python 3.13 wheels), so we always pass a JPEG
@@ -378,6 +546,13 @@ class SAM2Manager:
             raise RuntimeError("Video not initialised. Call init_video() first.")
         if not points:
             raise ValueError("add_points_to_video requires at least one point")
+        if isinstance(self._video_predictor, Sam3VideoAdapter):
+            return self._video_predictor.add_points_to_video(
+                frame_idx,
+                obj_id,
+                points,
+                clear_old_points=clear_old_points,
+            )
         coords = np.array([[p.x, p.y] for p in points], dtype=np.float32)
         labels = np.array([p.label for p in points], dtype=np.int32)
         # SAM 2 main renamed add_new_points_or_boxes -> add_new_points_or_box
@@ -385,7 +560,7 @@ class SAM2Manager:
         if fn is None:
             fn = self._video_predictor.add_new_points_or_boxes  # type: ignore[attr-defined]
         with self._speed_context(), torch.inference_mode():
-            return fn(
+            result = fn(
                 inference_state=self._video_state,
                 frame_idx=frame_idx,
                 obj_id=obj_id,
@@ -393,6 +568,18 @@ class SAM2Manager:
                 labels=labels,
                 clear_old_points=clear_old_points,
             )
+        if is_efficienttam(self.rec.model_size):
+            # EfficientTAM returns (frame_idx, obj_ids, video_res_masks);
+            # normalise to SAM 2's (masks[N,1,H,W], scores[N], logits) with
+            # logits thresholded to the bool masks the contract promises.
+            _frame_idx, _obj_ids, video_res_masks = result
+            masks = video_res_masks
+            if masks.ndim == 3:
+                masks = masks.unsqueeze(1)
+            masks = masks > 0.0
+            scores = np.ones(masks.shape[0], dtype=np.float32)
+            return masks, scores, None
+        return result
 
     def add_mask_to_video(
         self,
@@ -407,6 +594,12 @@ class SAM2Manager:
         """
         if self._video_state is None:
             raise RuntimeError("Video not initialised. Call init_video() first.")
+        if isinstance(self._video_predictor, Sam3VideoAdapter):
+            return self._video_predictor.add_mask_to_video(
+                frame_idx,
+                obj_id,
+                mask,
+            )
         fn = getattr(self._video_predictor, "add_new_mask", None)
         if fn is None:
             raise RuntimeError("add_new_mask is not available in the installed SAM 2")
@@ -450,6 +643,15 @@ class SAM2Manager:
         if reverse:
             kwargs["reverse"] = True
 
+        if isinstance(self._video_predictor, Sam3VideoAdapter):
+            return self._video_predictor.propagate_in_video(
+                start_frame_idx=start_frame_idx,
+                max_frames=max_frames,
+                reverse=reverse,
+                on_frame=on_frame,
+                cancel_event=cancel_event,
+                obj_id=1,
+            )
         results: list[tuple[int, int, np.ndarray, np.ndarray]] = []
         with self._speed_context(), torch.inference_mode():
             for (
@@ -473,6 +675,8 @@ class SAM2Manager:
 
     def reset_video_state(self) -> None:
         """Clear current video state (keeps model loaded)."""
+        if isinstance(self._video_predictor, Sam3VideoAdapter):
+            self._video_predictor.reset()
         self._video_state = None
         self._current_video_path = None
         gc.collect()

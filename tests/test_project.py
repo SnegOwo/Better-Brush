@@ -30,6 +30,7 @@ def test_roundtrip_preserves_session(tmp_path):
         edit_mode="brush",
         brush_size=12,
         timeline_selection=[2, 9],
+        scene_cuts=[0, 12, 40],
     )
     out = ProjectManager.save(tmp_path / "proj.bbproj", data)
 
@@ -42,6 +43,7 @@ def test_roundtrip_preserves_session(tmp_path):
     assert loaded.edit_mode == "brush"
     assert loaded.brush_size == 12
     assert loaded.timeline_selection == [2, 9]
+    assert loaded.scene_cuts == [0, 12, 40]
     np.testing.assert_array_equal(loaded.masks[0], data.masks[0])
     np.testing.assert_array_equal(loaded.masks[3], data.masks[3])
     assert loaded.masks[0].dtype == bool

@@ -10,13 +10,52 @@ torchvision>=0.18.0
 # If the command below fails, clone manually and pip install -e .
 git+https://github.com/facebookresearch/sam2.git@main
 
+# ── Optional SAM 3.1 (Meta) ──
+# SAM 3.1 uses the separate `sam3` repository and gated Hugging Face weights.
+# Install with: pip install -e ".[sam3]" (or uncomment the line below).
+# git+https://github.com/facebookresearch/sam3.git
+
 # ── Video / Image ──
 opencv-python>=4.9.0
 Pillow>=10.0.0
+# Mask post-processing (hole-filling / island removal) fallback for SAM 2
+# when its compiled `_C` extension is unavailable (no CUDA toolkit).
+scipy>=1.13.0
+
+# ── AMV features (Better Brush V2) ──
+# Scene-cut detection. Uses PySceneDetect when available; a built-in
+# histogram fallback covers machines where it cannot be installed.
+#   python -m pip install "scenedetect[opencv]>=0.7.0"
+# Face landmark detection for one-click mouth/eye isolation. Falls back
+# to an OpenCV Haar cascade when not installed.
+#   python -m pip install "mediapipe>=0.10.0"
+
+# ── Optional: LaMa AI inpainting (Clean Up engine, V3) ──
+# AI texture repair for subtitle/logo removal. Requires the model file
+# checkpoints/lama_fp32.onnx (~200 MB) next to the app / in checkpoints/.
+# Without it (or when per-region inference is too slow for frame-by-frame
+# use) the app silently falls back to the built-in OpenCV donor/Telea
+# repair — nothing breaks, the status is shown in Clean Up → Check-up.
+#   python -m pip install "onnxruntime>=1.17"
 
 # ── Hardware Detection ──
 nvidia-ml-py>=12.535.0
 psutil>=5.9.0
+
+# ── V3: AI object removal (MiniMax-Remover) ──
+# Diffusion inpainting engine: Wan VAE + a distilled 3D transformer.
+#   pip install diffusers accelerate
+# Weights (~2.6 GB) download from Hugging Face on first use into
+# checkpoints/minimax/.
+diffusers>=0.33.0
+accelerate>=1.0.0
+
+# ── V3: learned video matting (MatAnyone / MatAnyone 2) ──
+# Memory-propagation matting networks; weights (~135 MB each) download from
+# Hugging Face on first use into checkpoints/matanyone{,2}/.
+# imageio powers the upstream frame reading helpers.
+imageio>=2.34.0
+imageio-ffmpeg>=0.4.9
 
 # ── Optional: DirectML backend (Windows AMD/Intel GPU) ──
 # torch-directml>=0.2.0; platform_system=="Windows"

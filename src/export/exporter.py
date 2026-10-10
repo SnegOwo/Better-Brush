@@ -50,8 +50,13 @@ class Exporter:
         base_name: str = "mask",
         on_progress: Callable[[int, int], None] | None = None,
         cancel_event: threading.Event | None = None,
+        alphas: dict[int, np.ndarray] | None = None,
     ) -> Path:
         """Save each mask as PNG with alpha channel directly into output_dir.
+
+        ``alphas`` optionally supplies learned soft mattes (float32 0..1);
+        those frames use the matte as the alpha channel instead of the
+        binary mask.
 
         Returns:
             Output directory where PNGs were written.
@@ -62,9 +67,17 @@ class Exporter:
             if cancel_event is not None and cancel_event.is_set():
                 raise RuntimeError("Export cancelled")
             mask = masks[idx]
-            rgba = np.zeros((*mask.shape, 4), dtype=np.uint8)
-            rgba[mask] = [255, 255, 255, 255]  # white visible
-            rgba[~mask] = [0, 0, 0, 0]  # transparent
+            alpha = alphas.get(idx) if alphas else None
+            if alpha is not None:
+                alpha_u8 = np.clip(alpha.astype(np.float32) * 255.0, 0, 255).astype(
+                    np.uint8
+                )
+            else:
+                alpha_u8 = mask.astype(np.uint8) * 255
+            rgba = np.zeros((*alpha_u8.shape, 4), dtype=np.uint8)
+            rgba[alpha_u8 > 0] = [255, 255, 255, 255]  # white visible
+            rgba[alpha_u8 == 0] = [0, 0, 0, 0]  # transparent
+            rgba[:, :, 3] = alpha_u8
             img = Image.fromarray(rgba, mode="RGBA")
             img.save(dest / f"{base_name}_{idx:06d}.png")
             if on_progress is not None:
@@ -88,6 +101,8 @@ class Exporter:
         audio_source: Path | None = None,
         background: tuple[int, int, int] | None = None,
         watermark: bool | None = None,
+        edge_softness: int = 0,
+        alphas: dict[int, np.ndarray] | None = None,
     ) -> Path:
         """Compose frames + masks into a video written directly into output_dir.
 
@@ -160,7 +175,23 @@ class Exporter:
                 mask = masks.get(idx)
                 if mask is None:
                     mask = np.ones(frame.shape[:2], dtype=bool)
-                rgba = self._compose_rgba(frame, mask, background=background)
+                # A binary matte exports as a staircase with a background-tinted
+                # halo. Softening the coverage and decontaminating the ramp
+                # fixes both at the only point where the matte is composited.
+                # A learned soft matte already carries its own falloff, so the
+                # geometric feathering is skipped when one is available.
+                alpha = None
+                soft = alphas.get(idx) if alphas else None
+                if soft is not None:
+                    alpha = np.clip(soft.astype(np.float32), 0.0, 1.0)
+                    mask = soft > 0.5
+                elif edge_softness > 0:
+                    from src.processing.edge_finish import finish_edges
+
+                    frame, alpha = finish_edges(frame, mask, edge_softness)
+                rgba = self._compose_rgba(
+                    frame, mask, background=background, alpha=alpha
+                )
                 if watermark:
                     rgba = self._draw_watermark(rgba)
                 Image.fromarray(rgba, mode="RGBA").save(tmp_path / f"frm_{idx:06d}.png")
@@ -285,7 +316,18 @@ class Exporter:
         frame: np.ndarray,
         mask: np.ndarray,
         background: tuple[int, int, int] | None = None,
+        alpha: np.ndarray | None = None,
     ) -> np.ndarray:
+        """Build the RGBA tile for one frame.
+
+        Args:
+            frame: Source frame (H, W, 3 or 4) uint8 RGB.
+            mask: Binary matte.
+            background: Optional solid colour replacing transparency, which also
+                disables the alpha channel (chroma-key export).
+            alpha: Optional soft coverage in ``[0, 1]``. When absent the matte is
+                written as hard 0/255 alpha.
+        """
         h, w = frame.shape[:2]
         rgba = np.zeros((h, w, 4), dtype=np.uint8)
         rgb = (
@@ -293,18 +335,23 @@ class Exporter:
             if frame.shape[2] >= 3
             else np.stack([frame[:, :, 0]] * 3, axis=-1)
         )
+        if alpha is None:
+            alpha = mask.astype(np.float32)
         if background is not None:
             # Flatten the alpha channel into a solid chroma-key background
             # (kept fully opaque for yuv420p): subject pixels keep their color,
             # everything else becomes the key color.
             fill = np.zeros((h, w, 3), dtype=np.uint8)
             fill[:, :] = background
-            out = np.where(mask[:, :, None], rgb, fill)
-            rgba[:, :, :3] = out
+            # Partial coverage blends against the key, so the key edge is
+            # anti-aliased too instead of stepping.
+            weight = alpha[:, :, None]
+            out = rgb * weight + fill * (1.0 - weight)
+            rgba[:, :, :3] = np.clip(out, 0.0, 255.0).astype(np.uint8)
             rgba[:, :, 3] = 255
             return rgba
         rgba[:, :, :3] = rgb
-        rgba[:, :, 3] = (mask * 255).astype(np.uint8)
+        rgba[:, :, 3] = np.clip(alpha * 255.0, 0.0, 255.0).astype(np.uint8)
         return rgba
 
     @staticmethod

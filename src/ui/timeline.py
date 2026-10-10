@@ -52,6 +52,7 @@ class Timeline(QWidget):
         self._current_frame = 0
         self._keyframes: set[int] = set()
         self._masked_frames: set[int] = set()
+        self._scene_cuts: set[int] = set()
         self._dragging = False
         self._sel_start: int | None = None
         self._sel_end: int | None = None
@@ -87,6 +88,10 @@ class Timeline(QWidget):
 
     def set_masked_frames(self, frames: set[int]) -> None:
         self._masked_frames = set(frames)
+        self.update()
+
+    def set_scene_cuts(self, frames: list[int] | set[int]) -> None:
+        self._scene_cuts = set(frames)
         self.update()
 
     # ------------------------------------------------------------------ #
@@ -197,6 +202,13 @@ class Timeline(QWidget):
                     ]
                 )
                 painter.drawPolygon(diamond)
+
+        # ── Scene cut markers ──────────────────────────────────────────
+        if self._scene_cuts:
+            painter.setPen(QPen(QColor(165, 180, 252, 200), 1))
+            for cut_f in self._scene_cuts:
+                x = self._frame_to_x(cut_f, w)
+                painter.drawLine(x, track_top, x, track_top + track_h)
 
         # ── Playhead ──────────────────────────────────────────────────────
         ph_x = self._frame_to_x(self._current_frame, w)
