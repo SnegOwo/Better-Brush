@@ -1,3 +1,4 @@
+# @package _global_
 # SAM 2.1 fine-tune recipe for anime / AMV content, tuned for a single
 # consumer GPU (RTX 3060 12 GB, RTX 5060 Laptop 8 GB at a lower resolution,
 # or Colab free T4 16 GB).
@@ -298,7 +299,8 @@ trainer:
       focal_alpha_obj_score: -1.0
 
   distributed:
-    backend: nccl
+    # Windows PyTorch ships without NCCL; gloo works for a single-GPU run.
+    backend: gloo
     find_unused_parameters: True
 
   logging:
@@ -330,3 +332,14 @@ launcher:
   num_nodes: 1
   gpus_per_node: 1
   experiment_log_dir: null # defaults to ./sam2_logs/${config_name}
+
+# Launcher housekeeping (required by training/train.py even for a local run).
+submitit:
+  partition: null
+  account: null
+  qos: null
+  cpus_per_task: 10
+  use_cluster: false
+  timeout_hour: 24
+  name: null
+  port_range: [10000, 65000]

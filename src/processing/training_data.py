@@ -69,8 +69,11 @@ def export_clip(
     """
     root = Path(dataset_root)
     safe_name = "".join(
-        c if c.isalnum() or c in "._-" else "_" for c in clip_name
+        c if c.isalnum() or c in "_-" else "_" for c in clip_name
     ).strip("_") or "clip"
+    # NOTE: dots are *not* allowed. The official SAM 2 dataset loader strips
+    # the extension of every line in the split file with os.path.splitext(),
+    # which cuts a clip name at its last dot ("Show.S01E02" -> "Show").
 
     # Frame indices that carry at least one mask, in playback order.
     covered: set[int] = set()

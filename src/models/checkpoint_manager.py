@@ -73,9 +73,12 @@ class CheckpointManager:
     """Handle downloading and caching of SAM 2 weights and configs."""
 
     def __init__(self, checkpoints_dir: Path | None = None) -> None:
-        self.checkpoints_dir = (
-            checkpoints_dir or Path(__file__).resolve().parents[3] / "checkpoints"
-        )
+        # src.core.constants resolves the storage root for both the source
+        # tree and the frozen bundle; the previous relative walk landed one
+        # folder above the repo when the app ran from a nested path.
+        from src.core.constants import CHECKPOINTS_DIR
+
+        self.checkpoints_dir = checkpoints_dir or CHECKPOINTS_DIR
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
         self.configs_dir = self.checkpoints_dir / "configs"
         self.configs_dir.mkdir(parents=True, exist_ok=True)

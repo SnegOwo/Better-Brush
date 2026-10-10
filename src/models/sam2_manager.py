@@ -178,7 +178,16 @@ class SAM2Manager:
     def _config_name(self, size: ModelSize) -> str:
         """Hydra config name for *size*, resolving the custom sidecar."""
         if size is ModelSize.CUSTOM:
-            return str(self._ckpt_mgr.custom_model().config)
+            # The sidecar stores the short file name; prefix it for Hydra.
+            name = str(self._ckpt_mgr.custom_model().config)
+            for known in _HYDRA_CONFIGS.values():
+                if Path(known).name == Path(name).name:
+                    return known
+            raise RuntimeError(
+                f"Unknown base config '{name}' in the custom model sidecar. "
+                f"Expected one of: "
+                f"{', '.join(sorted(Path(v).name for v in _HYDRA_CONFIGS.values()))}."
+            )
         return _HYDRA_CONFIGS[size]
 
     # ------------------------------------------------------------------ #
