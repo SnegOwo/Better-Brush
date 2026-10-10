@@ -44,17 +44,28 @@ class InferenceWorker(QThread):
         self._frame: np.ndarray | None = None
         self._points: list[PointPrompt] = []
         self._mask: np.ndarray | None = None
+        self._mask_points: list = []
 
     def set_task(self, frame: np.ndarray, points: list[PointPrompt]) -> None:
         self._frame = frame
         self._points = list(points)
         self._mask = None
 
-    def set_task_mask(self, frame: np.ndarray, mask: np.ndarray) -> None:
-        """Run a refinement pass using a hand-drawn mask as the prompt."""
+    def set_task_mask(
+        self,
+        frame: np.ndarray,
+        mask: np.ndarray,
+        points: list | None = None,
+    ) -> None:
+        """Run a refinement pass using a hand-drawn mask as the prompt.
+
+        *points* are the user's points on this frame: they ride along so the
+        refinement cannot be confined to a stale mask extent.
+        """
         self._frame = frame
         self._points = []
         self._mask = mask
+        self._mask_points = list(points or [])
 
     def run(self) -> None:
         try:
@@ -65,7 +76,9 @@ class InferenceWorker(QThread):
                 raise ValueError("No frame set")
             if self._mask is not None:
                 self.progress.emit("Refining brush mask with SAM 2...")
-                results = self._sam.predict_frame_from_mask(self._frame, self._mask)
+                results = self._sam.predict_frame_from_mask(
+                    self._frame, self._mask, extra_points=self._mask_points
+                )
                 self.finished.emit(results)
                 return
             if not self._points:

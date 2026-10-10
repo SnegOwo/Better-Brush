@@ -4028,7 +4028,12 @@ class MainWindow(QMainWindow):
                 sam_manager=self._ensure_sam_manager(recommendation),
                 parent=self,
             )
-            self._inference_worker.set_task_mask(frame, mask)
+            # The user's points ride along: without them the box derived
+            # from a stale (smaller) mask confines SAM 2 to that extent and
+            # the segmentation silently loses the subject.
+            self._inference_worker.set_task_mask(
+                frame, mask, points=list(self._points)
+            )
             self._inference_worker.progress.connect(
                 lambda msg: self._status.showMessage(msg)
             )

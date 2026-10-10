@@ -358,6 +358,7 @@ class SAM2Manager:
         frame: np.ndarray,
         mask: np.ndarray,
         n_points: int = 4,
+        extra_points: list[PointPrompt] | None = None,
     ) -> list[MaskResult]:
         """Refine a hand-drawn (brush) mask on a single frame with SAM 2.
 
@@ -371,6 +372,10 @@ class SAM2Manager:
             frame: RGB uint8 array HxWx3.
             mask: Bool HxW user-painted mask.
             n_points: Number of interior points to sample as prompts.
+            extra_points: Points the user placed on this frame. They are
+                added to the prompt (with their include/exclude labels) and
+                the box is widened to cover them, so a stale mask can never
+                silently shrink the subject down to what it used to be.
 
         Returns:
             A list with a single :class:`MaskResult` (the best candidate).
@@ -380,15 +385,33 @@ class SAM2Manager:
         if len(xs) == 0:
             raise ValueError("predict_frame_from_mask requires a non-empty mask")
 
-        # Bounding box with a small padding
+        # Bounding box with a small padding.  When the user also placed
+        # points, the box must cover them, otherwise the box alone would
+        # confine SAM 2 to the old (possibly much smaller) mask extent.
+        ex1, ey1, ex2, ey2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+        extras = [
+            p for p in (extra_points or []) if 0 <= p.x < w and 0 <= p.y < h
+        ]
+        if extras:
+            ex1 = min([ex1] + [p.x for p in extras])
+            ey1 = min([ey1] + [p.y for p in extras])
+            ex2 = max([ex2] + [p.x for p in extras])
+            ey2 = max([ey2] + [p.y for p in extras])
         pad = max(2, int(0.04 * max(w, h)))
-        x1, y1 = int(max(0, xs.min() - pad)), int(max(0, ys.min() - pad))
-        x2, y2 = int(min(w - 1, xs.max() + pad)), int(min(h - 1, ys.max() + pad))
+        x1, y1 = int(max(0, ex1 - pad)), int(max(0, ey1 - pad))
+        x2, y2 = int(min(w - 1, ex2 + pad)), int(min(h - 1, ey2 + pad))
         box = np.array([x1, y1, x2, y2], dtype=np.float32)
 
         # Sample points spread across the painted region
         coords = self._sample_mask_points(xs, ys, w, h, n_points)
         labels = np.ones(len(coords), dtype=np.int32)
+        if extras:
+            # The user's points come first (they are the explicit intent)
+            # and keep their own include / exclude labels.
+            user_coords = np.array([[p.x, p.y] for p in extras], dtype=np.float32)
+            user_labels = np.array([p.label for p in extras], dtype=np.int32)
+            coords = np.concatenate([user_coords, coords], axis=0)
+            labels = np.concatenate([user_labels, labels], axis=0)
 
         self.load_image_predictor()
         predictor = self._image_predictor
