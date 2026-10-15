@@ -90,6 +90,19 @@ class InferenceWorker(QThread):
                 multimask_output=True,
             )
             self.finished.emit(results)
+        except torch.cuda.OutOfMemoryError:
+            logger.error("Inference ran out of GPU memory")
+            if self._sam is not None:
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:  # noqa: BLE001 - cache clear is best effort
+                    pass
+            self.finished.emit(
+                RuntimeError(
+                    "Out of GPU memory while segmenting. Close other GPU apps, "
+                    "or pick a smaller model in AI Model (e.g. SAM 2.1 Tiny)."
+                )
+            )
         except Exception as exc:  # noqa: BLE001 - surfaced via finished().emit(exc)
             logger.error("Inference failed: %s\n%s", exc, traceback.format_exc())
             self.finished.emit(exc)
@@ -267,6 +280,18 @@ class PropagationWorker(QThread):
                 edge = min if self._reverse else max
                 carry = edge(chunk, key=lambda entry: entry[0])[2]
             self.finished.emit(results)
+        except torch.cuda.OutOfMemoryError:
+            logger.error("Propagation ran out of GPU memory")
+            try:
+                torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001 - cache clear is best effort
+                pass
+            self.finished.emit(
+                RuntimeError(
+                    "Out of GPU memory while propagating. Close other GPU apps, "
+                    "or pick a smaller model in AI Model (e.g. SAM 2.1 Tiny)."
+                )
+            )
         except Exception as exc:  # noqa: BLE001 - surfaced via finished().emit(exc)
             logger.error("Propagation failed: %s\n%s", exc, traceback.format_exc())
             self.finished.emit(exc)

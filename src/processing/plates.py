@@ -58,6 +58,11 @@ _LAMA_MAX_SIDE = 2048
 # downgrade the whole session to the OpenCV repair).
 _LAMA_WARMUP_CALLS = 1
 _LAMA_SLOW_STREAK = 2
+# Consecutive inference *errors* (a transient CUDA OOM, a bad frame) before the
+# AI engine is retired.  One hiccup must not silently downgrade the whole
+# session to the OpenCV repair.
+_LAMA_FAIL_RUN = 0
+_LAMA_FAIL_STREAK = 3
 
 
 def _mask_variation(mask: np.ndarray, seed: int) -> np.ndarray:
@@ -170,7 +175,7 @@ def inpaint_engine_status() -> str:
 def _lama_repair(rgb: np.ndarray, mask: np.ndarray, seed: int = 0) -> np.ndarray | None:
     """Repair with LaMa if available, else ``None`` (caller falls back)."""
     global _LAMA_INSTANCE, _LAMA_TRYED, _LAMA_SLOW, _LAMA_KIND
-    global _LAMA_CALLS, _LAMA_SLOW_RUN
+    global _LAMA_CALLS, _LAMA_SLOW_RUN, _LAMA_FAIL_RUN
     if _LAMA_SLOW:
         return None
     if _LAMA_INSTANCE is None:
@@ -211,9 +216,25 @@ def _lama_repair(rgb: np.ndarray, mask: np.ndarray, seed: int = 0) -> np.ndarray
     try:
         result = _LAMA_INSTANCE.inpaint(rgb, mask, seed)
     except Exception as exc:  # noqa: BLE001 - AI is optional, never crash
-        logger.warning("LaMa repair failed (%s); falling back to OpenCV", exc)
-        _LAMA_SLOW = True
+        # A single failure (transient OOM, one malformed frame) used to retire
+        # the AI engine for the whole session.  Only give up after a *streak*
+        # of consecutive errors, so one hiccup falls back for that frame only.
+        _LAMA_FAIL_RUN += 1
+        logger.warning(
+            "LaMa repair failed (%d/%d) (%s); falling back to OpenCV",
+            _LAMA_FAIL_RUN,
+            _LAMA_FAIL_STREAK,
+            exc,
+        )
+        if _LAMA_FAIL_RUN >= _LAMA_FAIL_STREAK:
+            _LAMA_SLOW = True
+            logger.warning(
+                "LaMa failed %d times in a row; keeping the OpenCV repair "
+                "for the rest of this session.",
+                _LAMA_FAIL_RUN,
+            )
         return None
+    _LAMA_FAIL_RUN = 0
     dt = time.perf_counter() - t0
     budget = _LAMA_BUDGET_CUDA_S if _LAMA_KIND == "cuda" else _LAMA_BUDGET_S
     _LAMA_CALLS += 1
@@ -775,7 +796,16 @@ def detect_subtitle_band(frames: list[np.ndarray]) -> tuple[int, int, int, int] 
             return None
         x_pad = 6
         y_pad = max(3, (y1 - y0) // 8)
-        return (x0 - x_pad, y0 - y_pad, w + 2 * x_pad, (y1 - y0) + 2 * y_pad)
+        # Clamp to the frame *before* returning.  Callers index the score
+        # arrays with ``band[1] : band[1] + band[3]``; an un-clamped
+        # ``y0 - y_pad`` (negative for a caption hugging the top edge) made
+        # NumPy wrap to the end of the array and score the wrong rows, which
+        # promoted the wrong band.  Mirrors ``_clamp`` below.
+        bx = max(1, min(x0 - x_pad, W - 1))
+        by = max(1, min(y0 - y_pad, H - 1))
+        bw = max(8, min(w + 2 * x_pad, W - bx))
+        bh = max(8, min((y1 - y0) + 2 * y_pad, H - by))
+        return (bx, by, bw, bh)
 
     mono = glyph if glyph is not None else (resid_text > 0).astype(np.uint8) * 255
     resid_mono = cv2.morphologyEx(resid_text, cv2.MORPH_CLOSE, np.ones((1, 9), np.uint8))
@@ -1545,12 +1575,17 @@ def _track_text_band(
     # so the centroid hugs the real caption instead of drifting to a couple
     # of scene edges on the flanks of the search window.
     dens = cv2.GaussianBlur(mask.astype(np.float32), (31, 31), 0)
-    cxs = (dens.sum(axis=1) * np.arange(dens.shape[0])).sum()
-    cys = (dens.sum(axis=0) * np.arange(dens.shape[1])).sum()
+    # ``dens`` is indexed [row=y, col=x].  Summing over the columns (axis=1)
+    # yields the row / y-distribution; summing over the rows (axis=0) yields
+    # the column / x-distribution.  The two were assigned to the wrong axes,
+    # so the weighted "centroid" was transposed — a caption that merely drifted
+    # *down* dragged the tracked band *sideways*.
+    row_w = (dens.sum(axis=1) * np.arange(dens.shape[0])).sum()
+    col_w = (dens.sum(axis=0) * np.arange(dens.shape[1])).sum()
     tot = float(dens.sum())
     if tot > 0:
-        cx = int(cxs / tot) + x0
-        cy = int(cys / tot) + y0
+        cx = int(col_w / tot) + x0
+        cy = int(row_w / tot) + y0
     else:
         cx, cy = bx0 + bw // 2, by0 + bh // 2
     nx0 = int(np.clip(cx - nw / 2.0, px - travel_x, px + travel_x))
@@ -1709,8 +1744,15 @@ def apply_clean(
                     mask[orig_bottom + 1 : pad_end, x0:x1] = 255
                 static = plate.ink_ref is not None or not plate.track
                 if static:
+                    # Push the mask past the drawn box bottom.  Use the
+                    # *effective* region actually cropped (``ry``/``rh``) and
+                    # the crop offset ``cy0``: for a tracked caption those
+                    # follow the moving band, while the fixed ``plate.region``
+                    # y mixed coordinate origins and, once the band drifted,
+                    # produced a band_bottom above the glyphs so the outline
+                    # below them was never covered.
                     band_bottom = min(
-                        mask.shape[0], (int(y) - int(cy0)) + h + 16
+                        mask.shape[0], (int(ry) - int(cy0)) + int(rh) + 16
                     )
                 else:
                     band_bottom = min(mask.shape[0], orig_bottom + 16)
@@ -1898,7 +1940,6 @@ def clean_video_frames(
     immediately, so a caller can cache it with a bounded LRU — no memory
     explosion on long videos.  Returns the number of frames processed.
     """
-    total = 0
     # A fresh bake always starts tracking from the plate region (the tracker
     # is sequential and stateful in ``_bands``; without a reset a repeated /
     # regenerated bake would inherit drift accumulated by the previous run).
@@ -1908,10 +1949,16 @@ def clean_video_frames(
     try:
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open video: {video_path}")
-        total = max(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), 0)
-        end = total if end is None else min(total, int(end))
+        reported = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # CAP_PROP_FRAME_COUNT is unreliable for some containers / live streams
+        # and comes back as 0.  Treating that as "no frames" made the bake
+        # silently process nothing; ``None`` now means "stream to EOF" so the
+        # full video is still cleaned.
+        stop = reported if reported > 0 else None
         start = max(0, int(start))
-        if end <= start:
+        if end is not None:
+            stop = int(end) if stop is None else min(stop, int(end))
+        if stop is not None and stop <= start:
             return 0
         # Fast-forward to ``start`` without decoding every frame.
         for _ in range(start):
@@ -1920,8 +1967,8 @@ def clean_video_frames(
             if not cap.grab():
                 break
         idx = start
-        work = end - start
-        while idx < end:
+        work = (stop - start) if stop is not None else 0
+        while stop is None or idx < stop:
             if cancel_event is not None and cancel_event.is_set():
                 break
             ok, bgr = cap.read()

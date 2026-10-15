@@ -124,6 +124,8 @@ class MattingRunner:
         # Filled by matte(): returns the animator's segmentation mask for a
         # frame, used to keep the learned matte off background.
         self._mask_getter: Callable[[int], np.ndarray] | None = None
+        # One-time flag so a broken clamp lookup is reported, not swallowed.
+        self._clamp_miss_warned = False
 
     # ------------------------------------------------------------------ #
     # Model lifecycle
@@ -311,7 +313,20 @@ class MattingRunner:
         try:
             return self._mask_getter(index)
         except Exception as exc:  # noqa: BLE001 - a miss must not kill the run
-            logger.debug("Matte clamp lookup failed for %s (%s)", index, exc)
+            # The clamp silently degrades to the matte's own threshold when
+            # this returns None, which lets background scenery into the matte.
+            # Still never crash, but surface the first failure so a genuinely
+            # broken getter is not invisible.
+            if not self._clamp_miss_warned:
+                self._clamp_miss_warned = True
+                logger.warning(
+                    "Matte clamp lookup failed for %s (%s); the matte is not "
+                    "constrained to the segmentation mask this run.",
+                    index,
+                    exc,
+                )
+            else:
+                logger.debug("Matte clamp lookup failed for %s (%s)", index, exc)
             return None
 
     def _autocast_device(self) -> str:

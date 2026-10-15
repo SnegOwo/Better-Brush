@@ -153,10 +153,16 @@ class SAM2Manager:
     def _speed_context(self):
         """Return an autocast context for fast inference.
 
-        Uses bf16 mixed precision on CUDA (Ampere+ tensor cores give a
-        near-2x speed-up) and a no-op context everywhere else.
+        Uses bf16 mixed precision on CUDA only when the recommended GPU
+        actually has bf16 tensor cores (Ampere/Ada/Blackwell, i.e. compute
+        capability >= 8).  On older cards bf16 is emulated and can produce
+        wrong or NaN activations, so autocast is left off (full fp32) instead.
         """
-        if self.rec.device.startswith("cuda") and torch.cuda.is_available():
+        if (
+            self.rec.device.startswith("cuda")
+            and torch.cuda.is_available()
+            and self.rec.mixed_precision
+        ):
             return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
         return torch.autocast(device_type="cpu", enabled=False)
 
@@ -239,6 +245,37 @@ class SAM2Manager:
         self._image_predictor = _SAM2_IMAGE_PREDICTOR_CLASS(model)  # type: ignore[misc]
         logger.info("Image predictor loaded.")
 
+    def _video_offload_kwargs(self) -> dict[str, bool]:
+        """CPU-offload flags for the video predictor on small GPUs.
+
+        Keeping the memory bank on the CPU roughly halves the VRAM a long
+        propagation run needs, which is what lets a 6-8 GB laptop card track
+        a full scene without hitting the ceiling.  Off on bigger cards (the
+        host<->device traffic would only slow them down).
+        """
+        return {
+            "offload_state_to_cpu": bool(
+                getattr(self.rec, "offload_state_to_cpu", False)
+            ),
+            "offload_video_to_cpu": bool(
+                getattr(self.rec, "offload_video_to_cpu", False)
+            ),
+        }
+
+    def _build_video_predictor(self, builder, cfg: str, checkpoint: Path, **extra):
+        """Build a video predictor, dropping unsupported kwargs gracefully."""
+        kwargs = {**extra, **self._video_offload_kwargs()}
+        try:
+            return builder(cfg, str(checkpoint), device=self.device, **kwargs)
+        except TypeError:
+            # An older/patched predictor that does not accept the offload
+            # flags must still load rather than take the whole app down.
+            logger.debug("Video predictor does not accept offload kwargs")
+            try:
+                return builder(cfg, str(checkpoint), device=self.device, **extra)
+            except TypeError:
+                return builder(cfg, str(checkpoint), device=self.device)
+
     def load_video_predictor(self) -> None:
         if is_efficienttam(self.rec.model_size):
             if self._video_predictor is not None:
@@ -248,10 +285,10 @@ class SAM2Manager:
             checkpoint = self._ckpt_mgr.get_checkpoint_path(self.rec.model_size)
             cfg = self._config_name(self.rec.model_size)
             logger.info("Loading EfficientTAM video predictor: %s", cfg)
-            self._video_predictor = _BUILD_ETAM_VIDEO(  # type: ignore[misc]
+            self._video_predictor = self._build_video_predictor(
+                _BUILD_ETAM_VIDEO,  # type: ignore[arg-type]
                 cfg,
-                str(checkpoint),
-                device=self.device,
+                checkpoint,
                 hydra_overrides_extra=_ETAM_DISABLE_COMPILE,
             )
             logger.info("EfficientTAM video predictor loaded.")
@@ -280,8 +317,10 @@ class SAM2Manager:
         ckpt = self._ckpt_mgr.get_checkpoint_path(self.rec.model_size)
         cfg = self._config_name(self.rec.model_size)
         logger.info("Loading video predictor: %s | %s", cfg, ckpt.name)
-        self._video_predictor = _BUILD_SAM2_VIDEO_PREDICTOR(  # type: ignore[misc]
-            cfg, str(ckpt), device=self.device
+        self._video_predictor = self._build_video_predictor(
+            _BUILD_SAM2_VIDEO_PREDICTOR,  # type: ignore[arg-type]
+            cfg,
+            ckpt,
         )
         logger.info("Video predictor loaded.")
 

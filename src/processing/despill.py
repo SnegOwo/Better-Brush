@@ -95,6 +95,7 @@ def _sample_area(
     mask: np.ndarray | None,
     region: tuple[int, int, int, int] | None,
     region_mode: str = "clean",
+    shape: tuple[int, int] | None = None,
 ) -> np.ndarray:
     """Return the pixels treated as the neutral reference for colour casting.
 
@@ -102,9 +103,17 @@ def _sample_area(
     background is what the scene light actually bounced off. Falls back to the
     whole frame when there is nothing else to go on.
     """
-    shape = mask.shape[:2] if mask is not None else None
+    if shape is None and mask is not None:
+        shape = mask.shape[:2]
     if region is not None and shape is not None:
-        return _work_area(mask, 0, region, region_mode)
+        # A box is self-contained: it does not need a matte to be sampled.
+        # Previously a region *without* a mask fell through to an empty
+        # ``(0, 0)`` area, so the cast was never corrected even though the
+        # user had drawn an Area box.  ``_work_area(mask, 0, region, mode)``
+        # was just ``_box(shape, region)`` with the protect/clean flip, so
+        # reproducing it here keeps the with-mask behaviour identical.
+        box = _box(shape, region)
+        return ~box if region_mode == "protect" else box
     if mask is not None:
         background = ~mask
         if background.any():
@@ -154,7 +163,7 @@ def neutralize_cast(
         return frame_rgb
 
     source = frame_rgb[:, :, :3]
-    area = _sample_area(mask, region, region_mode)
+    area = _sample_area(mask, region, region_mode, source.shape[:2])
     if not area.any():
         return frame_rgb
 

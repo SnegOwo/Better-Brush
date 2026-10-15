@@ -44,7 +44,16 @@ def _positive_spread_penalty(
     xs = np.array([point.x for point in positive], dtype=np.float32)
     ys = np.array([point.y for point in positive], dtype=np.float32)
     h, w = mask.shape[:2]
-    margin = 0.22 * max(float(xs.max() - xs.min()), float(ys.max() - ys.min()))
+    span = max(float(xs.max() - xs.min()), float(ys.max() - ys.min()))
+    # The envelope must never collapse to the literal extent of the clicks:
+    # two clicks placed a few pixels apart (very common - both on the face)
+    # would otherwise flag the *correct*, whole-subject mask as "spread out"
+    # and hand the pick to a tiny blob (an eye, a nose). A floor tied to the
+    # frame size keeps the envelope meaningful no matter how close the clicks
+    # are, while a genuinely sprawling mask (grabbing the sky) is still
+    # penalised.
+    span = max(span, 0.2 * min(h, w))
+    margin = 0.22 * span
     x0 = max(0, int(xs.min() - margin))
     x1 = min(w, int(xs.max() + margin) + 1)
     y0 = max(0, int(ys.min() - margin))

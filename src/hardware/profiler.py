@@ -6,6 +6,7 @@ import importlib.util
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import ClassVar
 
 from src.hardware.detector import Backend, GPUInfo, HardwareProfile
@@ -58,6 +59,10 @@ class SAM2Recommendation:
     pred_iou_thresh: float
     stability_score_offset: float
     max_frames_in_memory: int
+    #: Low-VRAM cards benefit from keeping the video-predictor's memory bank
+    #: and frame buffer on the CPU.  Off by default so bigger cards stay fast.
+    offload_state_to_cpu: bool
+    offload_video_to_cpu: bool
     user_message: str
 
 
@@ -66,6 +71,22 @@ def _sam3_package_available() -> bool:
         return importlib.util.find_spec("sam3") is not None
     except (ImportError, ValueError):
         return False
+
+
+def _sam2_package_available() -> bool:
+    """Return whether the SAM 2 package can be imported at all."""
+    try:
+        return importlib.util.find_spec("sam2") is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _efficienttam_package_available() -> bool:
+    """Return whether the vendored EfficientTAM package is present."""
+    root = Path(__file__).resolve().parents[1]  # .../src
+    return (
+        root / "vendor" / "efficienttam" / "build_efficienttam.py"
+    ).is_file()
 
 
 class SAM2Profiler:
@@ -98,6 +119,14 @@ class SAM2Profiler:
     # Only recommend a tier when free VRAM × this factor clears the
     # threshold above (keeps ~35 % of VRAM free at runtime).
     _VRAM_SAFETY_FACTOR: float = 0.65
+
+    #: A card with less total VRAM than this cannot host SAM 2.1 Tiny
+    #: comfortably, so the lightweight EfficientTAM family is used instead.
+    _SAM2_MIN_TOTAL_MB: int = 3_500
+
+    #: Cards below this total VRAM keep the video predictor's state (memory
+    #: bank + frames) on the CPU to stay clear of the VRAM ceiling.
+    _OFFLOAD_BELOW_MB: int = 10_000
 
     _CONFIG_MAP: ClassVar[dict[ModelSize, str]] = {
         ModelSize.SAM3_1: "sam3.1_multiplex.pt",
@@ -165,6 +194,13 @@ class SAM2Profiler:
         backend = profile.best_backend
         mixed_precision = self._supports_amp(backend, target_gpu)
         presets = self._PROFILE_PRESETS[content]
+        # Small cards get the memory bank offloaded to system RAM.  This is
+        # what keeps a 6-8 GB laptop GPU from OOMing during long propagation
+        # runs, at the cost of a little host<->device traffic.
+        low_vram = (
+            target_gpu is not None
+            and 0 < target_gpu.total_vram_mb < self._OFFLOAD_BELOW_MB
+        )
         msg = self._build_user_message(model_size, backend, mixed_precision, target_gpu)
 
         return SAM2Recommendation(
@@ -179,6 +215,8 @@ class SAM2Profiler:
             pred_iou_thresh=presets["pred_iou_thresh"],  # type: ignore[arg-type]
             stability_score_offset=presets["stability_score_offset"],  # type: ignore[arg-type]
             max_frames_in_memory=presets["max_frames_in_memory"],  # type: ignore[arg-type]
+            offload_state_to_cpu=low_vram,
+            offload_video_to_cpu=low_vram,
             user_message=msg,
         )
 
@@ -196,45 +234,65 @@ class SAM2Profiler:
         if gpu is None or gpu.total_vram_mb == 0:
             logger.warning("No GPU detected — falling back to TINY on CPU")
             return ModelSize.TINY
-        # Free VRAM is the live signal; total VRAM is a fallback when the
-        # driver does not report free memory (DirectML, some WSL setups).
-        available = gpu.available_vram_mb or gpu.total_vram_mb
-        # Conservative headroom: we must stay comfortably below the card's
-        # limit. The previous "* 0.8" heuristic recommended the largest tier
-        # that *barely* fit -> GPU at 100 % -> overheating -> driver crash
-        # (black screen) on modestly-cooled cards.
-        effective = int(available * self._VRAM_SAFETY_FACTOR)
+        # The tier is chosen from the card's TOTAL VRAM, never from the free
+        # VRAM observed at call time.  Free VRAM moves while the app runs
+        # (another window opens, the loaded model itself occupies memory), so
+        # the old free-VRAM heuristic silently picked a different - and
+        # occasionally much weaker (EfficientTAM) - model between runs and
+        # even mid-session.  Users saw that as "sometimes it just cannot find
+        # the character"; a stable total-VRAM decision never switches a good
+        # model out from under them.  Runtime OOM is handled by the workers,
+        # which report it clearly instead of guessing the tier up front.
+        capacity = int(gpu.total_vram_mb)
+        # Conservative headroom on top of the (already padded) tier
+        # thresholds: never run a card at its limit, which overheats modestly
+        # cooled laptops and can reset the driver (black screen).
+        effective = int(capacity * self._VRAM_SAFETY_FACTOR)
         logger.debug(
-            "Pick model: %d MB free -> %d MB effective (factor x%.2f)",
-            available,
+            "Pick model: %d MB total -> %d MB effective (factor x%.2f)",
+            capacity,
             effective,
             self._VRAM_SAFETY_FACTOR,
         )
-        for size in (
-            ModelSize.SAM3_1,
-            ModelSize.LARGE,
-            ModelSize.BASE_PLUS,
-            ModelSize.SMALL,
-            ModelSize.TINY,
-            # Light variants are a last resort: only auto-picked when the free
-            # VRAM cannot host even SAM 2.1 Tiny.
-            ModelSize.EFFICIENTTAM_S,
-            ModelSize.EFFICIENTTAM_TI,
-        ):
-            if size is ModelSize.SAM3_1 and not _sam3_package_available():
-                continue
-            if effective >= self._VRAM_THRESHOLDS[size]:
-                logger.info(
-                    "Recommended %s (threshold %d MB, effective %d MB)",
-                    size.value,
-                    self._VRAM_THRESHOLDS[size],
-                    effective,
-                )
-                return size
-        logger.info(
-            "Free VRAM below the smallest tier - falling back to EfficientTAM Ti"
+        # The light EfficientTAM family is only used when SAM 2 cannot be used
+        # at all: not installed, or the card is genuinely too small.  It is
+        # markedly weaker on anime line art, so it must never be a silent
+        # "downgrade" a slightly busy GPU can trigger.
+        if _sam2_package_available() and capacity >= self._SAM2_MIN_TOTAL_MB:
+            for size in (
+                ModelSize.SAM3_1,
+                ModelSize.LARGE,
+                ModelSize.BASE_PLUS,
+                ModelSize.SMALL,
+                ModelSize.TINY,
+            ):
+                if size is ModelSize.SAM3_1 and not _sam3_package_available():
+                    continue
+                if effective >= self._VRAM_THRESHOLDS[size]:
+                    logger.info(
+                        "Recommended %s (threshold %d MB, effective %d MB)",
+                        size.value,
+                        self._VRAM_THRESHOLDS[size],
+                        effective,
+                    )
+                    return size
+        if _efficienttam_package_available():
+            light = (
+                ModelSize.EFFICIENTTAM_S
+                if effective >= self._VRAM_THRESHOLDS[ModelSize.EFFICIENTTAM_S]
+                else ModelSize.EFFICIENTTAM_TI
+            )
+            logger.info(
+                "SAM 2 does not fit (%d MB total); using %s",
+                capacity,
+                light.value,
+            )
+            return light
+        logger.warning(
+            "Neither SAM 2 nor EfficientTAM is importable — defaulting to "
+            "SAM 2.1 Tiny (loading will fail with a clear message)."
         )
-        return ModelSize.EFFICIENTTAM_TI
+        return ModelSize.TINY
 
     def largest_model_for_profile(self, profile: HardwareProfile) -> ModelSize | None:
         """Return the largest tier that fits current GPU memory, if any."""

@@ -168,6 +168,11 @@ class Exporter:
         with tempfile.TemporaryDirectory(prefix="bb_export_") as tmp:
             tmp_path = Path(tmp)
             total = len(frames)
+            # Write the frames with *sequential* names (000000, 000001, ...)
+            # rather than their absolute project index.  ffmpeg's image2
+            # demuxer starts at 0 and stops at the first gap, so absolute
+            # indices broke every export whose first masked frame was not
+            # frame 0 and every export with a hole in the masked range.
             for i, idx in enumerate(sorted(frames)):
                 if cancel_event is not None and cancel_event.is_set():
                     raise RuntimeError("Export cancelled")
@@ -194,7 +199,7 @@ class Exporter:
                 )
                 if watermark:
                     rgba = self._draw_watermark(rgba)
-                Image.fromarray(rgba, mode="RGBA").save(tmp_path / f"frm_{idx:06d}.png")
+                Image.fromarray(rgba, mode="RGBA").save(tmp_path / f"frm_{i:06d}.png")
                 if on_progress is not None:
                     on_progress(i + 1, total)
 
@@ -222,7 +227,15 @@ class Exporter:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
-            stdout, stderr = proc.communicate(timeout=3600)
+            try:
+                stdout, stderr = proc.communicate(timeout=3600)
+            except subprocess.TimeoutExpired:
+                # ffmpeg hung: kill it, otherwise it keeps burning CPU/GPU (and
+                # holds the temp frames / output file) after the export has
+                # already given up.
+                proc.kill()
+                proc.communicate()
+                raise RuntimeError("FFmpeg timed out after 3600s") from None
             if cancel_event is not None and cancel_event.is_set():
                 raise RuntimeError("Export cancelled")
             if proc.returncode != 0:
@@ -271,7 +284,14 @@ class Exporter:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
-            stdout, stderr = proc.communicate(timeout=3600)
+            try:
+                stdout, stderr = proc.communicate(timeout=3600)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                logger.warning("Audio mux timed out; keeping the export silent")
+                tmp.unlink(missing_ok=True)
+                break
             if proc.returncode == 0:
                 del stdout
                 video_file.unlink(missing_ok=True)

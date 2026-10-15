@@ -565,6 +565,20 @@ def test_neutralize_cast_uses_the_background_by_default() -> None:
     assert _blue_chroma(fixed, sky) < 20
 
 
+def test_neutralize_cast_uses_a_region_without_a_matte() -> None:
+    """An Area box alone is enough — no matte is required.
+
+    A region passed *without* a mask used to fall through to an empty
+    ``(0, 0)`` reference, so the cast was never corrected even though the user
+    had drawn a box.
+    """
+    frame, hair, sky, _ = _tinted_scene()
+    fixed = neutralize_cast(frame, None, (0, 0, 40, 40), "clean", 100)
+    assert _blue_chroma(fixed, sky) < 20
+    assert _blue_chroma(fixed, sky) < _blue_chroma(frame, sky) / 2
+    assert _blue_chroma(fixed, hair) < _blue_chroma(frame, hair)
+
+
 def test_cast_needs_a_representative_reference() -> None:
     """A box covering everything is useless, because "neutral" then means
     "the average of everything".

@@ -46,3 +46,18 @@ exports/
 
 # Bundled binaries (kept out of the repo, pulled in by the spec at build time)
 For-Agent/
+
+# Downloaded model weights and their Hugging Face caches (created at runtime)
+checkpoints/
+
+# Local build outputs, scratch footage and downloaded sources (never committed)
+BetterbrushDistV3/
+Sammie-Roto-2-main/
+Training-Date/
+trailer/
+trailerKIMI/
+clip/
+logs/
+
+# Large local media assets
+assets/icons/*.mov

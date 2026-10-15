@@ -644,7 +644,14 @@ def execute_render_job(
         total = len(frame_indices)
         if total <= 0:
             raise ValueError("The project has no masked frames")
-        report("Loading masks", sum(len(masks) for masks, _a, _n, _o in mask_sets), total)
+        # Masks are already materialised above, so report the true number of
+        # masks loaded.  Reporting the mask count against the *frame* total
+        # (as before) overflowed the denominator in "separate" object mode,
+        # where multiple objects contribute masks for the same frame and the
+        # sum easily exceeds the distinct-frame count -> RenderProgress raised
+        # "current cannot exceed total" and failed the whole job.
+        mask_total = sum(len(masks) for masks, _a, _n, _o in mask_sets)
+        report("Loading masks", mask_total, mask_total)
         report("Loading video", 0, total)
         frames: dict[int, Any] = {}
         for position, index in enumerate(frame_indices, start=1):
@@ -1071,8 +1078,16 @@ class RenderQueue:
             job.started_at = None
             job.finished_at = None
             job.updated_at = _utc_now()
-            self._jobs.pop(job.id)
-            self._jobs[job.id] = job
+            # Re-insert at the FRONT of the FIFO so a retried job runs before
+            # the other queued jobs.  ``dict`` preserves insertion order, so
+            # popping and re-adding (the old code) actually moved the job to
+            # the *end* -- the opposite of the documented behaviour.
+            remaining = {
+                other_id: other
+                for other_id, other in self._jobs.items()
+                if other_id != job.id
+            }
+            self._jobs = {job.id: job, **remaining}
             self._persist_locked()
             self._condition.notify_all()
         if autostart:

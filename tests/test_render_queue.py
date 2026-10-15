@@ -378,3 +378,98 @@ def test_execute_render_job_pauses_between_exporter_frames(
 
     assert exporter_type.latest is not None
     assert exporter_type.latest.accessed_frames == [0]
+
+
+def test_retry_moves_job_to_the_front_of_the_queue(tmp_path):
+    """A retried job is re-queued *ahead* of the jobs already waiting.
+
+    ``dict`` preserves insertion order, so the old pop-and-re-add actually
+    moved the job to the end — the opposite of the documented behaviour.
+    """
+    queue = RenderQueue(tmp_path / "queue.json")
+    first = queue.enqueue(tmp_path / "one.bbproj", tmp_path / "out")
+    second = queue.enqueue(tmp_path / "two.bbproj", tmp_path / "out")
+    third = queue.enqueue(tmp_path / "three.bbproj", tmp_path / "out")
+
+    queue.cancel(third.id)
+    queue.retry(third.id, autostart=False)
+
+    assert [job.id for job in queue.jobs] == [third.id, first.id, second.id]
+
+
+def test_execute_render_job_separate_mode_progress_is_valid(
+    tmp_path,
+    monkeypatch,
+):
+    """Separate object mode must report valid progress, not crash the job.
+
+    Each object contributes its own mask set, so the loaded-mask count exceeds
+    the number of distinct frames.  Reporting that count against the frame
+    total raised ``ValueError("current cannot exceed total")`` and failed the
+    whole render.
+    """
+    (tmp_path / "clip.bbproj").write_text("{}", encoding="utf-8")
+    (tmp_path / "source.mp4").write_bytes(b"video")
+
+    class FakeProjectManager:
+        """Project double with two objects each masked on both frames."""
+
+        @staticmethod
+        def load(path: Path) -> SimpleNamespace:
+            obj_a = SimpleNamespace(
+                obj_id=1, masks={0: "a0", 1: "a1"}, mattes={}, profile=None
+            )
+            obj_b = SimpleNamespace(
+                obj_id=2, masks={0: "b0", 1: "b1"}, mattes={}, profile=None
+            )
+            return SimpleNamespace(
+                video_path="source.mp4",
+                video_meta={"fps": 24.0},
+                masks={},
+                objects=[obj_a, obj_b],
+            )
+
+    class ExporterDouble:
+        """Exporter double that iterates the frame mapping."""
+
+        latest: ExporterDouble | None = None
+
+        def __init__(self, output_dir: Path) -> None:
+            self.output_dir = output_dir
+            self.accessed_frames: list[int] = []
+            ExporterDouble.latest = self
+
+        def export_video(self, frames, masks, fps, **options):
+            callback = options.get("on_progress")
+            total = len(frames)
+            for current, index in enumerate(sorted(frames), start=1):
+                frames[index]
+                self.accessed_frames.append(index)
+                if callback is not None:
+                    callback(current, total)
+            return self.output_dir / "render.mov"
+
+    project_module = ModuleType("src.core.project")
+    project_module.ProjectManager = FakeProjectManager
+    reader_module = ModuleType("src.processing.video_reader")
+    reader_module.VideoReader = FakeVideoReader
+    exporter_module = ModuleType("src.export.exporter")
+    exporter_module.Exporter = ExporterDouble
+    monkeypatch.setitem(sys.modules, "src.core.project", project_module)
+    monkeypatch.setitem(sys.modules, "src.processing.video_reader", reader_module)
+    monkeypatch.setitem(sys.modules, "src.export.exporter", exporter_module)
+
+    preset = RenderPreset(object_mode="separate", base_name="batch", include_audio=False)
+    job = RenderJob(
+        project_path=tmp_path / "clip.bbproj",
+        output_destination=tmp_path / "output",
+        preset_name=preset.name,
+        settings=preset.to_dict(),
+    )
+    progress: list[RenderProgress] = []
+
+    result = execute_render_job(job, on_progress=lambda update: progress.append(update))
+
+    # Two objects x two frames were rendered without a progress OverflowError.
+    assert result.frames_rendered == 4
+    assert any(update.stage == "Loading masks" for update in progress)

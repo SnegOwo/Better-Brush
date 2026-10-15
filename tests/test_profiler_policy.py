@@ -4,6 +4,11 @@ This tests that the profiler never recommends a model that would push the
 GPU to its VRAM limit (the old heuristic did, causing overheating / black
 screens). No GPU or SAM 2 weights are required.
 
+The tier is chosen from the card's **total** VRAM, never the free VRAM seen
+at call time: free VRAM fluctuates between runs and used to flip the model
+mid-session (occasionally down to the much weaker EfficientTAM family, which
+users experienced as "sometimes it just cannot find the character").
+
 Run with:
     python -m pytest tests/test_profiler_policy.py -v
 or standalone:
@@ -15,6 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 # Allow running from repo root without package install
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -23,27 +30,43 @@ from src.hardware.profiler import ModelSize, SAM2Profiler
 
 _SUT = SAM2Profiler()
 
+
+@pytest.fixture(autouse=True)
+def _packages_available(monkeypatch: pytest.MonkeyPatch):
+    """Make the policy tests hermetic.
+
+    ``_pick_model`` only considers SAM 2 when the package is importable and
+    EfficientTAM when the vendored build script exists. Patch both on so the
+    tier decision depends solely on VRAM, not on what happens to be installed
+    in the test runner's environment.
+    """
+    import src.hardware.profiler as profiler_module
+
+    monkeypatch.setattr(profiler_module, "_sam2_package_available", lambda: True)
+    monkeypatch.setattr(profiler_module, "_efficienttam_package_available", lambda: True)
+
+
 # (free VRAM MB, total VRAM MB, expected model) — mirrors the real cases that
-# crashed the user's GPU. free ≈ 11 GB on a 12 GB card used to recommend
-# base_plus; it must now stay on the much lighter *small* tier.
+# crashed the user's GPU. The tier now depends on *total* VRAM only; the free
+# column is kept to prove it no longer changes the outcome.
 _CASES: list[tuple[int, int, ModelSize]] = [
     (0, 0, ModelSize.TINY),  # no GPU / unknown VRAM
-    (3_000, 3_000, ModelSize.EFFICIENTTAM_S),  # 3 GB card: tiny needs 2.8 GB
-    (5_000, 5_000, ModelSize.TINY),  # 5 GB: 3.25 GB effective < 5 GB
+    (3_000, 3_000, ModelSize.EFFICIENTTAM_S),  # 3 GB total < SAM2 min -> light tier
+    (5_000, 5_000, ModelSize.TINY),  # 5 GB: 3.25 GB effective -> tiny
     (8_000, 8_000, ModelSize.SMALL),  # 8 GB card -> small (5.2 GB eff.)
     (11_000, 12_288, ModelSize.SMALL),  # RTX 3060 12 GB, idle at launch
-    (6_582, 12_288, ModelSize.TINY),  # 3060 while another app uses VRAM
+    (6_582, 12_288, ModelSize.SMALL),  # 3060 while another app uses VRAM -> same tier
     (14_000, 16_000, ModelSize.BASE_PLUS),  # 16 GB card -> base_plus
     (17_000, 18_000, ModelSize.BASE_PLUS),  # 18 GB card still base_plus
     (24_000, 24_000, ModelSize.LARGE),  # 24 GB card: SAM 3.1 skipped when optional package absent
     (32_000, 32_000, ModelSize.LARGE),  # same fallback with the optional extra
 ]
 
-# Below the SAM 2.1 Tiny threshold the picker falls back to the lightweight
-# EfficientTAM family, which runs on cards that cannot host Tiny at all.
+# Below the SAM 2.1 Tiny total-VRAM floor the picker falls back to the
+# lightweight EfficientTAM family, which runs on cards that cannot host Tiny.
 _LIGHT_CASES: list[tuple[int, int, ModelSize]] = [
-    (2_400, 3_000, ModelSize.EFFICIENTTAM_TI),  # 1.56 GB effective
-    (1_800, 2_400, ModelSize.EFFICIENTTAM_TI),  # 1.17 GB effective
+    (2_400, 3_000, ModelSize.EFFICIENTTAM_S),  # 3 GB total < min, 1.95 GB eff.
+    (1_800, 2_400, ModelSize.EFFICIENTTAM_TI),  # 1.56 GB effective
     (1_200, 1_500, ModelSize.EFFICIENTTAM_TI),  # below every threshold
 ]
 
@@ -104,6 +127,33 @@ def test_weak_gpus_fall_back_to_efficienttam() -> None:
     assert not failures, "light-model mismatches:\n" + "\n".join(failures)
 
 
+def test_model_is_deterministic_regardless_of_free_vram() -> None:
+    """The pick must not change as free VRAM fluctuates between runs.
+
+    This is the regression guard for the intermittent "cannot detect the
+    character" bug: the same physical card must always map to the same tier,
+    no matter how much VRAM another app happens to be holding at the moment
+    ``recommend()`` is called.
+    """
+    total_mb = 12_288  # e.g. an RTX 3060 12 GB
+    picks = {
+        _SUT.recommend(_profile(_gpu(total_mb, free))).model_size
+        for free in (0, 500, 2_000, 4_788, 6_582, 9_000, 11_000, total_mb)
+    }
+    assert len(picks) == 1, f"model flips with free VRAM: {picks}"
+    assert picks == {ModelSize.SMALL}
+
+
+def test_low_vram_cards_offload_state_to_cpu() -> None:
+    """Cards under the offload ceiling keep the memory bank on the host."""
+    small = _SUT.recommend(_profile(_gpu(8_000, 3_000)))
+    assert small.offload_state_to_cpu is True
+    assert small.offload_video_to_cpu is True
+    big = _SUT.recommend(_profile(_gpu(24_000, 20_000)))
+    assert big.offload_state_to_cpu is False
+    assert big.offload_video_to_cpu is False
+
+
 def test_efficienttam_thresholds_are_below_tiny() -> None:
     """The light tiers must always fit where Tiny does not."""
     thresholds = _SUT._VRAM_THRESHOLDS
@@ -112,7 +162,7 @@ def test_efficienttam_thresholds_are_below_tiny() -> None:
 
 
 def test_effective_vram_keeps_headroom() -> None:
-    """effective VRAM = free × 0.65, i.e. ~35 % headroom is kept."""
+    """effective VRAM = total × 0.65, i.e. ~35 % headroom is kept."""
     assert int(11_000 * _SUT._VRAM_SAFETY_FACTOR) == 7_150
 
 

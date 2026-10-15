@@ -44,7 +44,10 @@ def temporal_smooth_masks(
         gray_cache[idx] = gray
         return gray
 
-    result: dict[int, np.ndarray] = {}
+    # Start from the inputs so that a cancelled run still returns a complete
+    # set: unvisited frames keep their original mask instead of silently
+    # disappearing from the result (which used to drop them from the export).
+    result: dict[int, np.ndarray] = dict(masks)
     total = len(sorted_idx)
 
     for i, idx in enumerate(sorted_idx):
@@ -72,13 +75,14 @@ def temporal_smooth_masks(
                 if neighbor_gray is None:
                     continue
 
-                if neighbor_idx < idx:
-                    flow = _compute_flow(neighbor_gray, cur_gray)
-                    warped = _warp_mask(masks[neighbor_idx], flow)
-                else:
-                    flow = _compute_flow(cur_gray, neighbor_gray)
-                    inv_flow = _invert_flow(flow)
-                    warped = _warp_mask(masks[neighbor_idx], inv_flow)
+                # Always measure the flow from the *current* frame to the
+                # neighbour and sample the neighbour mask at ``x + flow``.
+                # Previously the earlier-neighbour branch used the reverse
+                # flow without inverting it, so half the votes were shifted
+                # the wrong way and smoothing added ghosting instead of
+                # removing flicker.
+                flow = _compute_flow(cur_gray, neighbor_gray)
+                warped = _warp_mask(masks[neighbor_idx], flow)
 
                 votes += warped.astype(np.float64)
                 vote_count += 1.0

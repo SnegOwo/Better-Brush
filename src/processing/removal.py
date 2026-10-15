@@ -515,11 +515,12 @@ def _composite(
     reconstructed to untouched pixels never shows a hard seam, while pixels
     far outside the subject are copied unchanged.
     """
-    if settings.mask_grow <= 0 and settings.feather <= 0:
-        return removed
     if not mask.any():
         return original
-    grown = mask.astype(np.uint8)
+    # ``mask`` is a *boolean* matte.  Casting it straight to uint8 produced
+    # 0/1 values, so ``alpha`` collapsed to ~0.004 (1/255) and the composite
+    # quietly did nothing whenever no feather pass re-expanded the range.
+    grown = mask.astype(bool).astype(np.uint8) * 255
     if settings.mask_grow > 0:
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
@@ -529,7 +530,12 @@ def _composite(
     if settings.feather > 0:
         sigma = max(1.0, settings.feather / 3.0)
         grown = cv2.GaussianBlur(grown, (0, 0), sigma)
-        grown = cv2.normalize(grown, None, 0, 255, cv2.NORM_MINMAX)
+        # Re-expand the softened edge to the full range.  ``cv2.normalize``
+        # maps a *constant* array (a matte covering the whole region) to
+        # all-zero, which silently disabled the removal — skip it when there is
+        # no range to normalise.
+        if int(grown.max()) > int(grown.min()):
+            grown = cv2.normalize(grown, None, 0, 255, cv2.NORM_MINMAX)
     alpha = (grown.astype(np.float32) / 255.0)[:, :, None]
     blended = (
         removed.astype(np.float32) * alpha + original.astype(np.float32) * (1.0 - alpha)

@@ -1,0 +1,354 @@
+# @package _global_
+# SAM 2.1 fine-tune recipe for anime / AMV content, tuned for GOOGLE COLAB.
+#
+# This is the same recipe as ../anime_amv.yaml, preset for a Colab GPU:
+#   * Colab FREE (Tesla T4, 16 GB, no bfloat16) -> resolution 384,
+#     num_frames 2, amp_dtype float16.
+#   * Colab Pro (L4 / A100, bfloat16) -> bump resolution to 512-768 and
+#     num_frames to 4 (the notebook does this automatically).
+#
+# The companion notebook `BetterBrush_SAM2_Finetune.ipynb` (or the
+# `sam2_colab_finetune.py` script) copies this file into the SAM 2 repo's
+# configs/sam2.1_training/ folder, fills in the dataset paths, patches the
+# dtype for the GPU it finds, and launches training:
+#
+#   python training/train.py -c configs/sam2.1_training/anime_amv_colab.yaml \
+#       --use-cluster 0 --num-gpus 1
+#
+# What makes this affordable on one GPU:
+#   * freeze_image_encoder: True  -> the Hiera trunk (the memory hog) is
+#     frozen, so only the mask decoder / memory attention / prompt encoder
+#     train. That is where anime edge quality is decided.
+#   * resolution: 384             -> raise it once you have a bigger GPU.
+#   * num_frames: 2               -> short clips keep the temporal memory
+#     trained without the 8-frame memory cost. Keep it low on Colab.
+#   * DAVIS-style annotation folders produced by Better Brush's
+#     "Save Training Data" action (JPEGImages / Annotations / ImageSets).
+#
+# Everything else follows the official MOSE fine-tune example.
+
+scratch:
+  # Colab free T4: keep 384 / 2 frames. Colab L4/A100: 512-768 / 4 frames.
+  resolution: 384
+  train_batch_size: 1
+  num_train_workers: 2
+  num_frames: 2
+  max_num_objects: 2
+  base_lr: 2.0e-5          # decoder + memory lr (frozen encoder keeps this stable)
+  vision_lr: 0.0           # image encoder is frozen; the value is unused there
+  phases_per_epoch: 1
+  # ~1 pass over a few thousand frames; raise once you see the loss plateau.
+  num_epochs: 20
+
+dataset:
+  # PATHS inside the Colab runtime. The notebook overwrites these with your
+  # Google Drive (or /content) dataset folder automatically.
+  img_folder: /content/dataset/JPEGImages
+  gt_folder: /content/dataset/Annotations
+  file_list_txt: /content/dataset/ImageSets/train.txt
+  multiplier: 2
+
+vos:
+  train_transforms:
+    - _target_: training.dataset.transforms.ComposeAPI
+      transforms:
+        # Anime frames are freely mirrored and rotated in practice, and the
+        # heavy affine jitter that real video needs is less useful here.
+        - _target_: training.dataset.transforms.RandomHorizontalFlip
+          consistent_transform: True
+        - _target_: training.dataset.transforms.RandomAffine
+          degrees: 10
+          shear: 5
+          image_interpolation: bilinear
+          consistent_transform: True
+        - _target_: training.dataset.transforms.RandomResizeAPI
+          sizes: ${scratch.resolution}
+          square: true
+          consistent_transform: True
+        - _target_: training.dataset.transforms.ColorJitter
+          consistent_transform: True
+          brightness: 0.1
+          contrast: 0.03
+          saturation: 0.03
+          hue: null
+        - _target_: training.dataset.transforms.ToTensorAPI
+        - _target_: training.dataset.transforms.NormalizeAPI
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+
+trainer:
+  _target_: training.trainer.Trainer
+  mode: train_only
+  max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
+  accelerator: cuda
+  seed_value: 123
+
+  model:
+    _target_: training.model.sam2.SAM2Train
+    image_encoder:
+      _target_: sam2.modeling.backbones.image_encoder.ImageEncoder
+      scalp: 1
+      trunk:
+        _target_: sam2.modeling.backbones.hieradet.Hiera
+        embed_dim: 112
+        num_heads: 2
+        drop_path_rate: 0.0
+      neck:
+        _target_: sam2.modeling.backbones.image_encoder.FpnNeck
+        position_encoding:
+          _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
+          num_pos_feats: 256
+          normalize: true
+          scale: null
+          temperature: 10000
+        d_model: 256
+        backbone_channel_list: [896, 448, 224, 112]
+        fpn_top_down_levels: [2, 3]
+        fpn_interp_model: nearest
+
+    memory_attention:
+      _target_: sam2.modeling.memory_attention.MemoryAttention
+      d_model: 256
+      pos_enc_at_input: true
+      layer:
+        _target_: sam2.modeling.memory_attention.MemoryAttentionLayer
+        activation: relu
+        dim_feedforward: 2048
+        dropout: 0.1
+        pos_enc_at_attn: false
+        self_attention:
+          _target_: sam2.modeling.sam.transformer.RoPEAttention
+          rope_theta: 10000.0
+          feat_sizes: [64, 64]
+          embedding_dim: 256
+          num_heads: 1
+          downsample_rate: 1
+          dropout: 0.1
+        d_model: 256
+        pos_enc_at_cross_attn_keys: true
+        pos_enc_at_cross_attn_queries: false
+        cross_attention:
+          _target_: sam2.modeling.sam.transformer.RoPEAttention
+          rope_theta: 10000.0
+          feat_sizes: [64, 64]
+          rope_k_repeat: True
+          embedding_dim: 256
+          num_heads: 1
+          downsample_rate: 1
+          dropout: 0.1
+          kv_in_dim: 64
+      num_layers: 4
+
+    memory_encoder:
+        _target_: sam2.modeling.memory_encoder.MemoryEncoder
+        out_dim: 64
+        position_encoding:
+          _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
+          num_pos_feats: 64
+          normalize: true
+          scale: null
+          temperature: 10000
+        mask_downsampler:
+          _target_: sam2.modeling.memory_encoder.MaskDownSampler
+          kernel_size: 3
+          stride: 2
+          padding: 1
+        fuser:
+          _target_: sam2.modeling.memory_encoder.Fuser
+          layer:
+            _target_: sam2.modeling.memory_encoder.CXBlock
+            dim: 256
+            kernel_size: 7
+            padding: 3
+            layer_scale_init_value: 1e-6
+            use_dwconv: True
+          num_layers: 2
+
+    num_maskmem: 7
+    image_size: ${scratch.resolution}
+    sigmoid_scale_for_mem_enc: 20.0
+    sigmoid_bias_for_mem_enc: -10.0
+    use_mask_input_as_output_without_sam: true
+    directly_add_no_mem_embed: true
+    no_obj_embed_spatial: true
+    use_high_res_features_in_sam: true
+    multimask_output_in_sam: true
+    iou_prediction_use_sigmoid: True
+    use_obj_ptrs_in_encoder: true
+    add_tpos_enc_to_obj_ptrs: true
+    proj_tpos_enc_in_obj_ptrs: true
+    use_signed_tpos_enc_to_obj_ptrs: true
+    only_obj_ptrs_in_the_past_for_eval: true
+    pred_obj_scores: true
+    pred_obj_scores_mlp: true
+    fixed_no_obj_ptr: true
+    multimask_output_for_tracking: true
+    use_multimask_token_for_obj_ptr: true
+    multimask_min_pt_num: 0
+    multimask_max_pt_num: 1
+    use_mlp_for_obj_ptr_proj: true
+
+    ####### Training specific params #######
+    # The sampler simulates the clicks a user would place, exactly like SAM 2's
+    # own data engine: half the time from a point, half from a box, with a few
+    # correction clicks on top.
+    prob_to_use_pt_input_for_train: 0.5
+    prob_to_use_pt_input_for_eval: 0.0
+    prob_to_use_box_input_for_train: 0.5
+    prob_to_use_box_input_for_eval: 0.0
+    prob_to_sample_from_gt_for_train: 0.1
+    num_frames_to_correct_for_train: 2
+    num_frames_to_correct_for_eval: 1
+    rand_frames_to_correct_for_train: True
+    add_all_frames_to_correct_as_cond: True
+    num_init_cond_frames_for_train: 1
+    rand_init_cond_frames_for_train: False
+    num_correction_pt_per_frame: 7
+    use_act_ckpt_iterative_pt_sampling: false
+    num_init_cond_frames_for_eval: 1
+    forward_backbone_per_frame_for_eval: True
+
+    # The single biggest memory saver: freeze the Hiera image encoder.
+    freeze_image_encoder: True
+
+  data:
+    train:
+      _target_: training.dataset.sam2_datasets.TorchTrainMixedDataset
+      phases_per_epoch: ${scratch.phases_per_epoch}
+      batch_sizes:
+        - ${scratch.train_batch_size}
+
+      datasets:
+        - _target_: training.dataset.utils.RepeatFactorWrapper
+          dataset:
+            _target_: training.dataset.utils.ConcatDataset
+            datasets:
+            - _target_: training.dataset.vos_dataset.VOSDataset
+              # is_palette=False -> Better Brush's per-object PNG folders.
+              transforms: ${vos.train_transforms}
+              training: true
+              video_dataset:
+                _target_: training.dataset.vos_raw_dataset.PNGRawDataset
+                img_folder: ${dataset.img_folder}
+                gt_folder: ${dataset.gt_folder}
+                file_list_txt: ${dataset.file_list_txt}
+                is_palette: false
+                # Each object folder becomes its own training video, so a clip
+                # with two characters yields two samples per frame.
+                single_object_mode: true
+              sampler:
+                _target_: training.dataset.vos_sampler.RandomUniformSampler
+                num_frames: ${scratch.num_frames}
+                max_num_objects: ${scratch.max_num_objects}
+              multiplier: ${dataset.multiplier}
+      shuffle: True
+      num_workers: ${scratch.num_train_workers}
+      pin_memory: True
+      drop_last: True
+      collate_fn:
+        _target_: training.utils.data_utils.collate_fn
+        _partial_: true
+        dict_key: all
+
+  optim:
+    amp:
+      enabled: True
+      # T4 (Colab free) has no bfloat16 -> float16. The notebook rewrites this
+      # to bfloat16 automatically on an L4 / A100.
+      amp_dtype: float16
+
+    optimizer:
+      _target_: torch.optim.AdamW
+
+    gradient_clip:
+      _target_: training.optimizer.GradientClipper
+      max_norm: 0.1
+      norm_type: 2
+
+    # Layer decay only applies to the (frozen) image encoder, so it is a no-op
+    # here and kept for parity with the official config.
+    param_group_modifiers:
+      - _target_: training.optimizer.layer_decay_param_modifier
+        _partial_: True
+        layer_decay_value: 0.9
+        apply_to: 'image_encoder.trunk'
+        overrides:
+          - pattern: '*pos_embed*'
+            value: 1.0
+
+    options:
+      lr:
+        - scheduler:
+            _target_: fvcore.common.param_scheduler.CosineParamScheduler
+            start_value: ${scratch.base_lr}
+            end_value: ${divide:${scratch.base_lr},10}
+      weight_decay:
+        - scheduler:
+            _target_: fvcore.common.param_scheduler.ConstantParamScheduler
+            value: 0.1
+        - scheduler:
+            _target_: fvcore.common.param_scheduler.ConstantParamScheduler
+            value: 0.0
+          param_names:
+            - '*bias*'
+          module_cls_names: ['torch.nn.LayerNorm']
+
+  loss:
+    all:
+      _target_: training.loss_fns.MultiStepMultiMasksAndIous
+      weight_dict:
+        loss_mask: 20
+        loss_dice: 1
+        loss_iou: 1
+        loss_class: 1
+      supervise_all_iou: true
+      iou_use_l1_loss: true
+      pred_obj_scores: true
+      focal_gamma_obj_score: 0.0
+      focal_alpha_obj_score: -1.0
+
+  distributed:
+    # Windows PyTorch ships without NCCL; gloo works for a single-GPU run.
+    backend: gloo
+    find_unused_parameters: True
+
+  logging:
+    tensorboard_writer:
+      _target_: training.utils.logger.make_tensorboard_logger
+      log_dir:  ${launcher.experiment_log_dir}/tensorboard
+      flush_secs: 120
+      should_log: True
+    log_dir: ${launcher.experiment_log_dir}/logs
+    log_freq: 10
+
+  checkpoint:
+    save_dir: ${launcher.experiment_log_dir}/checkpoints
+    save_freq: 0
+    model_weight_initializer:
+      _partial_: True
+      _target_: training.utils.checkpoint_utils.load_state_dict_into_model
+      strict: True
+      ignore_unexpected_keys: null
+      ignore_missing_keys: null
+
+      state_dict:
+        _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
+        # Start from the stock SAM 2.1 Base+ checkpoint.
+        checkpoint_path: ./checkpoints/sam2.1_hiera_base_plus.pt
+        ckpt_state_dict_keys: ['model']
+
+launcher:
+  num_nodes: 1
+  gpus_per_node: 1
+  experiment_log_dir: null # defaults to ./sam2_logs/${config_name}
+
+# Launcher housekeeping (required by training/train.py even for a local run).
+submitit:
+  partition: null
+  account: null
+  qos: null
+  cpus_per_task: 10
+  use_cluster: false
+  timeout_hour: 24
+  name: null
+  port_range: [10000, 65000]

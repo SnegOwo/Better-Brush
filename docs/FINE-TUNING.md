@@ -96,6 +96,48 @@ that label and can be selected per shot from the Shot Profile dialog like any
 built-in tier. Keep the old checkpoint around; rename the sidecar to switch
 back.
 
+## Google Colab (train without a local GPU)
+
+You do not need a local GPU: the same recipe runs on a **free Colab T4** (or an
+L4/A100 on Colab Pro) from the browser. Everything is under
+[`tools/sam2_training/colab/`](../tools/sam2_training/colab/README.md):
+
+| File | Purpose |
+|---|---|
+| `BetterBrush_SAM2_Finetune.ipynb` | Open in Colab → upload your dataset → run the cells |
+| `sam2_colab_finetune.py` | Driver: clone SAM 2, install, write the config, train |
+| `anime_amv_colab.yaml` | Colab-tuned recipe (384 px, 2 frames, `float16` on T4) |
+
+Quick start:
+
+1. In Better Brush, **File → Save Training Data…** over 5–20 clips, then upload
+   the `dataset/` folder to Google Drive.
+2. Open the notebook in Colab
+   (`Runtime → Change runtime type → GPU`) and upload `anime_amv_colab.yaml` +
+   `sam2_colab_finetune.py` when prompted.
+3. Run the cells. The driver **auto-detects the GPU**: `float16` on a T4 (no
+   bfloat16), `bfloat16` on an L4/A100. On the free T4 it trains at
+   `resolution 384`, `num_frames 2`; on an L4/A100 try `512–768` / `4`.
+4. The last cell copies the checkpoint to Drive; install it exactly as in
+   [step 6](#6--use-the-result) above.
+
+Command-line equivalent:
+
+```bash
+python sam2_colab_finetune.py --dataset /content/drive/MyDrive/BetterBrush/dataset \
+    --resolution 384 --num-frames 2
+```
+
+> **Lowering `resolution` does not require touching `feat_sizes`.** SAM 2's
+> `RoPEAttention` recomputes its rotary embeddings whenever the token count
+> differs (`if self.freqs_cis.shape[0] != q.shape[-2]: ...`), so the `[64, 64]`
+> in the config is only a default. Keeping square inputs (the recipe's
+> `RandomResizeAPI(square: true)`) is what matters.
+
+Colab tips: keep the tab open (free sessions are killed when idle), save the
+checkpoint to Drive as you go, and lower `--resolution` first if you hit a
+`CUDA out of memory`. See the Colab README for a fuller troubleshooting list.
+
 ## Hardware: what fits where
 
 The official MOSE recipe assumes 8×A100 80 GB. What makes it fit on one card:
