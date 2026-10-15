@@ -60,6 +60,9 @@ sam3 = [
 [project.gui-scripts]
 better-brush = "src.core.app:run"
 
+[project.scripts]
+better-brush-engine = "src.engine.server:main"
+
 [project.urls]
 Homepage = "https://sneg.dev"
 Developer = "https://sneg.dev"

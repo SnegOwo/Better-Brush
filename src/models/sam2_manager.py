@@ -392,6 +392,47 @@ class SAM2Manager:
             )
         return results
 
+    def predict_frame_multi(
+        self,
+        frame: np.ndarray,
+        prompt_sets: list[list[PointPrompt]],
+        multimask_output: bool = True,
+    ) -> list[list[MaskResult]]:
+        """Run several independent point prompts against one frame.
+
+        ``set_image`` is the expensive half of a SAM 2 image prediction, so
+        probing a frame with a grid of seed points (the headless auto-subject
+        pass) calls it once and then runs each prompt against the cached
+        embedding. Returns one result list per prompt set, in order.
+        """
+        cleaned = [pts for pts in prompt_sets if pts]
+        if not cleaned:
+            raise ValueError("predict_frame_multi requires at least one prompt set")
+        self.load_image_predictor()
+        predictor = self._image_predictor
+        outputs: list[list[MaskResult]] = []
+        with self._speed_context(), torch.inference_mode():
+            predictor.set_image(frame)
+            for points in cleaned:
+                coords = np.array([[p.x, p.y] for p in points], dtype=np.float32)
+                labels = np.array([p.label for p in points], dtype=np.int32)
+                masks, scores, logits = predictor.predict(
+                    point_coords=coords,
+                    point_labels=labels,
+                    multimask_output=multimask_output,
+                )
+                batch: list[MaskResult] = []
+                for i in range(masks.shape[0]):
+                    batch.append(
+                        MaskResult(
+                            mask=masks[i].astype(bool),
+                            score=float(scores[i]),
+                            logits=logits[i] if logits is not None else None,
+                        )
+                    )
+                outputs.append(batch)
+        return outputs
+
     def predict_frame_from_mask(
         self,
         frame: np.ndarray,

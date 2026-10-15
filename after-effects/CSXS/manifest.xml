@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Better Brush — After Effects panel (CEP).
+
+  Targets After Effects 2022+ (host id AEFT) on Windows. CEP is used rather
+  than UXP because the work here needs the ExtendScript object model:
+  ImportOptions + Layer.replaceSource + render-queue queries are only reliably
+  scriptable through ExtendScript today.
+-->
+<ExtensionManifest Version="7.0"
+                   ExtensionBundleId="com.snegdev.betterbrush"
+                   ExtensionBundleVersion="0.1.0"
+                   ExtensionBundleName="Better Brush">
+
+  <ExtensionList>
+    <Extension Id="com.snegdev.betterbrush.panel" Version="0.1.0"/>
+  </ExtensionList>
+
+  <ExecutionEnvironment>
+    <HostList>
+      <Host Name="AEFT" Version="[22.0,99.9]"/>
+    </HostList>
+    <LocaleList>
+      <Locale Code="All"/>
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="9.0"/>
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+
+  <DispatchInfoList>
+    <Extension Id="com.snegdev.betterbrush.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+          <ScriptPath>./js/host.jsx</ScriptPath>
+          <CEFCommandLine>
+            <Parameter>--allow-file-access</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+            <Parameter>--disable-features=OutOfBlinkCors</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>Better Brush</Menu>
+          <Geometry>
+            <Size>
+              <Width>340</Width>
+              <Height>480</Height>
+            </Size>
+            <MinSize>
+              <Width>280</Width>
+              <Height>320</Height>
+            </MinSize>
+            <MaxSize>
+              <Width>4000</Width>
+              <Height>4000</Height>
+            </MaxSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

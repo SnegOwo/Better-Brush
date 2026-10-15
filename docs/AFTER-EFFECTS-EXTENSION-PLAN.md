@@ -1,8 +1,10 @@
 # Better Brush for After Effects — integration plan
 
-> **Status: plan only.** Nothing here is implemented yet. This document decides
-> *what* to build, *how* the pieces talk, and *in what order*, so the work can
-> start without re-litigating fundamentals.
+> **Status: v1 implemented** (Windows, AE 2022+). Shipping code lives in
+> [`after-effects/`](../after-effects/README.md) (the CEP panel) and
+> [`src/engine/`](../src/engine) (the headless engine). The rest of this
+> document is the original plan, kept for rationale; §14 records the decisions
+> and the deviations that were made while building it.
 
 ## 0 · The one-line pitch
 
@@ -377,43 +379,66 @@ timeline grab) fastest.
 
 **Locked**
 
-1. **Minimum AE version: 2024+**, built as a **UXP** panel. CEP fallback for
-   2020–2023 is deferred, not in v1.
-2. **Default mode: Replace layer**, with **Add as layer** one toggle away; the
-   choice is **persisted as a user setting**.
-3. **Licensing: Pro feature** — single-object free with watermark; multi-object,
-   >1080p and no-watermark require Pro (see §8).
+1. **Platform: Windows, After Effects 2022+.** Built as a **CEP** panel, not UXP.
+   Rationale in "Deviations" below.
+2. **Default mode: Replace layer**, with **Add as new layer** one toggle away;
+   the choice is **persisted** (panel `localStorage`).
+3. **Licensing: Pro feature** — the panel checks `/health` and blocks the button
+   when the engine reports `pro: false` (same client-side model as the desktop
+   app).
+4. **Scope: characters only.** The one button removes the background behind a
+   single character. Multi-object and anything ambiguous opens the full app.
+5. **Cold start: acceptable.** The panel starts the engine on demand and polls
+   `/health` for up to two minutes while showing "starting engine…".
+6. **Panel placement: docked** in the standard AE workspace.
 
-**Still open**
+**Deviations from the original plan (and why)**
 
-4. **Platform** — Windows-only v1, or macOS at launch?
-5. **Scope of "background"** — characters only, or also objects/plates v1?
-6. **Multi-object v1** — single subject per run, or several?
-7. **Cold start** — is a one-time "warming up" wait acceptable on first use?
-8. **Panel placement** — docked in the standard AE workspace, or a floating
-   window? (UXP supports both.)
+| Plan said | v1 does | Why |
+| --- | --- | --- |
+| UXP panel, AE 2024+ | **CEP**, AE 2022+ | The work needs the ExtendScript object model — `ImportOptions`, `Layer.replaceSource`, `FileSource.alphaMode`. The AE UXP API does not cover these yet, so a UXP panel could not finish the job. CEP also loads unsigned in player-debug mode, which makes beta installs trivial. |
+| WebSocket job protocol (§5) | **Plain JSON over HTTP** on `127.0.0.1` | One job at a time, poll every 800 ms. Far less machinery, and `http.server` is already in the stdlib. |
+| Auth token / port discovery | **Fixed port + loopback bind** | `127.0.0.1` is the security boundary; a token file added failure modes (CEP FS access) for no real gain. |
+| `Refine` brush UI in the panel | **Hands off to the full app** | The panel is deliberately one button. A half-capable brush inside a 340 px CEP panel is worse than the real editor one click away. |
+| Engine as `src/engine/{pipeline,qc_gate,runner}` | `src/engine/{schemas,model_setup,auto_subject,pipeline,jobs,server}__main__` | Same shape; `jobs.py` + `server.py` replaced `runner`/`qc_gate`. |
+
+**Explicitly deferred (not in v1)**
+
+- macOS, Premiere/Resolve/Final Cut panels.
+- In-panel brush refine, preview scrubber, per-object layers.
+- Multi-object auto-subject (single character only, by design).
+- `.ccx` signing / Exchange distribution (installer copies into the user CEP
+  folder and enables player-debug mode instead).
 
 ---
 
-## 15 · Concrete change list (for when we build)
+## 15 · What shipped (v1)
 
 **New**
-- `src/engine/{pipeline,auto_subject,qc_gate,schemas,server,runner}.py`
-- console script `better-brush-serve` (in `pyproject.toml`)
-- `extensions/after-effects/` (manifest, `index.html`, `panel.js`, `host.jsx`)
-- `docs/AFTER-EFFECTS.md` (user guide), `tests/engine/`
+
+| Path | Purpose |
+| --- | --- |
+| `src/engine/__init__.py` | Version + API contract constants |
+| `src/engine/schemas.py` | `JobRequest` / `JobResult` / progress / error kinds (stdlib only) |
+| `src/engine/model_setup.py` | Deterministic model selection by total VRAM; prefers an installed custom ("Lugnica SAM") model |
+| `src/engine/auto_subject.py` | Character scoring + the "refuse when ambiguous" gate |
+| `src/engine/pipeline.py` | Extract → auto-subject → propagate → stream ProRes 4444 (PNG fallback) |
+| `src/engine/jobs.py` | Single-slot job registry, progress, cancel, error mapping |
+| `src/engine/server.py`, `__main__.py` | `http.server` API on `127.0.0.1`; `python -m src.engine` |
+| `after-effects/` | CEP panel: manifest, `index.html`, `panel.css`, `js/panel.js`, `js/host.jsx`, `install.ps1`, `README.md` |
+| `tests/test_engine_*.py`, `tests/engine_helpers.py` | 51 tests (schemas, scoring, jobs, HTTP, end-to-end plumbing) |
 
 **Modified**
-- `src/ui/main_window.py` — call the new pipeline instead of inlining it
-- `src/export/exporter.py` — straight-alpha + optional EXR path
-- `src/core/licensing.py` — feature flags for panel capabilities
-- `pyproject.toml`, `README.md`, `docs/ROADMAP-IDEAS.md` (this is ideas #9 NLE
-  interchange + #13 Plugin SDK, made concrete)
+
+- `src/models/sam2_manager.py` — added `predict_frame_multi` (one `set_image`,
+  many probes) for the auto-subject grid.
+- `pyproject.toml` — `better-brush-engine` console script.
 
 **Reused as-is**
-`video_reader`, `mask_selection`, `temporal_smooth`, `edge_finish`, `matting`,
-`anime_qc`, `cel_hold`, `line_prior`, `letterbox`, `exporter`, `profiler`,
-`render_queue` (as the framework-independence template).
+`video_reader`, `mask_selection`, `edge_finish`, `face_parts` (best-effort face
+seed), `exporter` (`_resolve_ffmpeg`, `_compose_rgba`), `profiler`,
+`checkpoint_manager`, `licensing`. The desktop app was **not** modified — the
+engine shares code rather than forking it.
 
 ---
 

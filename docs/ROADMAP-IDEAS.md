@@ -59,10 +59,12 @@ The ideas below are intentionally concrete. Each one should improve either <span
 | 19 | Accessibility pass | Make the editor usable in more studios | Low | Focus order, keyboard navigation, high-contrast mode, screen-reader labels |
 | 20 | Distilled/fast models | Make weaker GPUs viable | High | Quantized SAM 2 variant with a quality/speed benchmark gate |
 
-> **Concrete plan for #9 + #13:** [`AFTER-EFFECTS-EXTENSION-PLAN.md`](AFTER-EFFECTS-EXTENSION-PLAN.md)
-> specifies a one-click "remove background" panel for After Effects built on a
-> shared, headless engine. It is the first exercised instance of NLE interchange
-> and the plugin SDK, and the foundation any Premiere/Resolve panel would reuse.
+> **#9 + #13, v1 shipped:** the After Effects panel
+> ([`after-effects/`](../after-effects/README.md)) is the first exercised instance
+> of NLE interchange and of the plugin SDK: a shared, headless engine
+> ([`src/engine/`](../src/engine)) that any Premiere/Resolve panel would reuse.
+> The original plan and the deviations it took are recorded in
+> [`AFTER-EFFECTS-EXTENSION-PLAN.md`](AFTER-EFFECTS-EXTENSION-PLAN.md).
 
 ---
 

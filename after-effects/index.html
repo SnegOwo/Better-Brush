@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Better Brush</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span class="logo">Better&nbsp;Brush</span>
+      <span class="status">
+        <i id="statusDot" class="dot"></i>
+        <span id="statusText">connecting…</span>
+      </span>
+    </header>
+
+    <div id="proBanner" class="banner hidden">
+      Better Brush <b>Pro</b> is required. Activate it in the desktop app,
+      then reopen this panel.
+    </div>
+
+    <section class="card">
+      <div class="card-title">
+        <span>Layer</span>
+        <button id="refreshBtn" class="ghost" title="Re-check the selection">↻</button>
+      </div>
+      <dl id="layerInfo" class="info">
+        <div><dt>Comp</dt><dd id="infoComp">—</dd></div>
+        <div><dt>Layer</dt><dd id="infoLayer">—</dd></div>
+        <div><dt>Size</dt><dd id="infoSize">—</dd></div>
+        <div><dt>Frames</dt><dd id="infoFrames">—</dd></div>
+      </dl>
+      <p id="selectionHint" class="hint"></p>
+    </section>
+
+    <section class="controls">
+      <label class="field">
+        <span>Quality</span>
+        <select id="qualitySelect">
+          <option value="fast">Fast (Small)</option>
+          <option value="balanced" selected>Balanced (Base+)</option>
+          <option value="best">Best</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Result</span>
+        <select id="modeSelect">
+          <option value="replace" selected>Replace layer</option>
+          <option value="add">Add as new layer</option>
+        </select>
+      </label>
+    </section>
+
+    <button id="runBtn" class="primary">Remove Background</button>
+    <button id="cancelBtn" class="danger hidden">Cancel</button>
+
+    <div id="progressWrap" class="progress hidden">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+    <p id="message" class="message"></p>
+
+    <footer class="bar foot">
+      <span id="engineInfo">engine: —</span>
+      <button id="openAppBtn" class="ghost">Open full app</button>
+    </footer>
+
+    <script src="js/panel.js"></script>
+  </body>
+</html>

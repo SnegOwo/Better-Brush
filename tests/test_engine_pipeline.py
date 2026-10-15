@@ -1,0 +1,188 @@
+"""End-to-end pipeline plumbing with a stubbed SAM 2 manager.
+
+These exercise frame extraction, the auto-subject gate, propagation collection,
+streaming export and the ffmpeg-free fallback — everything except the GPU.
+"""
+
+from __future__ import annotations
+
+import threading
+from pathlib import Path
+from types import SimpleNamespace
+
+import cv2
+import numpy as np
+import pytest
+
+from src.engine import auto_subject, pipeline
+from src.engine.auto_subject import SubjectSelection
+from src.engine.schemas import JobCancelled, JobRequest
+from tests.test_integration import create_synthetic_video
+
+
+class FakeManager:
+    """Stands in for SAM2Manager: one centred square, tracked to every frame."""
+
+    is_available = True
+
+    def __init__(self, _recommendation) -> None:
+        self.count = 0
+        self.frames_dir = None
+
+    def init_video(self, frames_dir, progress_cb=None):
+        self.frames_dir = Path(frames_dir)
+        files = sorted(self.frames_dir.glob("*.jpg"))
+        self.count = len(files)
+        sample = cv2.imread(str(files[0]))
+        self.h, self.w = sample.shape[:2]
+
+    def add_mask_to_video(self, frame_idx, obj_id, mask):
+        self.key = frame_idx
+
+    def propagate_in_video(
+        self,
+        start_frame_idx=0,
+        max_frames=None,
+        reverse=False,
+        on_frame=None,
+        cancel_event=None,
+    ):
+        order = list(range(start_frame_idx, self.count))
+        if reverse:
+            order = list(range(start_frame_idx - 1, -1, -1))
+        out = []
+        for i in order:
+            mask = np.zeros((self.h, self.w), dtype=bool)
+            mask[self.h // 4 : 3 * self.h // 4, self.w // 4 : 3 * self.w // 4] = True
+            if on_frame is not None:
+                on_frame(i, 1, mask)
+            out.append((i, 1, mask, np.array([1.0])))
+        return out
+
+    def reset_video_state(self):
+        ...
+
+
+def _patch_runtime(monkeypatch, selection=None):
+    monkeypatch.setattr(
+        "src.engine.model_setup.build_recommendation",
+        lambda **kw: SimpleNamespace(
+            model_size=SimpleNamespace(value="fake_model")
+        ),
+    )
+    monkeypatch.setattr(
+        "src.models.sam2_manager.SAM2Manager", FakeManager
+    )
+    if selection is None:
+        selection = SubjectSelection(
+            mask=np.ones((64, 64), dtype=bool),
+            confidence=0.91,
+            box=(16, 16, 32, 32),
+            reasons=["fake"],
+        )
+    monkeypatch.setattr(auto_subject, "find_subject", lambda *a, **k: selection)
+    monkeypatch.setattr(auto_subject, "detect_face_center", lambda frame: None)
+
+
+@pytest.fixture
+def synth_video(tmp_path) -> Path:
+    path = tmp_path / "clip.mp4"
+    create_synthetic_video(path, frames=10, size=(256, 256))
+    if not path.exists() or path.stat().st_size == 0:
+        pytest.skip("OpenCV could not write the synthetic video")
+    return path
+
+
+def _request(video: Path, out_dir: Path) -> JobRequest:
+    return JobRequest.from_dict(
+        {
+            "input_path": str(video),
+            "output_dir": str(out_dir),
+            "fps": 10.0,
+            "quality": "fast",
+        }
+    )
+
+
+def test_png_fallback_when_ffmpeg_missing(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+
+    result = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+
+    assert result.output_kind == "png_sequence"
+    out = Path(result.output_path)
+    assert out.is_dir()
+    assert len(list(out.glob("*.png"))) == 10
+    assert result.frame_count == 10
+    assert result.preview_path is not None
+    assert Path(result.preview_path).is_file()
+    assert result.qc["state"] == "ok"
+    assert result.subject is not None
+    assert result.subject.confidence > 0
+
+
+def test_end_to_end_with_real_exporters(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+
+    result = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+
+    assert result.frame_count == 10
+    assert result.frame_in == 0
+    assert result.frame_out == 9
+    output = Path(result.output_path)
+    if result.output_kind == "mov_alpha":
+        assert output.is_file()
+        assert output.stat().st_size > 0
+    else:
+        assert output.is_dir()
+        assert len(list(output.glob("*.png"))) == 10
+
+
+def test_no_character_is_reported(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch, selection=SubjectSelection(confidence=0.1))
+    with pytest.raises(pipeline.PipelineError) as exc:
+        pipeline.run_job(_request(synth_video, tmp_path / "out"))
+    assert exc.value.kind == "no_character"
+
+
+def test_multiple_subjects_is_reported(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch, selection=SubjectSelection(multiple=True, confidence=0.8))
+    with pytest.raises(pipeline.PipelineError) as exc:
+        pipeline.run_job(_request(synth_video, tmp_path / "out"))
+    assert exc.value.kind == "multiple_subjects"
+
+
+def test_missing_input_is_unsupported(monkeypatch, tmp_path):
+    _patch_runtime(monkeypatch)
+    request = JobRequest.from_dict(
+        {"input_path": str(tmp_path / "nope.mov"), "output_dir": str(tmp_path / "out")}
+    )
+    with pytest.raises(pipeline.PipelineError) as exc:
+        pipeline.run_job(request)
+    assert exc.value.kind == "unsupported"
+
+
+def test_cancel_before_start_raises(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(JobCancelled):
+        pipeline.run_job(_request(synth_video, tmp_path / "out"), cancel_event=cancel)
+
+
+def test_progress_is_reported(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    seen: list[str] = []
+    pipeline.run_job(
+        _request(synth_video, tmp_path / "out"),
+        on_progress=lambda stage, cur, total, msg: seen.append(stage),
+    )
+    assert "extract" in seen
+    assert "propagate" in seen
+    assert "done" in seen
