@@ -116,10 +116,10 @@ Two panel technologies exist; the decision drives everything downstream:
 | Scripting reach | full `app.project` API | same API, different binding |
 | Risk | deprecated long-term | thin host API on some AE versions |
 
-**Recommendation:** build **UXP first** for AE 2024+ (the future), keep the host
-script small and API-shaped so a **CEP fallback** can wrap the same `host.jsx`
-logic for older AE. Decide the exact minimum AE version with the user
-(see §14).
+**Decision (locked):** target **After Effects 2024+** and build **UXP** only.
+The host script stays small and API-shaped so a **CEP fallback** for older AE
+(2020–2023) can wrap the same logic later if demand appears — but it is **not**
+in v1 scope. UXP also fixes packaging (`.ccx`; see §10).
 
 ### 3.3 Diagnostics
 
@@ -225,6 +225,11 @@ footage.
   range. Keep the old layer as a disabled copy for one-click undo.
 - **Add as new layer**: `comp.layers.add(newFootage)`, place directly above the
   source, set the same in/out, optional solo.
+
+**Default (locked): Replace.** It is what "remove the background of *this clip*"
+literally means. **Add as layer** stays one toggle away in the panel, and the
+chosen mode is **persisted as a user setting** (alongside preset and quality) so
+someone who prefers non-destructive compositing only picks it once.
 - Import the output into the project bin under a folder **"Better Brush"**,
   named `<layer>_bb_v1`.
 - **Alpha contract**: engine writes **straight (unpremultiplied)** alpha; AE
@@ -272,8 +277,8 @@ panel feels like Better Brush, not a generic Adobe panel.
 
 ## 8 · Licensing & editions
 
-Reuse the offline HMAC licensing already in `src/core/licensing.py`. Proposed
-split (confirm with the user):
+Reuse the offline HMAC licensing already in `src/core/licensing.py`.
+**Locked: the AE extension is a Pro feature.** Split:
 
 | Capability | Lite (free) | Pro |
 |---|---|---|
@@ -324,12 +329,12 @@ Each milestone is independently demoable.
 
 | # | Milestone | Est. | Acceptance |
 |---|---|---|---|
-| **M0** | Spike: `better-brush serve` + hello-world panel that lists the selected layer and round-trips one frame | 1–2 wk | Panel shows the selected layer's name/range; engine echoes a PNG frame |
+| **M0** | Spike: `better-brush serve` + hello-world **UXP** panel that lists the selected layer and round-trips one frame | 1–2 wk | Panel shows the selected layer's name/range; engine echoes a PNG frame |
 | **M1** | Headless engine: extract pipeline from `main_window`, `auto_subject`, PNG-alpha out, integration test on a tiny clip | 2–3 wk | `submit_job` on a test clip returns an alpha sequence; `pytest tests/engine` green, no Qt import |
-| **M2** | One-click background removal end-to-end: render intermediates, progress/cancel, replace + add, colour/alpha contract | 2–3 wk | Select 1080p layer → click → layer replaced with correct alpha; cancel works mid-job |
+| **M2** | One-click background removal end-to-end: render intermediates, progress/cancel, default **Replace** + Add-as-layer toggle, colour/alpha contract | 2–3 wk | Select 1080p layer → click → layer replaced with correct alpha; cancel works mid-job |
 | **M3** | Refine UI: brush/points, keyframe a frame, re-run from frame | 2–3 wk | Paint a fix, re-run, result reflects it |
 | **M4** | Anime polish: preset wiring, cel hold/line lock, QC gate → "needs review" | 1–2 wk | Low-confidence shot surfaces Review instead of silently replacing |
-| **M5** | Packaging: `.ccx`/CEP install, discovery, version handshake, diagnostics | 1–2 wk | Fresh machine: install app + panel, panel finds engine, works |
+| **M5** | Packaging: `.ccx` (UXP) install, engine discovery, version handshake, **Pro** licensing gate, diagnostics | 1–2 wk | Fresh machine: install app + panel, panel finds engine, gates on licence |
 | **M6** | Hardening: AE version matrix, colour/premult edge cases, docs, optional macOS | 2–3 wk | Documented supported-AE matrix all pass |
 
 Rough total: ~10–16 focused weeks. M0 proves the riskiest assumption (IPC +
@@ -342,7 +347,7 @@ timeline grab) fastest.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | AE can't headlessly render arbitrary layers | Blocks "grab clip" for comp'd layers | Use render-queue temp output; document limits; v1 supports straight footage + precomps |
-| UXP vs CEP fragmentation | Panel works on some AE versions only | Small API-shaped host script; ship UXP first, CEP fallback for older AE |
+| AE-version support breadth | Panel won't load on AE < 2024 | Locked to 2024+ UXP; keep the host script API-shaped so a CEP fallback can be added later |
 | Alpha/colour mismatch | Visible fringing or wrong gamma | Explicit straight-alpha + sRGB contract; premultiply toggle; golden-frame tests; warn on ACES |
 | Auto-subject picks wrong subject | User distrust | Confidence gate + "needs review" state; one-click Refine |
 | GPU contention / OOM with AE | Crashed renders | VRAM cap; `quality=fast` proxy; clear OOM hints |
@@ -368,15 +373,25 @@ timeline grab) fastest.
 
 ---
 
-## 14 · Open questions (need your call before M0)
+## 14 · Decisions
 
-1. **Minimum AE version** — decides UXP-first vs CEP-first (2024+ vs older).
-2. **Default mode** — Replace layer or Add as layer?
-3. **Pro-only?** — is the AE extension a Pro feature, or free with a watermark?
+**Locked**
+
+1. **Minimum AE version: 2024+**, built as a **UXP** panel. CEP fallback for
+   2020–2023 is deferred, not in v1.
+2. **Default mode: Replace layer**, with **Add as layer** one toggle away; the
+   choice is **persisted as a user setting**.
+3. **Licensing: Pro feature** — single-object free with watermark; multi-object,
+   >1080p and no-watermark require Pro (see §8).
+
+**Still open**
+
 4. **Platform** — Windows-only v1, or macOS at launch?
 5. **Scope of "background"** — characters only, or also objects/plates v1?
 6. **Multi-object v1** — single subject per run, or several?
 7. **Cold start** — is a one-time "warming up" wait acceptable on first use?
+8. **Panel placement** — docked in the standard AE workspace, or a floating
+   window? (UXP supports both.)
 
 ---
 
