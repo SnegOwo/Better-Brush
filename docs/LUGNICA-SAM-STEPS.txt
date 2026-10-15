@@ -1,0 +1,349 @@
+================================================================================
+ BETTER BRUSH  ->  "LUGNICA SAM"  :  COMPLETE FINE-TUNING STEPS
+ A full, copy-paste walkthrough. Follow top to bottom. Nothing is skipped.
+================================================================================
+
+WHAT YOU END UP WITH
+--------------------
+A file, checkpoints/custom/lugnica_sam_v1.pt, that Better Brush loads as a model
+called "Lugnica SAM", fine-tuned on YOUR anime/AMV corrections. It shows up in
+the AI Model dropdown like any built-in tier.
+
+TIME / COST
+-----------
+  Data building  : ~1-3 hours of clicking (spread over sessions, it appends).
+  Training       : ~1-4 hours on Colab (free T4) for a few hundred frames.
+  Cost           : free (Google Colab free tier) OR your own GPU power.
+  Disk on Drive  : ~1-5 GB for the dataset + the checkpoint.
+
+BASE SIZES (pick ONE; default is base_plus)
+-------------------------------------------
+  tiny        Hiera-T   fastest,  lowest quality   (preview only)
+  small       Hiera-S   fast,     good quality     (light laptops, quick runs)
+  base_plus   Hiera-B+  medium,   BEST value       <-- RECOMMENDED
+  large       Hiera-L   slow,     best quality     (24 GB cards only)
+
+  Your RTX 5060 Laptop has 8 GB. base_plus at 384 px fits. Start there.
+
+================================================================================
+ PART 1 - BUILD THE DATASET (in Better Brush, on your PC)
+================================================================================
+
+Goal: a folder called dataset/ full of frames you corrected.
+
+1.1  Open Better Brush, open a clip (Ctrl+O).
+
+1.2  Matte one character/object you care about using the normal tools:
+       - click a point on the subject to seed it
+       - "B" for the brush if it needs help
+       - propagate (track) across the frames
+       - fix the frames it gets wrong
+
+1.3  When a clip is in a state you are happy with, export it:
+       File  ->  Save Training Data...
+       Choose a folder. IMPORTANT: use the SAME folder every time, so all
+       clips accumulate into one dataset. Recommended:
+         C:\Projects\Better-Brush\Training-Date\dataset
+
+1.4  Repeat 1.1-1.3 over 5-20 DIFFERENT clips.
+
+WHICH CLIPS TO EXPORT
+---------------------
+  Export the frames you had to CORRECT. A mask the model already got right
+  teaches it nothing. The value is in your corrections.
+  Vary the material: cel shading, thick line art, soft shading, 3D anime,
+  close-ups, wides, crowds, hair, ribbons, glasses, hands, fast motion.
+
+HOW MUCH DATA
+-------------
+  Target: ~300-1000 corrected frames from 5-20 clips/shows.
+  500 frames from 10 shows BEATS 5000 frames from 1 clip (it overfits one
+  style fast).
+
+1.5  VERIFY the folder looks exactly like this:
+
+  dataset/
+    JPEGImages/<clipname>/000042.jpg        <- source frames
+    Annotations/<clipname>/0/000042.png     <- object 1's corrected mask
+    Annotations/<clipname>/1/000042.jpg     <- object 2's mask (only if multi)
+    ImageSets/train.txt                     <- one <clipname> per line
+
+  Quick check in PowerShell:
+
+    cd C:\Projects\Better-Brush\Training-Date\dataset
+    Get-Content .\ImageSets\train.txt
+    (Get-ChildItem .\JPEGImages -Recurse -File | Measure-Object).Count
+
+  The count = roughly how many frames you will train on.
+
+================================================================================
+ PART 2 - CHOOSE YOUR TRAINING ROUTE
+================================================================================
+
+  ROUTE A = Google Colab ............ RECOMMENDED (no local install, 16 GB T4)
+  ROUTE B = your own GPU ............ only if you want to iterate locally
+
+  Why Colab wins: your 8 GB card can run out of memory, and local training
+  locks up your machine. Colab trains unattended in a browser tab.
+
+  NOTE on local training: SAM 2's trainer needs Python 3.10-3.12. You have
+  Python 3.14, so ROUTE B needs a SEPARATE venv with Python 3.11. Colab
+  already has a good Python, which is one more reason to use ROUTE A.
+
+================================================================================
+ PART 3 - ROUTE A : TRAIN ON GOOGLE COLAB (recommended)
+================================================================================
+
+3.1  Zip your dataset (or just folder-upload it).
+       Zip the folder "dataset" so you get dataset.zip.
+
+3.2  Put it on Google Drive:
+       drive.google.com -> My Drive -> make a folder "BetterBrush"
+       -> upload dataset.zip -> right-click -> Extract here
+       -> delete the zip. Result must be:
+         My Drive/BetterBrush/dataset/JPEGImages/...
+         My Drive/BetterBrush/dataset/Annotations/...
+         My Drive/BetterBrush/dataset/ImageSets/train.txt
+
+3.3  Open the notebook:
+       colab.research.google.com -> Upload ->
+       tools/sam2_training/colab/BetterBrush_SAM2_Finetune.ipynb
+       (repo: C:\Projects\Better-Brush\tools\sam2_training\colab\)
+
+3.4  Set the runtime:
+       Runtime -> Change runtime type -> Hardware accelerator -> GPU -> Save
+       (a free "T4" is fine. "L4"/"A100" = Colab Pro = faster + bfloat16.)
+
+3.5  Run the cells top to bottom:
+       Cell 1  Check the GPU. Expect "T4" and "will use float16" on free tier.
+       Cell 2  Mounts Drive. Approve the popup when it appears.
+       Cell 3  Sets DATASET and BASE. Edit them if needed:
+                 DATASET = "/content/drive/MyDrive/BetterBrush/dataset"
+                 BASE    = "base_plus"
+       Cell 4  Upload helper files when prompted:
+                 anime_amv_colab.yaml
+                 sam2_colab_finetune.py
+               (both are in tools/sam2_training/colab/ on your PC)
+       Cell 5  PREPARE only (--no-train): clones SAM 2, installs it, downloads
+               the base checkpoint, writes the config. Watch for errors here
+               BEFORE you spend GPU time.
+       Cell 6  TRAIN. This is the long one.
+       Cell 7  Saves the newest checkpoint to
+               My Drive/BetterBrush/sam2_checkpoints/lugnica_sam_v1.pt
+
+3.6  WATCH IT LEARN (optional, second browser tab / Colab terminal):
+       Run:  tensorboard --logdir /content/sam2/sam2_logs --port 6006
+       "loss_mask" should fall, then flatten. 20 epochs is usually plenty.
+
+3.7  IF something to tune:
+       - Free T4 out of memory  -> cell 5: --resolution 320 --num-frames 2
+       - L4/A100 headroom       -> cell 5: --resolution 512 --num-frames 4
+       - Loss won't move        -> edit base_lr to 5e-5 in anime_amv_colab.yaml
+       - Masks drift per frame  -> edit base_lr to 1e-5 in anime_amv_colab.yaml
+       Keep the tab OPEN: free Colab kills idle sessions. The last cell saves
+       the checkpoint to Drive so a disconnect is not a disaster.
+
+3.8  ONE-COMMAND equivalent of cells 5+6 (if you prefer typing):
+       !python sam2_colab_finetune.py --dataset "$DATASET" --base "$BASE" \
+           --resolution 384 --num-frames 2
+     Useful flags:
+       --base tiny|small|base_plus|large   choose backbone (default base_plus)
+       --no-train                          prepare only, do not train
+       --epochs N                          override epochs
+       --amp-dtype bfloat16|float16        (auto-detected by default)
+       --workdir /content/sam2             where SAM 2 is cloned
+
+3.9  DONE with Colab -> continue to PART 5.
+
+================================================================================
+ PART 4 - ROUTE B : TRAIN ON YOUR OWN GPU (optional)
+================================================================================
+
+4.1  Make a Python 3.11 environment ONCE (do not use 3.14):
+       py -3.11 -m venv C:\venvs\sam2train
+       C:\venvs\sam2train\Scripts\activate
+
+4.2  Run the driver (it clones SAM 2, installs it, downloads the checkpoint,
+     writes the config, then trains). From the repo root:
+
+       cd C:\Projects\Better-Brush
+       python tools\sam2_training\colab\sam2_colab_finetune.py `
+           --dataset "C:\Projects\Better-Brush\Training-Date\dataset" `
+           --base base_plus --resolution 384 --num-frames 2 `
+           --workdir C:\sam2
+
+     (Backtick ` = PowerShell line-continuation; in cmd.exe use ^ instead.)
+
+     On one line (easiest, no continuation needed):
+       python tools\sam2_training\colab\sam2_colab_finetune.py --dataset "C:\Projects\Better-Brush\Training-Date\dataset" --base base_plus --resolution 384 --num-frames 2 --workdir C:\sam2
+
+4.3  Expect it to run for hours. Rough guide (batch 1, frozen encoder):
+       RTX 5060 Laptop 8 GB   384-448 px, num_frames 2-4
+       RTX 3060 12 GB         512 px,     num_frames 4
+       24 GB desktop          768-1024 px
+     If it OOMs: lower --resolution first, then --num-frames.
+
+4.4  Checkpoints land in:
+       C:\sam2\sam2_logs\<run>\checkpoints\
+     -> continue to PART 5 (skip the "download from Drive" bit).
+
+================================================================================
+ PART 5 - GET THE CHECKPOINT ONTO YOUR PC
+================================================================================
+
+5.1  Colab route: download
+       My Drive/BetterBrush/sam2_checkpoints/lugnica_sam_v1.pt
+     to e.g. your Downloads folder.
+
+5.2  Local route: the newest file in
+       C:\sam2\sam2_logs\<run>\checkpoints\
+
+5.3  Note WHICH base you trained (the BASE you used). You MUST pass the same
+     one when installing.
+
+================================================================================
+ PART 6 - INSTALL IT AS "LUGNICA SAM"
+================================================================================
+
+6.1  From the Better Brush repo root, ONE command:
+
+       cd C:\Projects\Better-Brush
+       python tools\sam2_training\install_lugnica.py "C:\Users\you\Downloads\lugnica_sam_v1.pt" --base base_plus
+
+     That copies the file to checkpoints\custom\lugnica_sam_v1.pt and writes
+     checkpoints\custom\sam2_custom.json with the label "Lugnica SAM".
+
+6.2  Nicer name / a small variant:
+
+       python tools\sam2_training\install_lugnica.py "C:\Users\you\Downloads\lugnica_sam_v1.pt" --base small --label "Lugnica SAM (small)" --name lugnica_sam_small_v1.pt
+
+     - --base MUST equal the base you trained. Wrong base = shape mismatch on
+       load (Better Brush reports "Unknown base config" or a load error).
+     - --label is what appears in the AI Model dropdown.
+     - --name is the file name inside checkpoints\custom\.
+
+6.3  The sidecar file it writes looks like this (for reference):
+
+       checkpoints\custom\sam2_custom.json
+       {
+         "checkpoint": "lugnica_sam_v1.pt",
+         "config": "sam2.1_hiera_b+.yaml",
+         "label": "Lugnica SAM"
+       }
+
+     config mapping:  tiny -> sam2.1_hiera_t.yaml | small -> sam2.1_hiera_s.yaml
+                      base_plus -> sam2.1_hiera_b+.yaml | large -> sam2.1_hiera_l.yaml
+
+6.4  Manual alternative (if you ever need it):
+       - copy your .pt into C:\Projects\Better-Brush\checkpoints\custom\
+       - create sam2_custom.json in that folder with the three keys above.
+
+================================================================================
+ PART 7 - USE LUGNICA SAM IN BETTER BRUSH
+================================================================================
+
+7.1  RESTART Better Brush (it reads the sidecar at startup).
+
+7.2  Open a clip -> AI Model dropdown -> choose "Lugnica SAM".
+
+7.3  Optional: per-shot control
+       Inspect -> Shot Profiles (Ctrl+Shift+P): pick Lugnica SAM for a shot
+       while leaving other shots on a built-in model.
+
+7.4  To go back to the stock model, either pick a built-in tier, or rename the
+     sidecar / point it at another checkpoint.
+
+================================================================================
+ PART 8 - IMPROVE IT (ROUND 2)
+================================================================================
+
+  The fastest win is ALWAYS more of your corrections, not more epochs.
+
+8.1  Export more fixed clips into the SAME dataset folder (append).
+
+8.2  Re-run PART 3 (or PART 4). It retrains on the bigger set.
+
+8.3  Validate honestly:
+       - Put one clip aside that you NEVER exported.
+       - Segment it with Lugnica SAM and compare before/after.
+       - That held-out clip is your real quality number.
+
+8.4  Knobs, in order of usefulness:
+       1) more/varied data
+       2) --resolution  (384 -> 448 -> 512): anime line art loves pixels
+       3) base_lr       2e-5 safe; 1e-5 if it drifts; 5e-5 if it's stuck
+       4) --epochs      ~20 is usually enough; more overfits
+       5) --base        small/base_plus/large as quality needs grow
+
+8.5  When you install an improved run, just re-run PART 6 with the new .pt.
+     Same --name overwrites "Lugnica SAM" in place.
+
+================================================================================
+ PART 9 - CONFIG REFERENCE (tools/sam2_training/colab/anime_amv_colab.yaml)
+================================================================================
+
+  scratch.resolution        input size (384 T4/8GB, 512-768 bigger GPUs)
+  scratch.num_frames        temporal length (2 on T4/8GB, 4 with headroom)
+  scratch.train_batch_size  keep 1
+  scratch.base_lr           learning rate (2e-5 default)
+  scratch.num_epochs        ~20
+  freeze_image_encoder      True = the big memory saver (keep True on 8GB)
+  optim.amp.amp_dtype       bfloat16 (Ampere+/L4/A100) or float16 (T4)
+  use_act_ckpt_iterative_pt_sampling   set True as a last resort for OOM
+
+  NOTE: lowering resolution does NOT require editing feat_sizes -- SAM 2's
+  RoPEAttention recomputes the rotary embeddings for the actual token count.
+
+================================================================================
+ PART 10 - TROUBLESHOOTING
+================================================================================
+
+  "CUDA out of memory"              -> lower --resolution first, then --num-frames
+  Colab killed / disconnected       -> keep the tab open; save to Drive often
+  Loss won't move                  -> more/varied data; try base_lr 5e-5
+  Masks drift across frames        -> base_lr 1e-5; export fix-frames
+  "No module named 'sam2'"          -> the pip install cell didn't finish
+  Model not in AI Model dropdown    -> restart app; check checkpoints\custom\sam2_custom.json
+  "Unknown base config ... "        -> install --base does not match training base
+  "Fine-tuned checkpoint not found" -> the .pt name in the sidecar must EXIST in the same folder
+  train.txt missing                 -> File > Save Training Data writes ImageSets\train.txt
+  Local install fails on Python 3.14-> use a Python 3.11 venv (PART 4.1) or Colab
+
+================================================================================
+ PART 11 - FINAL CHECKLIST
+================================================================================
+
+  [ ] dataset\ has JPEGImages, Annotations, ImageSets\train.txt
+  [ ] ~300-1000 corrected frames from 5-20 varied clips
+  [ ] chose a BASE (base_plus unless you know better)
+  [ ] training finished; newest checkpoint located
+  [ ] install_lugnica.py run with the SAME --base
+  [ ] checkpoints\custom\lugnica_sam_v1.pt + sam2_custom.json both present
+  [ ] restarted Better Brush; "Lugnica SAM" selectable in AI Model
+  [ ] validated on one held-out clip that was never exported
+
+================================================================================
+ PART 12 - COMMAND CHEAT SHEET
+================================================================================
+
+  Colab prepare+train:
+    python sam2_colab_finetune.py --dataset /content/drive/MyDrive/BetterBrush/dataset --base base_plus --resolution 384 --num-frames 2
+
+  Local prepare+train (PowerShell, Python 3.11 venv):
+    python tools\sam2_training\colab\sam2_colab_finetune.py --dataset "C:\Projects\Better-Brush\Training-Date\dataset" --base base_plus --resolution 384 --num-frames 2 --workdir C:\sam2
+
+  Install as Lugnica SAM:
+    python tools\sam2_training\install_lugnica.py "C:\Users\you\Downloads\lugnica_sam_v1.pt" --base base_plus
+
+  Full guides:
+    docs\LUGNICA-SAM.md      (short walkthrough)
+    docs\FINE-TUNING.md      (deep reference: per-GPU, LR, legal note)
+
+================================================================================
+ LEGAL
+================================================================================
+  The SAM 2 training code is Apache-2.0. A checkpoint you fine-tune yourself is
+  yours to license. Do NOT train on third-party anime mask datasets you download
+  (usually research-licensed, built from copyrighted art). Building the set from
+  your own corrections keeps provenance clean.
+================================================================================

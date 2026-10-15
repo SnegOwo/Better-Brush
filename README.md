@@ -116,6 +116,7 @@ account, no server, no telemetry. [Get Pro →](https://sneg.dev/BetterBrush)
 | [Complete Feature Reference](docs/COMPLETE-FEATURES.md) | Every feature and system, in depth |
 | [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
 | [Fine-tuning](docs/FINE-TUNING.md) · [Build Lugnica SAM](docs/LUGNICA-SAM.md) · [Colab Kit](tools/sam2_training/colab/README.md) | Train your own model |
+| [After Effects plan](docs/AFTER-EFFECTS-EXTENSION-PLAN.md) | Plan only: one-click background removal inside AE |
 | [Audit Report](docs/AUDIT-REPORT.md) · [Roadmap](docs/ROADMAP-IDEAS.md) | Recent fixes · backlog |
 
 Format support, keyboard shortcuts, troubleshooting and the FAQ live in the

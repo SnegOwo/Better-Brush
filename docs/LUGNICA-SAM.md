@@ -220,5 +220,6 @@ are intentional (they cross your PC ↔ Colab boundary).
 | `tools/sam2_training/colab/sam2_colab_finetune.py` | The driver (`--base`, `--resolution`, `--no-train`, …) |
 | `tools/sam2_training/colab/anime_amv_colab.yaml` | Colab-tuned training recipe |
 | `tools/sam2_training/install_lugnica.py` | Installs a checkpoint as "Lugnica SAM" |
+| [`LUGNICA-SAM-STEPS.txt`](LUGNICA-SAM-STEPS.txt) | The same steps as a single detailed `.txt` checklist |
 | [`FINE-TUNING.md`](FINE-TUNING.md) | Full reference: per-GPU settings, LR, legal note |
 | [`tools/sam2_training/colab/README.md`](../tools/sam2_training/colab/README.md) | Colab-specific details and troubleshooting |
