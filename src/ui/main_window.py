@@ -73,6 +73,8 @@ from src.processing.inference_worker import (
     RemovalWorker,
     SceneCutWorker,
 )
+from src.processing.letterbox import Letterbox, detect_letterbox_sequence
+from src.processing.line_prior import extract_lines
 from src.processing.mask_refine import erode_mask
 from src.processing.mask_selection import (
     choose_prompt_mask_index,
@@ -3769,6 +3771,7 @@ class MainWindow(QMainWindow):
             self._scene_cuts = []
             self._timeline.set_scene_cuts([])
             self._update_cut_label()
+            self._letterbox = Letterbox()
             self._video_reader = VideoReader(path)
             self._frame_buffer = FrameBuffer(self._video_reader)
             self._current_frame_idx = 0
@@ -3780,6 +3783,7 @@ class MainWindow(QMainWindow):
             self._timeline.set_keyframes(set())
             self._timeline.clear_selection()
             self._show_current_frame()
+            self._detect_letterbox()
             self._project_path = None
             self._project_dirty = False
             self._brush_stroke_active = False
@@ -3788,15 +3792,45 @@ class MainWindow(QMainWindow):
             self._update_auto_save_timer()
             self._set_window_title(f"Better Brush - {path.name}")
             self._refresh_context()
+            bars = ""
+            if self._letterbox.active:
+                bars = (
+                    f" - black bars T{self._letterbox.top}/B{self._letterbox.bottom}"
+                    f"/L{self._letterbox.left}/R{self._letterbox.right}"
+                )
             self._status.showMessage(
                 f"Loaded {path.name} - {self._video_reader.width}x{self._video_reader.height} "
-                f"@ {self._video_reader.fps:.2f} fps"
+                f"@ {self._video_reader.fps:.2f} fps{bars}"
             )
             if self._cuts_detect_on_import:
                 self._start_scene_detection()
         except Exception as exc:  # noqa: BLE001 - shown to the user in the dialog below
             logger.error("Failed to load video: %s", exc)
             QMessageBox.critical(self, "Error", f"Cannot load video:\n{exc}")
+
+    def _detect_letterbox(self) -> None:
+        """Detect baked-in black bars and remember them for the session.
+
+        Bars are common in anime/AMV sources (pillarboxed 4:3 masters,
+        letterboxed prints).  Detection is informational here - it never crops
+        anything on its own - but it lets the app tell the user why so much of
+        the frame is dead space, and gives later features a crop box to use.
+        """
+        self._letterbox = Letterbox()
+        if self._video_reader is None or self._frame_buffer is None:
+            return
+        total = max(1, int(self._video_reader.total_frames))
+        sample_indices = sorted({0, total // 2, max(0, total - 1)})
+        frames = []
+        for idx in sample_indices:
+            frame = self._frame_buffer.get(idx)
+            if frame is not None:
+                frames.append(frame)
+        if not frames:
+            return
+        self._letterbox = detect_letterbox_sequence(frames)
+        if self._letterbox.active:
+            logger.info("Black bars detected: %s", self._letterbox.to_dict())
 
     # ──────────────────────────────────────────────────────────────────────
     # Frame navigation
@@ -4081,17 +4115,27 @@ class MainWindow(QMainWindow):
         if results:
             masks = [item.mask for item in results]
             scores = [item.score for item in results]
-            index = choose_prompt_mask_index(masks, scores, self._points)
-            best = results[index]
-            selected_mask = best.mask
+            frame = None
             if self._frame_buffer is not None:
                 frame = self._frame_buffer.get(self._current_frame_idx)
-                if frame is not None:
-                    selected_mask = trim_prompt_background(
-                        frame,
-                        selected_mask,
-                        self._points,
-                    )
+            # On anime content, extract the line art so candidate selection can
+            # reject masks that follow background contours the user never
+            # pointed at (the classic "it grabbed the fence" failure).
+            lines = (
+                extract_lines(frame)
+                if frame is not None
+                and self._config.content_profile == ContentProfile.ANIME
+                else None
+            )
+            index = choose_prompt_mask_index(masks, scores, self._points, lines=lines)
+            best = results[index]
+            selected_mask = best.mask
+            if frame is not None:
+                selected_mask = trim_prompt_background(
+                    frame,
+                    selected_mask,
+                    self._points,
+                )
             self._masks[self._current_frame_idx] = selected_mask
             self._keyframes.add(self._current_frame_idx)
             self._mark_dirty()
@@ -4350,6 +4394,10 @@ class MainWindow(QMainWindow):
             temporal_window=1,
             profile_resolver=profile_for_frame,
             prompt_points=list(self._points),
+            # Anime: reuse held cels verbatim (kills boiling, skips wasted work)
+            # and lock the final edges onto the line art.
+            cel_hold=self._config.content_profile == ContentProfile.ANIME,
+            line_lock=self._config.content_profile == ContentProfile.ANIME,
             parent=self,
         )
         self._post_worker.progress.connect(self._on_worker_progress)

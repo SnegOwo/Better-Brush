@@ -31,6 +31,7 @@
 23. [Troubleshooting](#23-troubleshooting)
 24. [Architecture overview](#24-architecture-overview)
 25. [Technical guardrails](#25-technical-guardrails)
+26. [Anime & AMV engine](#26-anime--amv-engine)
 
 ---
 
@@ -122,6 +123,8 @@ The content preset changes how the SAM 2 decoder evaluates candidate masks:
 | **Human** | Faces, hair, skin detail |
 | **Object** | General-purpose, safe starting point |
 
+When the preset is **Anime / AMV**, segmentation also extracts the frame's line art and penalises candidate masks that swallow background line art the user never pointed at. See [§26](#26-anime--amv-engine).
+
 ---
 
 ## 5. Propagation
@@ -146,6 +149,8 @@ Propagation carries a keyframe matte forward (or backward) through the clip.
 - Propagation stops at a cut — it never crosses a scene boundary.
 - A cut also gives the shot-profile system a clear processing boundary, preventing flicker from leaking between edits.
 - You can add cuts manually even when the shot doesn't change — this is useful for organising processing.
+
+On **Anime / AMV**, post-processing additionally reuses masks verbatim across **held cels** (frames that are the same drawing on 2s/3s), which removes boiling and skips wasted work. See [§26](#26-anime--amv-engine).
 
 ### Timeline export range
 
@@ -196,6 +201,8 @@ Uses a **guided filter** to smooth the matte boundary while preserving edges. Th
 ### Temporal smoothing
 
 Uses **Farneback optical flow** to align neighbouring masks with the current frame, then applies majority voting only near the contour. Stable interiors are not blurred.
+
+On **Anime / AMV**, two extra passes run in this stage: **cel hold** copies the previous mask verbatim across held drawings (so the contour cannot boil), and **line lock** snaps the refined contour onto the frame's line art immediately before export-time edge finishing. See [§26](#26-anime--amv-engine).
 
 ### Global settings
 
@@ -735,6 +742,56 @@ These rules keep the codebase safe and maintainable:
 - **Always emit completion on every exit path** — a worker that returns silently leaves the caller waiting forever.
 - **Always restore window state before branching on the result** — a handler that returns early on the error path leaves the window permanently disabled.
 - **`QWidget.setEnabled(False)` cascades to child widgets** — dialogs that must stay interactive need explicit re-enabling.
+
+---
+
+## 26. Anime & AMV engine
+
+Four features exist specifically for cel-shaded anime and AMV sources. They run
+automatically when the content preset is **Anime / AMV**; switching to **Human**
+or **Object** disables the two that change masks. The full write-up lives in the
+[Anime & AMV Engine guide](ANIME-AMV.md).
+
+### Line lock (line-art prior)
+
+Anime is drawn with line art, and the character outline and background line art
+are the *same* black lines. Line lock extracts the line art and (1) penalises
+candidate masks that swallow line-art components the user never pointed at, and
+(2) snaps the refined contour onto the nearest line. It is a no-op when the
+contour does not already overlap line art, so it is safe on photographic
+footage.
+
+**Module:** `src/processing/line_prior.py`
+
+### Cel hold (anti-boiling)
+
+Anime cels are held on 2s/3s, so long stretches are the same drawing. A
+frame-by-frame tracker re-solves anyway and the contour *boils*. Cel hold detects
+held frames from the source (downscaled signature match) and copies the previous
+mask **verbatim**, making boiling zero by construction and skipping wasted
+inference.
+
+**Module:** `src/processing/cel_hold.py`
+
+### Letterbox / pillarbox detection
+
+On import the clip is sampled for baked-in black bars (pillarboxed 4:3 masters,
+letterboxed prints) and reported in the status bar. It is conservative — a
+uniformly dark frame is not a letterbox, the crop is capped, and the smallest
+bar across frames wins — and it never crops on its own. `crop_frame`,
+`crop_mask` and `embed_mask` expose the box.
+
+**Module:** `src/processing/letterbox.py`
+
+### Anime QC metrics
+
+`boiling_score` measures contour change **only on held pairs** (where any change
+is wrong, so real motion is never counted); `line_support` and
+`background_line_ratio` measure whether the contour rides the pencil line and how
+much background line art it swallowed. `suggest_keyframes` flags the frames where
+the contour moves on a held cel.
+
+**Module:** `src/processing/anime_qc.py`
 
 ---
 

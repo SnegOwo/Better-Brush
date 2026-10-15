@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from src.models.sam2_manager import PointPrompt
+from src.processing.line_prior import background_line_penalty
 
 
 def prompt_consistency(
@@ -70,22 +71,40 @@ def choose_prompt_mask_index(
     masks: Sequence[np.ndarray],
     scores: Sequence[float],
     points: Sequence[PointPrompt],
+    *,
+    lines: np.ndarray | None = None,
+    line_penalty_weight: float = 2.0,
 ) -> int:
     """Choose the best candidate that honors positive and negative points.
 
     A raw SAM score alone can prefer a broad mask that includes the sky. We
     first prefer candidates containing every positive point and no negative
     point, then fall back to the least-violating candidate.
+
+    Args:
+        masks: Candidate masks.
+        scores: Per-candidate confidence scores.
+        points: User prompt points.
+        lines: Optional line-art mask (see
+            :func:`src.processing.line_prior.extract_lines`).  When supplied,
+            candidates that swallow line art the user never pointed at are
+            penalised - the classic anime failure where the mask follows a
+            background contour.
+        line_penalty_weight: How strongly background line art is penalised.
     """
     if not masks:
         raise ValueError("at least one mask candidate is required")
     count = min(len(masks), len(scores))
     if count == 0:
         raise ValueError("mask candidates and scores cannot be empty")
-    ranked: list[tuple[int, float, float, int, float]] = []
+    ranked: list[tuple[int, float, float, int, float, float]] = []
     for index in range(count):
         consistency, missed, hits = prompt_consistency(masks[index], points)
         spread_penalty = _positive_spread_penalty(masks[index], points)
+        if lines is not None:
+            line_penalty = background_line_penalty(masks[index], lines, points)
+        else:
+            line_penalty = 0.0
         ranked.append(
             (
                 index,
@@ -93,11 +112,20 @@ def choose_prompt_mask_index(
                 float(scores[index]),
                 missed * 10 + hits * 20,
                 spread_penalty,
+                line_penalty,
             )
         )
     consistent = [item for item in ranked if item[3] == 0]
     pool = consistent or ranked
-    return max(pool, key=lambda item: (item[1], item[2] - item[4] * 1.5, item[2], -item[0]))[0]
+    return max(
+        pool,
+        key=lambda item: (
+            item[1],
+            item[2] - item[4] * 1.5 - item[5] * line_penalty_weight,
+            item[2],
+            -item[0],
+        ),
+    )[0]
 
 
 def trim_prompt_background(

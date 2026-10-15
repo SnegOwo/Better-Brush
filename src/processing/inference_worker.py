@@ -454,6 +454,8 @@ class PostProcessWorker(QThread):
         temporal_window: int = 1,
         profile_resolver: Callable[[int], Any] | None = None,
         prompt_points: Sequence[PointPrompt] | None = None,
+        cel_hold: bool = False,
+        line_lock: bool = False,
         parent: Any | None = None,
     ) -> None:
         super().__init__(parent)
@@ -466,6 +468,8 @@ class PostProcessWorker(QThread):
         self._mask_inset = mask_inset
         self._temporal_window = temporal_window
         self._prompt_points = list(prompt_points or [])
+        self._cel_hold = bool(cel_hold)
+        self._line_lock = bool(line_lock)
         self._cancel = threading.Event()
         # Normalise the resolver once, here, instead of trusting a positional
         # tuple contract at the point of use.  A wrong arity used to be
@@ -500,6 +504,14 @@ class PostProcessWorker(QThread):
                 idxs = sorted(result)
                 for idx in idxs:
                     result[idx] = fill_mask_holes(result[idx])
+
+            if self._cel_hold:
+                from src.processing.cel_hold import apply_cel_hold
+
+                # Held cels reuse the previous mask verbatim: on an anime hold
+                # the drawing has not changed, so any difference is boiling.
+                self.progress.emit("Reusing held cels", 0, 0)
+                result = apply_cel_hold(result, frames).masks
 
             if self._temporal_smooth:
                 from src.processing.temporal_smooth import temporal_smooth_masks
@@ -569,6 +581,23 @@ class PostProcessWorker(QThread):
                             detail_preservation=detail,
                             mask_inset=inset,
                         )
+
+            if self._line_lock:
+                from src.processing.line_prior import snap_to_anime_lines
+
+                # After refinement the edge is smooth but may float off the
+                # pencil line; snap it back onto the line art.
+                idxs = sorted(result)
+                total = len(idxs)
+                for k, idx in enumerate(idxs):
+                    if self._cancel.is_set():
+                        break
+                    self.progress.emit("Locking edges to line art", k + 1, total)
+                    frame = frames.get(idx)
+                    if frame is None:
+                        frame = self._frame_loader(idx)
+                    if frame is not None:
+                        result[idx] = snap_to_anime_lines(result[idx], frame)
 
             if any(point.label == 0 for point in self._prompt_points):
                 idxs = sorted(result)

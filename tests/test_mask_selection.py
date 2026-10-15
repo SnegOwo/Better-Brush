@@ -169,3 +169,67 @@ def test_postprocess_failure_is_reported_not_swallowed() -> None:
     result = _run_postprocess(explode)
     assert isinstance(result, RuntimeError)
     assert str(result) == "boom"
+
+
+# ------------------------------------------------------------------ #
+# Anime line-art prior and cel-hold integration                       #
+# ------------------------------------------------------------------ #
+def test_line_prior_can_flip_mask_selection_off_background_lines() -> None:
+    import cv2
+
+    from src.processing.line_prior import extract_lines
+
+    frame = np.full((120, 140, 3), 255, dtype=np.uint8)
+    cv2.rectangle(frame, (10, 10), (40, 40), (0, 0, 0), 1)  # subject outline
+    cv2.rectangle(frame, (60, 50), (130, 110), (0, 0, 0), 1)  # background
+    lines = extract_lines(frame)
+    points = [PointPrompt(10, 25, 1)]
+
+    clean = np.zeros((120, 140), dtype=bool)
+    clean[10:41, 10:41] = True
+    greedy = clean.copy()
+    greedy[50:111, 60:131] = True  # also swallows the background line art
+
+    # Higher raw score wins without the prior...
+    assert choose_prompt_mask_index([greedy, clean], [0.9, 0.4], points) == 0
+    # ...and the line-art penalty flips it to the clean candidate.
+    assert (
+        choose_prompt_mask_index(
+            [greedy, clean],
+            [0.9, 0.4],
+            points,
+            lines=lines,
+            line_penalty_weight=10.0,
+        )
+        == 1
+    )
+
+
+def test_postprocess_worker_reuses_held_cel_masks() -> None:
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    held = np.random.default_rng(11).integers(0, 255, (32, 32, 3), dtype=np.uint8)
+    frames = {0: held, 1: held.copy(), 2: held.copy()}
+    m0 = np.zeros((32, 32), dtype=bool)
+    m0[2:30, 2:30] = True
+    m1 = np.zeros((32, 32), dtype=bool)
+    m1[8:20, 8:20] = True
+    m2 = np.zeros((32, 32), dtype=bool)
+    m2[5:15, 5:15] = True
+
+    received: list[object] = []
+    worker = PostProcessWorker(
+        lambda i: frames.get(i),
+        {0: m0, 1: m1, 2: m2},
+        refine_edges=False,
+        temporal_smooth=False,
+        cel_hold=True,
+    )
+    worker.finished.connect(received.append)
+    worker.run()
+
+    assert received
+    result = received[0]
+    assert not isinstance(result, Exception)
+    # Every held frame reuses frame 0's mask verbatim.
+    np.testing.assert_array_equal(result[1], m0)
+    np.testing.assert_array_equal(result[2], m0)
