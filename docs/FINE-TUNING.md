@@ -6,6 +6,10 @@ loop" idea Meta used to build SAM 2 itself: Better Brush makes the masks, you
 fix them, Better Brush exports them, the official SAM 2 trainer learns from
 your corrections.
 
+> **In a hurry?** [`LUGNICA-SAM.md`](LUGNICA-SAM.md) is the short, opinionated
+> step-by-step (which base to pick, Colab vs local, and installing the result as
+> **Lugnica SAM**). This page is the full reference.
+
 > **Why not just use a sharper prompt?** The Anime/AMV content preset only
 > tunes the decoder thresholds of the stock model. A fine-tune changes the
 > weights themselves — it learns what an anime character *is* (flat cel
@@ -78,6 +82,21 @@ TensorBoard (optional): `tensorboard --logdir sam2_logs/<run>/tensorboard`.
 
 ### 6 — Use the result
 
+One command installs the checkpoint and writes the sidecar for you (run it on
+the machine that runs Better Brush):
+
+```bash
+python tools/sam2_training/install_lugnica.py sam2_logs/.../checkpoints/checkpoint.pt \
+    --base base_plus --label "Lugnica SAM"
+```
+
+`--base` must match the size you trained on (`tiny`, `small`, `base_plus`,
+`large`) so the sidecar's `config` line names the right architecture. See
+[`LUGNICA-SAM.md`](LUGNICA-SAM.md) for the full walkthrough.
+
+<details>
+<summary>Doing it by hand instead</summary>
+
 ```bash
 mkdir -p <Better-Brush>/checkpoints/custom
 cp sam2_logs/.../checkpoints/checkpoint.pt \
@@ -90,6 +109,8 @@ cat > <Better-Brush>/checkpoints/custom/sam2_custom.json <<'JSON'
 }
 JSON
 ```
+
+</details>
 
 Restart Better Brush — the model appears in the **AI Model** dropdown under
 that label and can be selected per shot from the Shot Profile dialog like any
@@ -118,15 +139,18 @@ Quick start:
 3. Run the cells. The driver **auto-detects the GPU**: `float16` on a T4 (no
    bfloat16), `bfloat16` on an L4/A100. On the free T4 it trains at
    `resolution 384`, `num_frames 2`; on an L4/A100 try `512–768` / `4`.
-4. The last cell copies the checkpoint to Drive; install it exactly as in
+4. The last cell copies the checkpoint to Drive; install it in one command as in
    [step 6](#6--use-the-result) above.
 
 Command-line equivalent:
 
 ```bash
 python sam2_colab_finetune.py --dataset /content/drive/MyDrive/BetterBrush/dataset \
-    --resolution 384 --num-frames 2
+    --base base_plus --resolution 384 --num-frames 2
 ```
+
+`--base tiny|small|base_plus|large` picks which SAM 2.1 size to fine-tune and
+swaps the architecture + starting checkpoint to match (default `base_plus`).
 
 > **Lowering `resolution` does not require touching `feat_sizes`.** SAM 2's
 > `RoPEAttention` recomputes its rotary embeddings whenever the token count

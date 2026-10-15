@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/version-0.3.0-blueviolet" alt="Version 0.3.0" />
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python: 3.11+" />
-  <img src="https://img.shields.io/badge/tests-405%20passing-brightgreen" alt="Tests: 405 passing" />
+  <img src="https://img.shields.io/badge/tests-420%20passing-brightgreen" alt="Tests: 420 passing" />
 </p>
 
 <p align="center"><b>100% local.</b> Your footage never leaves your machine.</p>
@@ -87,9 +87,12 @@ checkpoint at any time. Open **Help → Quick Tutorial** for a guided tour in-ap
 ## Fine-tune your own anime SAM 2
 
 Better Brush is the data engine for a custom model: the app proposes masks, you correct
-the ones it gets wrong, and those corrections become the training set.
+the ones it gets wrong, and those corrections become the training set. A full walkthrough
+that names the result **Lugnica SAM** lives in
+**[docs/LUGNICA-SAM.md](docs/LUGNICA-SAM.md)**.
 
 - **[Fine-tuning guide](docs/FINE-TUNING.md)** — the full recipe and per-GPU settings.
+- **[Build Lugnica SAM](docs/LUGNICA-SAM.md)** — the simple, opinionated step-by-step.
 - **[Colab kit](tools/sam2_training/colab/README.md)** — train in the browser on a free
   T4 (or L4/A100), no local GPU needed.
 
@@ -112,7 +115,7 @@ account, no server, no telemetry. [Get Pro →](https://sneg.dev/BetterBrush)
 | [Anime & AMV Engine](docs/ANIME-AMV.md) | Line lock, cel hold, letterbox, anime QC |
 | [Complete Feature Reference](docs/COMPLETE-FEATURES.md) | Every feature and system, in depth |
 | [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
-| [Fine-tuning](docs/FINE-TUNING.md) · [Colab Kit](tools/sam2_training/colab/README.md) | Train your own model |
+| [Fine-tuning](docs/FINE-TUNING.md) · [Build Lugnica SAM](docs/LUGNICA-SAM.md) · [Colab Kit](tools/sam2_training/colab/README.md) | Train your own model |
 | [Audit Report](docs/AUDIT-REPORT.md) · [Roadmap](docs/ROADMAP-IDEAS.md) | Recent fixes · backlog |
 
 Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
@@ -121,7 +124,7 @@ Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
 ## Development
 
 ```bash
-python -m pytest tests/ -q                    # 405 tests, no GPU required
+python -m pytest tests/ -q                    # 420 tests, no GPU required
 python -m ruff check src/                      # lint
 pyinstaller --clean better_brush.spec          # developer build
 ```

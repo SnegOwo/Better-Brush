@@ -28,11 +28,72 @@ import subprocess
 import sys
 from pathlib import Path
 
-#: Official SAM 2 repository and the single checkpoint this recipe starts from.
+#: Official SAM 2 repository.
 REPO_URL = "https://github.com/facebookresearch/sam2.git"
-CKPT_URL = (
-    "https://dl.fbaipublicfiles.com/segment_anything_2/092824/"
-    "sam2.1_hiera_base_plus.pt"
+_CKPT_BASE = "https://dl.fbaipublicfiles.com/segment_anything_2/092824/"
+CKPT_URL = f"{_CKPT_BASE}sam2.1_hiera_base_plus.pt"
+
+#: Per-size architecture. SAM 2.1's four Hiera sizes differ only in a handful of
+#: fields, and ``anime_amv_colab.yaml`` is written for Base+.  Switching the base
+#: means swapping the starting checkpoint *and* exactly these fields, so the
+#: trained checkpoint always matches the architecture it was initialised from.
+#: Values mirror ``sam2/configs/sam2.1/sam2.1_hiera_{t,s,b+,l}.yaml`` upstream.
+#: ``stages``/``global_att_blocks``/``window`` are ``None`` for Base+ because its
+#: values are the ``Hiera`` constructor defaults, which the template inherits.
+_BASE_SPECS: dict[str, dict[str, object]] = {
+    "tiny": {
+        "embed_dim": 96,
+        "num_heads": 1,
+        "stages": "[1, 2, 7, 2]",
+        "global_att_blocks": "[5, 7, 9]",
+        "window": "[7, 7]",
+        "window_spec": None,
+        "channel_list": "[768, 384, 192, 96]",
+        "checkpoint": "sam2.1_hiera_tiny.pt",
+    },
+    "small": {
+        "embed_dim": 96,
+        "num_heads": 1,
+        "stages": "[1, 2, 11, 2]",
+        "global_att_blocks": "[7, 10, 13]",
+        "window": "[7, 7]",
+        "window_spec": None,
+        "channel_list": "[768, 384, 192, 96]",
+        "checkpoint": "sam2.1_hiera_small.pt",
+    },
+    "base_plus": {
+        "embed_dim": 112,
+        "num_heads": 2,
+        "stages": None,
+        "global_att_blocks": None,
+        "window": None,
+        "window_spec": None,
+        "channel_list": "[896, 448, 224, 112]",
+        "checkpoint": "sam2.1_hiera_base_plus.pt",
+    },
+    "large": {
+        "embed_dim": 144,
+        "num_heads": 2,
+        "stages": "[2, 6, 36, 4]",
+        "global_att_blocks": "[23, 33, 43]",
+        "window": "[7, 7]",
+        "window_spec": "[8, 4, 16, 8]",
+        "channel_list": "[1152, 576, 288, 144]",
+        "checkpoint": "sam2.1_hiera_large.pt",
+    },
+}
+
+#: Backbone used when ``--base`` is not given.
+DEFAULT_BASE = "base_plus"
+
+#: The exact Base+ Hiera block in ``anime_amv_colab.yaml``.  Kept as a literal so
+#: ``_apply_base`` can swap it for another size without a YAML parser.
+_OLD_TRUNK = (
+    "      trunk:\n"
+    "        _target_: sam2.modeling.backbones.hieradet.Hiera\n"
+    "        embed_dim: 112\n"
+    "        num_heads: 2\n"
+    "        drop_path_rate: 0.0\n"
 )
 
 #: Where Colab usually keeps things.
@@ -119,6 +180,62 @@ def download_checkpoint(repo: Path = DEFAULT_WORKDIR, url: str = CKPT_URL) -> Pa
     return dest
 
 
+def checkpoint_url(base: str = DEFAULT_BASE) -> str:
+    """Official download URL for the starting checkpoint of *base*."""
+    return _CKPT_BASE + str(_BASE_SPECS[base]["checkpoint"])
+
+
+def _apply_base(text: str, base: str = DEFAULT_BASE) -> str:
+    """Swap the template's Base+ Hiera block for *base*'s architecture.
+
+    The trained checkpoint must be initialised from — and match the shape of —
+    the same base it was trained on, so the trunk fields and ``checkpoint_path``
+    move together.  Values come from the upstream ``sam2.1_hiera_<size>.yaml``
+    configs.  ``base_plus`` reproduces the template byte-for-byte, so the
+    default path is unchanged.
+    """
+    if base not in _BASE_SPECS:
+        raise ValueError(
+            f"unknown base {base!r}; expected one of {sorted(_BASE_SPECS)}"
+        )
+    spec = _BASE_SPECS[base]
+    trunk = [
+        "      trunk:",
+        "        _target_: sam2.modeling.backbones.hieradet.Hiera",
+        f"        embed_dim: {spec['embed_dim']}",
+        f"        num_heads: {spec['num_heads']}",
+    ]
+    if spec["stages"] is not None:
+        trunk.append(f"        stages: {spec['stages']}")
+        trunk.append(f"        global_att_blocks: {spec['global_att_blocks']}")
+    if spec["window"] is not None:
+        trunk.append(f"        window_pos_embed_bkg_spatial_size: {spec['window']}")
+    if spec["window_spec"] is not None:
+        trunk.append(f"        window_spec: {spec['window_spec']}")
+    trunk.append("        drop_path_rate: 0.0")
+    if _OLD_TRUNK not in text:
+        raise ValueError(
+            "config template trunk block not found — was anime_amv_colab.yaml "
+            "edited? _apply_base anchors on the Base+ Hiera block."
+        )
+    text = text.replace(_OLD_TRUNK, "\n".join(trunk) + "\n", 1)
+    text = re.sub(
+        r"^(\s*backbone_channel_list:\s*)\S.*$",
+        lambda mo: mo.group(1) + str(spec["channel_list"]),
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r"^(\s*checkpoint_path:\s*)\S.*$",
+        lambda mo: mo.group(1) + f"./checkpoints/{spec['checkpoint']}",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    return text
+
+
 def _patch_config(
     text: str,
     dataset_root: Path,
@@ -169,6 +286,7 @@ def write_config(
     epochs: int | None = None,
     num_workers: int = 2,
     name: str = "anime_amv_colab",
+    base: str = DEFAULT_BASE,
 ) -> Path:
     """Write the Colab config into the repo's ``configs/sam2.1_training``."""
     repo = Path(repo)
@@ -180,7 +298,8 @@ def write_config(
         )
     if amp_dtype is None:
         amp_dtype = detect_amp_dtype()
-    text = CONFIG_TEMPLATE.read_text(encoding="utf-8")
+    text = CONFIG_TEMPLATE.read_text(encoding="utf-8").replace("\r\n", "\n")
+    text = _apply_base(text, base)
     text = _patch_config(
         text,
         dataset_root,
@@ -193,8 +312,8 @@ def write_config(
     dest = repo / "configs" / "sam2.1_training" / f"{name}.yaml"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text, encoding="utf-8")
-    _log(f"wrote config: {dest}  (amp_dtype={amp_dtype}, {resolution}px, "
-         f"{num_frames} frames)")
+    _log(f"wrote config: {dest}  (base={base}, amp_dtype={amp_dtype}, "
+         f"{resolution}px, {num_frames} frames)")
     return dest
 
 
@@ -235,6 +354,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--workdir", type=Path, default=DEFAULT_WORKDIR)
+    parser.add_argument(
+        "--base",
+        choices=sorted(_BASE_SPECS),
+        default=DEFAULT_BASE,
+        help="SAM 2.1 backbone to fine-tune (default: %(default)s)",
+    )
     parser.add_argument("--resolution", type=int, default=384)
     parser.add_argument("--num-frames", type=int, default=2)
     parser.add_argument("--epochs", type=int, default=None)
@@ -251,8 +376,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     _log(f"GPU: {detect_gpu_name()}  |  amp_dtype -> {args.amp_dtype or detect_amp_dtype()}")
+    _log(f"base: {args.base}  ({_BASE_SPECS[args.base]['checkpoint']})")
     repo = clone_and_install(args.workdir, install=not args.skip_install)
-    download_checkpoint(repo)
+    download_checkpoint(repo, checkpoint_url(args.base))
     config = write_config(
         repo,
         args.dataset,
@@ -261,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
         amp_dtype=args.amp_dtype,
         epochs=args.epochs,
         num_workers=args.num_workers,
+        base=args.base,
     )
     if args.no_train:
         _log("--no-train set; stopping before training.")
@@ -272,9 +399,11 @@ def main(argv: list[str] | None = None) -> int:
         for path in saved[:5]:
             _log(f"  {path}")
         _log(
-            "\nCopy the newest one to Better Brush as "
-            "checkpoints/custom/anime_amv_v1.pt and add sam2_custom.json "
-            "(see docs/FINE-TUNING.md)."
+            "\nDownload the newest one, then install it on the machine that runs "
+            "Better Brush with:\n"
+            f"  python tools/sam2_training/install_lugnica.py <downloaded.pt> "
+            f"--base {args.base} --label \"Lugnica SAM\"\n"
+            "It lands in checkpoints/custom/ and shows up in AI Model."
         )
     return 0
 

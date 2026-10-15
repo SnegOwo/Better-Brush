@@ -1,8 +1,11 @@
 # Fine-tune SAM 2.1 for anime / AMV on Google Colab
 
-Train a **SAM 2.1 Base+** checkpoint on the masks you corrected in Better Brush,
-entirely in the browser — no local GPU needed. This folder is the Colab edition
-of the recipe in [`../../docs/FINE-TUNING.md`](../../../docs/FINE-TUNING.md).
+Train a **SAM 2.1** checkpoint on the masks you corrected in Better Brush,
+entirely in the browser — no local GPU needed. Base+ is the default, but
+`--base tiny|small|base_plus|large` switches size. This folder is the Colab
+edition of the recipe in [`../../docs/FINE-TUNING.md`](../../../docs/FINE-TUNING.md);
+the plain-language walkthrough (and how to install the result as **"Lugnica
+SAM"**) is [`../../docs/LUGNICA-SAM.md`](../../../docs/LUGNICA-SAM.md).
 
 ```
 colab/
@@ -10,6 +13,7 @@ colab/
   sam2_colab_finetune.py            # the driver: clone / install / config / train
   anime_amv_colab.yaml              # Colab-tuned training recipe
   README.md                         # this file
+../install_lugnica.py               # installs the result into checkpoints/custom
 ```
 
 > The workflow is Meta's "model in the loop": Better Brush proposes masks, you
@@ -63,8 +67,8 @@ Two easy options — either is fine:
    folder).
 
 The first cell checks the GPU, then the notebook clones SAM 2, installs the
-training extras, downloads only the Base+ checkpoint, writes the config and
-starts training.
+training extras, downloads only the chosen base checkpoint (Base+ by default),
+writes the config and starts training.
 
 ### Prefer the command line?
 
@@ -73,11 +77,11 @@ starts training.
 ```bash
 python sam2_colab_finetune.py \
     --dataset /content/drive/MyDrive/BetterBrush/dataset \
-    --resolution 384 --num-frames 2
+    --base base_plus --resolution 384 --num-frames 2
 ```
 
-Useful flags: `--no-train` (prepare only), `--epochs N`,
-`--amp-dtype bfloat16|float16` (auto-detected otherwise),
+Useful flags: `--base tiny|small|base_plus|large`, `--no-train` (prepare only),
+`--epochs N`, `--amp-dtype bfloat16|float16` (auto-detected otherwise),
 `--workdir /content/sam2`. Import it in a cell instead —
 `import sam2_colab_finetune as bb` — to call `bb.train(repo)` and friends
 step by step.
@@ -98,14 +102,27 @@ small dataset; more mostly memorises your clips.
 ## 4 · Bring the checkpoint back to Better Brush
 
 The notebook copies the newest checkpoint to
-`My Drive/BetterBrush/sam2_checkpoints/anime_amv_v1.pt`. Then, on your PC:
+`My Drive/BetterBrush/sam2_checkpoints/`. Download it, then install it on your
+PC in **one command** (from the Better Brush repo):
+
+```bash
+python tools/sam2_training/install_lugnica.py path/to/checkpoint.pt \
+    --base base_plus --label "Lugnica SAM"
+```
+
+That drops the weights into `checkpoints/custom/` and writes the sidecar for
+you. `--base` must match the size you trained on.
+
+<details>
+<summary>Doing it by hand instead</summary>
 
 ```text
 <Better-Brush>/checkpoints/custom/anime_amv_v1.pt       <- the trained file
 <Better-Brush>/checkpoints/custom/sam2_custom.json      <- the sidecar
 ```
 
-`sam2_custom.json`:
+`sam2_custom.json` (the `config` file name must match the base — `t`, `s`,
+`b+`, or `l`):
 
 ```json
 {
@@ -115,11 +132,31 @@ The notebook copies the newest checkpoint to
 }
 ```
 
-Restart Better Brush → **Anime AMV v1** appears in the **AI Model** dropdown
+</details>
+
+Restart Better Brush → **Lugnica SAM** appears in the **AI Model** dropdown
 (and per shot in **Inspect → Shot Profiles**). Keep the stock checkpoint around;
 rename the sidecar to switch back.
 
 ---
+
+## Which base?
+
+`--base` picks the SAM 2.1 backbone. All four use the same recipe; Base+ is the
+default sweet spot.
+
+| `--base` | Backbone | Speed | Anime quality | Pick when |
+|---|---|:--:|:--:|---|
+| `tiny` | Hiera-T | ⚡⚡⚡ | fair | fastest previews only |
+| `small` | Hiera-S | ⚡⚡ | good | light/laptop, quick re-runs |
+| **`base_plus`** | Hiera-B+ | ⚡ | **best** | **default** |
+| `large` | Hiera-L | 🐢 | best+ | 24 GB cards, max quality |
+
+The driver downloads the matching base checkpoint and rewrites the config's
+`embed_dim`/`num_heads`/`stages`/`global_att_blocks`/`backbone_channel_list`/
+`checkpoint_path` to match, so the trained weights always line up with the base
+they were initialised from. Remember to pass the same `--base` when you install
+the result.
 
 ## What fits where
 
