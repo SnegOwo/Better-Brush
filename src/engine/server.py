@@ -77,6 +77,16 @@ class EngineServer(ThreadingHTTPServer):
         self.registry = registry
         self.pro_probe = pro_probe
 
+    def handle_error(self, request: object, client_address: tuple) -> None:
+        """Keep a dropped keep-alive connection out of the console.
+
+        HTTP/1.1 clients (fetch, urllib) routinely close a connection right
+        after reading a response; socketserver's default handler prints a full
+        traceback for that, which would spam the engine log for no reason.
+        """
+        error = sys.exc_info()[1]
+        logger.debug("request error from %s: %r", client_address, error)
+
 
 class EngineHandler(BaseHTTPRequestHandler):
     server: EngineServer

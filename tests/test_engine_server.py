@@ -148,6 +148,13 @@ def test_busy_then_cancel(start_server):
     release.set()
 
 
+def test_dropped_connection_is_quiet(start_server, capsys):
+    srv, _client = start_server(_ok_pipeline)
+    srv.handle_error(None, ("127.0.0.1", 1234))
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.err
+
+
 def test_options_preflight(start_server):
     _srv, client = start_server(_ok_pipeline)
     req = urllib.request.Request(client.base + "/job", method="OPTIONS")
