@@ -130,7 +130,13 @@ $config = [ordered]@{
   pythonwPath = $pythonwExe
   port        = $Port
 }
-$config | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $ExtDir "config.json")
+$configPath = Join-Path $ExtDir "config.json"
+$configJson = $config | ConvertTo-Json
+[System.IO.File]::WriteAllText(
+  $configPath,
+  $configJson,
+  (New-Object System.Text.UTF8Encoding($false))
+)
 Good "Wrote config.json"
 
 # --------------------------------------------------------------------- #
