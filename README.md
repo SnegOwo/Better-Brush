@@ -96,18 +96,21 @@ that names the result **Lugnica SAM** lives in
 - **[Colab kit](tools/sam2_training/colab/README.md)** — train in the browser on a free
   T4 (or L4/A100), no local GPU needed.
 
-## After Effects panel
+## After Effects & Premiere Pro panels
 
-Select a footage layer, click **Remove Background** - the layer is rotoscoped in place.
-The AI work runs in a local headless engine (the same SAM 2 stack), so nothing leaves your
-machine and After Effects never loads torch.
+Select a footage layer (AE) or a video clip (Premiere), click **Remove Background** — it is
+rotoscoped in place. The AI work runs in a local headless engine (the same SAM 2 stack), so
+nothing leaves your machine and the host never loads torch.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1
+powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1    # After Effects
+powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1     # Premiere Pro
 ```
 
-One character per click; multi-subject and oddball layers are handed to the full app.
-Windows, AE 2022+ - see **[after-effects/README.md](after-effects/README.md)**.
+One character per click; multi-subject and oddball layers are handed to the full app. Both
+panels drive the same local engine, so install one or both. Windows, AE 2022+ / Premiere
+Pro 2022+ — see **[after-effects/README.md](after-effects/README.md)** and
+**[premiere-pro/README.md](premiere-pro/README.md)**.
 
 ## Editions
 
@@ -130,6 +133,7 @@ account, no server, no telemetry. [Get Pro →](https://sneg.dev/BetterBrush)
 | [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
 | [Fine-tuning](docs/FINE-TUNING.md) · [Build Lugnica SAM](docs/LUGNICA-SAM.md) · [Colab Kit](tools/sam2_training/colab/README.md) | Train your own model |
 | [After Effects panel](after-effects/README.md) | One-click background removal inside AE (Windows, AE 2022+) |
+| [Premiere Pro panel](premiere-pro/README.md) | The same panel ported to Premiere Pro (Windows, PPro 2022+) |
 | [Audit Report](docs/AUDIT-REPORT.md) · [Roadmap](docs/ROADMAP-IDEAS.md) | Recent fixes · backlog |
 
 Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
