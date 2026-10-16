@@ -26,14 +26,23 @@
 
   /* Engine progress stages, in the order the pipeline reports them. "load" is
    * the cold-start model load: it has no frame count, so it reports 0/0 and
-   * the bar runs indeterminate rather than sitting still at zero. */
-  var STAGES = ["load", "extract", "analyze", "propagate", "export"];
+   * the bar runs indeterminate rather than sitting still at zero. "matte" only
+   * appears when the soft-matte pass runs. */
+  var STAGES = ["load", "extract", "analyze", "propagate", "matte", "export"];
   var STAGE_TEXT = {
     load: "Loading the model",
     extract: "Reading the source",
     analyze: "Finding the character",
     propagate: "Tracking through the clip",
+    matte: "Refining the edges",
     export: "Writing the alpha movie"
+  };
+
+  /* Brush overlay colours, shared by the live canvas and the exported stroke
+   * masks. Ground truth for "add" vs "remove" is the tool, not the colour. */
+  var BRUSH_COLOURS = {
+    add: "rgba(74, 222, 128, 0.45)",
+    remove: "rgba(248, 113, 113, 0.45)"
   };
 
   /* Short model names (from /health capabilities) and the ModelSize values the
@@ -97,7 +106,18 @@
     lastPercent: 0,
     quality: "balanced",
     outputMode: "replace",
+    matting: true,
     previewPath: null,
+    previewSize: { w: 0, h: 0 },
+    /* The original selection, kept apart from state.selection: once a run has
+     * replaced the layer's source, state.selection points at the cut-out, and a
+     * correction must still read the original footage. */
+    source: null,
+    /* Where the next apply goes: the original layer for a fresh run, the
+     * result layer for a correction. */
+    apply: null,
+    resumeDir: null,
+    brush: { tool: "add", size: 48, strokes: [], stroke: null, painting: false },
     resultModel: "",
     doneTitle: "",
     doneText: "",
@@ -375,6 +395,7 @@
       chip: false,
       stages: false,
       preview: false,
+      brush: false,
       elapsed: false
     };
 
@@ -395,6 +416,7 @@
       plan.action = { label: "Run again", value: "again" };
       plan.chip = !!(sel && sel.ok);
       plan.preview = !!state.previewPath;
+      plan.brush = !!state.resumeDir;
     } else if (state.mode === "error") {
       plan.tone = "tone-err";
       plan.icon = "alert";
@@ -443,6 +465,11 @@
         ? "Key frame — " + state.doneMeta
         : "";
     }
+    show(ui.brushTools, plan.brush);
+    show(ui.brushCanvas, plan.brush);
+    if (plan.brush) {
+      syncBrushCanvas();
+    }
 
     show(ui.heroAction, !!plan.action);
     if (plan.action) {
@@ -465,6 +492,7 @@
     ui.runBtn.disabled = state.running || !pro || !(sel && sel.ok);
     show(ui.cancelBtn, state.running);
     updateModelNote();
+    updateMattingNote();
   }
 
   function updateModelNote() {
@@ -472,6 +500,174 @@
     var map = caps && caps.quality_models;
     var name = map ? map[state.quality] : null;
     ui.modelNote.textContent = name ? "Uses " + modelLabel(name) : "—";
+  }
+
+  function mattingAvailable() {
+    /* Older engines do not report the capability, so only an explicit false
+     * disables the switch. */
+    return !(state.capabilities && state.capabilities.matting === false);
+  }
+
+  function updateMattingNote() {
+    var available = mattingAvailable();
+    ui.mattingToggle.disabled = !available || state.running;
+    if (!available) {
+      ui.mattingToggle.checked = false;
+      ui.mattingNote.textContent = "Matting model not installed.";
+    } else if (state.matting) {
+      ui.mattingNote.textContent = "Softens hair and edges — slower.";
+    } else {
+      ui.mattingNote.textContent = "Edges follow the tracked outline.";
+    }
+    ui.mattingToggle.parentNode.className =
+      "toggle" + (available ? "" : " disabled");
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Brush correction                                                    */
+  /* ------------------------------------------------------------------ */
+  function syncBrushCanvas() {
+    var size = state.previewSize;
+    if (!size || !size.w || !size.h) {
+      return;
+    }
+    ui.brushStage.style.setProperty("--ar", size.w + " / " + size.h);
+    if (ui.brushCanvas.width !== size.w || ui.brushCanvas.height !== size.h) {
+      ui.brushCanvas.width = size.w;
+      ui.brushCanvas.height = size.h;
+    }
+    redrawBrush();
+  }
+
+  function brushContext() {
+    return ui.brushCanvas.getContext("2d");
+  }
+
+  function redrawBrush() {
+    var ctx = brushContext();
+    ctx.clearRect(0, 0, ui.brushCanvas.width, ui.brushCanvas.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    var strokes = state.brush.strokes;
+    for (var i = 0; i < strokes.length; i++) {
+      drawStroke(ctx, strokes[i]);
+    }
+    if (state.brush.stroke) {
+      drawStroke(ctx, state.brush.stroke);
+    }
+  }
+
+  function drawStroke(ctx, stroke, colour) {
+    if (!stroke || !stroke.points.length) {
+      return;
+    }
+    var paint = colour || BRUSH_COLOURS[stroke.tool] || BRUSH_COLOURS.add;
+    ctx.strokeStyle = paint;
+    ctx.fillStyle = paint;
+    ctx.lineWidth = stroke.width;
+    var points = stroke.points;
+    if (points.length === 1) {
+      ctx.beginPath();
+      ctx.arc(points[0].x, points[0].y, stroke.width / 2, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (var i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.stroke();
+  }
+
+  function canvasPoint(event) {
+    var rect = ui.brushCanvas.getBoundingClientRect();
+    var scaleX = ui.brushCanvas.width / (rect.width || 1);
+    var scaleY = ui.brushCanvas.height / (rect.height || 1);
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+      scale: (scaleX + scaleY) / 2
+    };
+  }
+
+  function brushDown(event) {
+    if (state.running || !state.resumeDir) {
+      return;
+    }
+    event.preventDefault();
+    var point = canvasPoint(event);
+    state.brush.painting = true;
+    state.brush.stroke = {
+      tool: state.brush.tool,
+      width: Math.max(2, state.brush.size * point.scale),
+      points: [{ x: point.x, y: point.y }]
+    };
+    try {
+      ui.brushCanvas.setPointerCapture(event.pointerId);
+    } catch (err) { /* pointer capture is best-effort */ }
+    redrawBrush();
+  }
+
+  function brushMove(event) {
+    if (!state.brush.painting || !state.brush.stroke) {
+      return;
+    }
+    var point = canvasPoint(event);
+    state.brush.stroke.points.push({ x: point.x, y: point.y });
+    redrawBrush();
+  }
+
+  function brushUp() {
+    if (!state.brush.painting) {
+      return;
+    }
+    state.brush.painting = false;
+    if (state.brush.stroke) {
+      state.brush.strokes.push(state.brush.stroke);
+      state.brush.stroke = null;
+    }
+    redrawBrush();
+  }
+
+  function clearBrush() {
+    state.brush.strokes = [];
+    state.brush.stroke = null;
+    redrawBrush();
+  }
+
+  /* Rasterise one tool's strokes into a base64 PNG in source resolution, or
+   * null when nothing was painted with that tool. */
+  function rasterizeStrokes(tool) {
+    var size = state.previewSize;
+    var strokes = state.brush.strokes.filter(function (stroke) {
+      return stroke.tool === tool;
+    });
+    if (!strokes.length || !size.w || !size.h) {
+      return null;
+    }
+    var canvas = document.createElement("canvas");
+    canvas.width = size.w;
+    canvas.height = size.h;
+    var ctx = canvas.getContext("2d");
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    strokes.forEach(function (stroke) {
+      drawStroke(ctx, stroke, "#ffffff");
+    });
+    return canvas.toDataURL("image/png");
+  }
+
+  function applyCorrection() {
+    if (state.running || !state.resumeDir || !state.source) {
+      return;
+    }
+    var add = rasterizeStrokes("add");
+    var remove = rasterizeStrokes("remove");
+    if (!add && !remove) {
+      return;
+    }
+    startCorrection(add, remove);
   }
 
   function renderProgress(stage, current, total, message) {
@@ -535,6 +731,10 @@
     state.lastStageIndex = -1;
     state.lastPercent = 0;
     state.startedAt = Date.now();
+    /* A correction consumes the strokes it was built from, so the surface
+     * starts clean for the next pass. */
+    state.brush.strokes = [];
+    state.brush.stroke = null;
     startTick();
     /* Open on the first stage the engine reports ("load"), or the monotonic
      * stage index below would mark it done and sit on "reading source". */
@@ -542,17 +742,27 @@
     render();
   }
 
-  function postJob(sel) {
+  function jobBody(src, extra) {
     var body = {
-      input_path: sel.file,
+      input_path: src.file,
       frame_in: 0,
       frame_out: -1,
-      fps: sel.fps,
-      width: sel.width,
-      height: sel.height,
+      fps: src.fps,
+      width: src.width,
+      height: src.height,
       preset: "anime",
-      quality: state.quality
+      quality: state.quality,
+      matting: !!state.matting && mattingAvailable()
     };
+    if (extra) {
+      Object.keys(extra).forEach(function (key) {
+        body[key] = extra[key];
+      });
+    }
+    return body;
+  }
+
+  function postJob(body) {
     return fetch(baseUrl() + "/job", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -582,6 +792,22 @@
     if (!sel || !sel.ok) {
       return;
     }
+    /* Freeze the original footage and the apply target now: after the run
+     * replaces the layer's source, state.selection will describe the cut-out. */
+    state.source = {
+      file: sel.file,
+      fps: sel.fps,
+      width: sel.width,
+      height: sel.height,
+      compId: sel.compId,
+      layerId: sel.layerId
+    };
+    state.apply = {
+      compId: sel.compId,
+      layerId: sel.layerId,
+      mode: state.outputMode
+    };
+    state.resumeDir = null;
     beginRun();
 
     ensureEngine()
@@ -589,7 +815,7 @@
         if (state.health && state.health.pro === false) {
           throw new Error(PRO_REQUIRED);
         }
-        return postJob(sel);
+        return postJob(jobBody(state.source));
       })
       .then(function (job) {
         state.jobId = job.id;
@@ -606,6 +832,43 @@
         } else {
           failRun(message, err && err.kind ? err.kind : "internal", false);
         }
+      });
+  }
+
+  /* Re-run the clip from the stored key frame with the painted strokes layered
+   * over the seed mask, then replace the result layer with the new cut-out. */
+  function startCorrection(addPng, removePng) {
+    if (state.running || !state.resumeDir || !state.source) {
+      return;
+    }
+    var body = jobBody(state.source, {
+      resume_dir: state.resumeDir,
+      correction_add: addPng || null,
+      correction_remove: removePng || null
+    });
+    /* A correction always replaces the current result layer, whichever mode
+     * produced it. */
+    state.apply = {
+      compId: state.apply ? state.apply.compId : null,
+      layerId: state.apply ? state.apply.layerId : null,
+      mode: "replace"
+    };
+    beginRun();
+
+    ensureEngine()
+      .then(function () {
+        return postJob(body);
+      })
+      .then(function (job) {
+        state.jobId = job.id;
+        pollJob();
+      })
+      .catch(function (err) {
+        failRun(
+          err && err.message ? err.message : String(err),
+          err && err.kind ? err.kind : "internal",
+          false
+        );
       });
   }
 
@@ -695,14 +958,24 @@
       failRun("The engine finished without returning a result.", "internal", false);
       return;
     }
-    var sel = state.selection || {};
+    var apply = state.apply;
+    if (!apply && state.selection) {
+      /* Adopted a job the panel did not start: fall back to the live selection
+       * rather than an unknown target. */
+      apply = {
+        compId: state.selection.compId,
+        layerId: state.selection.layerId,
+        mode: state.outputMode
+      };
+    }
+    apply = apply || {};
     var script =
       "bbApplyResult(" +
       csString(result.output_path) + "," +
-      csString(state.outputMode) + "," +
+      csString(apply.mode || state.outputMode) + "," +
       (result.fps || 0) + "," +
-      (sel.compId != null ? sel.compId : -1) + "," +
-      (sel.layerId != null ? sel.layerId : -1) +
+      (apply.compId != null ? apply.compId : -1) + "," +
+      (apply.layerId != null ? apply.layerId : -1) +
       ")";
 
     callHost(script)
@@ -720,6 +993,16 @@
         state.mode = "done";
         state.resultModel = result.model || "";
         state.previewPath = result.preview_path || null;
+        state.previewSize = { w: result.width || 0, h: result.height || 0 };
+        state.resumeDir = result.work_dir || null;
+        clearBrush();
+        /* From here on, applying goes to the layer that now holds the cut-out,
+         * so a correction replaces this result rather than the original. */
+        state.apply = {
+          compId: res.compId != null ? res.compId : apply.compId,
+          layerId: res.layerId != null ? res.layerId : apply.layerId,
+          mode: "replace"
+        };
         state.doneTitle =
           "Done — " + result.frame_count +
           (result.frame_count === 1 ? " frame" : " frames");
@@ -727,10 +1010,14 @@
           state.outputMode === "replace"
             ? "The layer's source was replaced with the cut-out."
             : "Added as a new footage layer above the original.";
+        if (result.matting) {
+          state.doneText += " Soft matting applied.";
+        }
         state.doneMeta =
           result.frame_count + (result.frame_count === 1 ? " frame" : " frames") +
           " · " + result.width + "×" + result.height +
-          " · " + modelLabel(result.model);
+          " · " + modelLabel(result.model) +
+          (result.matting ? " · matted" : "");
         render();
         refreshHealth(true);
         refreshSelection();
@@ -800,7 +1087,11 @@
     try {
       localStorage.setItem(
         "bb.settings",
-        JSON.stringify({ quality: state.quality, mode: state.outputMode })
+        JSON.stringify({
+          quality: state.quality,
+          mode: state.outputMode,
+          matting: state.matting
+        })
       );
     } catch (err) { /* storage may be unavailable; not fatal */ }
   }
@@ -817,6 +1108,9 @@
       }
       if (saved && saved.mode) {
         state.outputMode = saved.mode;
+      }
+      if (saved && typeof saved.matting === "boolean") {
+        state.matting = saved.matting;
       }
     } catch (err) { /* ignore malformed settings */ }
   }
@@ -844,11 +1138,20 @@
       previewWrap: id("previewWrap"),
       previewImg: id("previewImg"),
       previewCaption: id("previewCaption"),
+      brushStage: id("brushStage"),
+      brushCanvas: id("brushCanvas"),
+      brushTools: id("brushTools"),
+      brushToolSeg: id("brushToolSeg"),
+      brushSize: id("brushSize"),
+      brushClear: id("brushClear"),
+      brushApply: id("brushApply"),
       notice: id("notice"),
       noticeDetail: id("noticeDetail"),
       qualitySeg: id("qualitySeg"),
       modeSeg: id("modeSeg"),
       modelNote: id("modelNote"),
+      mattingToggle: id("mattingToggle"),
+      mattingNote: id("mattingNote"),
       runBtn: id("runBtn"),
       cancelBtn: id("cancelBtn"),
       openAppBtn: id("openAppBtn")
@@ -885,6 +1188,17 @@
     });
     setSegment(ui.qualitySeg, state.quality);
     setSegment(ui.modeSeg, state.outputMode);
+    setSegment(ui.brushToolSeg, state.brush.tool);
+    ui.brushToolSeg.addEventListener("click", function (event) {
+      var button = closestButton(event.target);
+      if (!button) {
+        return;
+      }
+      state.brush.tool = button.getAttribute("data-value");
+      setSegment(ui.brushToolSeg, state.brush.tool);
+    });
+    ui.brushSize.value = String(state.brush.size);
+    ui.mattingToggle.checked = state.matting;
   }
 
   function init() {
@@ -895,6 +1209,28 @@
     ui.runBtn.addEventListener("click", startJob);
     ui.cancelBtn.addEventListener("click", cancelJob);
     ui.openAppBtn.addEventListener("click", openFullApp);
+
+    ui.mattingToggle.addEventListener("change", function () {
+      state.matting = ui.mattingToggle.checked;
+      saveSettings();
+      render();
+    });
+
+    ui.brushCanvas.addEventListener("pointerdown", brushDown);
+    ui.brushCanvas.addEventListener("pointermove", brushMove);
+    ui.brushCanvas.addEventListener("pointerup", brushUp);
+    ui.brushCanvas.addEventListener("pointercancel", brushUp);
+    ui.brushCanvas.addEventListener("pointerleave", function () {
+      if (state.brush.painting) {
+        brushUp();
+      }
+    });
+    ui.brushSize.addEventListener("input", function () {
+      state.brush.size = parseInt(ui.brushSize.value, 10) || 48;
+    });
+    ui.brushClear.addEventListener("click", clearBrush);
+    ui.brushApply.addEventListener("click", applyCorrection);
+
     ui.heroAction.addEventListener("click", function () {
       var action = ui.heroAction.getAttribute("data-action");
       if (action === "openapp") {

@@ -13,6 +13,9 @@ errors so the panel can hand the user off to the full app.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import logging
 import os
 import shutil
@@ -29,6 +32,7 @@ import numpy as np
 
 from src.engine import auto_subject
 from src.engine.schemas import (
+    ERR_BAD_REQUEST,
     ERR_INTERNAL,
     ERR_MULTIPLE_SUBJECTS,
     ERR_NO_CHARACTER,
@@ -50,6 +54,11 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".
 _SAMPLE_FRAMES = 3
 _EDGE_FEATHER = 1.0
 _PROGRESS_EVERY = 5
+
+#: Written next to the result so a later brush correction can re-track from the
+#: exact key frame the first pass picked.
+_SEED_MASK = "seed.png"
+_SEED_META = "seed.json"
 
 
 class PipelineError(RuntimeError):
@@ -263,6 +272,107 @@ def _analyze(
 
 
 # --------------------------------------------------------------------- #
+# Seed persistence + brush correction
+# --------------------------------------------------------------------- #
+def _save_seed(work: Path, mask: np.ndarray, meta: dict) -> None:
+    """Persist the key-frame seed so a brush correction can re-use it.
+
+    The mask is tiny and the metadata is a few numbers, so this costs nothing
+    next to the alpha movie sitting beside it — and it is what lets a correction
+    skip the subject search entirely.
+    """
+    cv2.imwrite(str(work / _SEED_MASK), (np.asarray(mask).astype(np.uint8) * 255))
+    (work / _SEED_META).write_text(json.dumps(meta), encoding="utf-8")
+
+
+def _load_seed(resume_dir: str) -> tuple[np.ndarray, dict]:
+    root = Path(resume_dir)
+    mask_path = root / _SEED_MASK
+    meta_path = root / _SEED_META
+    if not mask_path.is_file() or not meta_path.is_file():
+        raise PipelineError(
+            "The earlier result is no longer on disk, so there is nothing to "
+            "correct — run Remove Background again.",
+            ERR_UNSUPPORTED,
+        )
+    gray = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        raise PipelineError(
+            "The stored mask could not be read back — run the removal again.",
+            ERR_UNSUPPORTED,
+        )
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        meta = {}
+    return gray > 127, meta
+
+
+def _decode_stroke(payload: str | None, name: str, shape: tuple[int, int]) -> np.ndarray | None:
+    """Decode a base64 PNG brush stroke into a bool mask at *shape* (h, w)."""
+    if not payload:
+        return None
+    # Tolerate a data: URL prefix, which canvas.toDataURL() produces.
+    text = payload.split(",")[-1].strip()
+    try:
+        raw = base64.b64decode(text, validate=False)
+    except (binascii.Error, ValueError) as exc:
+        raise PipelineError(f"'{name}' is not valid base64 data.", ERR_BAD_REQUEST) from exc
+    image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        raise PipelineError(
+            f"'{name}' could not be read as an image.", ERR_BAD_REQUEST
+        )
+    if image.shape[:2] != shape:
+        image = cv2.resize(
+            image, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST
+        )
+    return image > 127
+
+
+def _apply_correction(
+    seed: np.ndarray, add: np.ndarray | None, remove: np.ndarray | None
+) -> np.ndarray:
+    """Layer painted strokes over the stored seed: add wins, then remove trims."""
+    corrected = np.asarray(seed).astype(bool).copy()
+    if add is not None:
+        corrected |= add
+    if remove is not None:
+        corrected &= ~remove
+    return corrected
+
+
+def _resume_seed(
+    request: JobRequest,
+    info: _SourceInfo,
+    on_progress,
+) -> tuple[auto_subject.SubjectSelection, int]:
+    """Rebuild the seed from an earlier job, applying the panel's brush strokes."""
+    seed, meta = _load_seed(request.resume_dir or "")
+    shape = (info.height, info.width)
+    if seed.shape[:2] != shape:
+        seed = cv2.resize(
+            (seed.astype(np.uint8) * 255),
+            (shape[1], shape[0]),
+            interpolation=cv2.INTER_NEAREST,
+        ) > 127
+    add = _decode_stroke(request.correction_add, "correction_add", shape)
+    remove = _decode_stroke(request.correction_remove, "correction_remove", shape)
+    seed = _apply_correction(seed, add, remove)
+    key_idx = int(meta.get("key_idx", 0))
+    key_idx = max(0, min(key_idx, info.count - 1))
+    _emit(on_progress, "analyze", 1, 1, "using your correction")
+    box = meta.get("box")
+    selection = auto_subject.SubjectSelection(
+        mask=seed,
+        confidence=float(meta.get("confidence", 0.0)),
+        box=tuple(box) if isinstance(box, (list, tuple)) and len(box) == 4 else None,
+        reasons=["your brush correction"],
+    )
+    return selection, key_idx
+
+
+# --------------------------------------------------------------------- #
 # Propagation
 # --------------------------------------------------------------------- #
 def _propagate(
@@ -318,6 +428,64 @@ def _propagate(
 
 
 # --------------------------------------------------------------------- #
+# Matting
+# --------------------------------------------------------------------- #
+def _matte(
+    frames_dir: Path,
+    masks: dict[int, np.ndarray],
+    key_idx: int,
+    count: int,
+    device: str,
+    on_progress,
+    cancel_event: threading.Event | None,
+) -> dict[int, np.ndarray]:
+    """Refine the tracked outline into a soft alpha with MatAnyone 2.
+
+    The propagated mask is the prompt on the key frame and the clamp on every
+    other, so the learned matte can only soften the edge the animator already
+    agreed with — it cannot wander into background.
+    """
+    from src.processing.matting import MattingRunner, MattingSettings
+
+    runner = MattingRunner("matanyone2", device=device, cancel_event=cancel_event)
+    alphas: dict[int, np.ndarray] = {}
+    seen = 0
+
+    def _frame_getter(index: int) -> np.ndarray:
+        return _read_rgb(frames_dir / f"{index:05d}.jpg")
+
+    def _on_alpha(index: int, alpha: np.ndarray) -> None:
+        nonlocal seen
+        alphas[index] = alpha
+        seen += 1
+        if seen % _PROGRESS_EVERY == 0 or seen == count:
+            _emit(on_progress, "matte", seen, count, "refining edges")
+
+    _emit(on_progress, "matte", 0, count, "refining edges")
+    try:
+        runner.matte(
+            list(range(count)),
+            _frame_getter,
+            {key_idx: masks[key_idx]},
+            MattingSettings(),
+            on_alpha=_on_alpha,
+            mask_getter=lambda i: masks.get(i),
+        )
+    except Exception as exc:
+        # The runner signals cancellation with a RuntimeError of its own; the
+        # job must see a real JobCancelled or the record would claim success.
+        if cancel_event is not None and cancel_event.is_set():
+            raise JobCancelled() from exc
+        raise
+    finally:
+        # Two networks on one card is the one thing this GPU cannot afford, so
+        # the matting model is released the moment its work is done.
+        runner.unload()
+    _emit(on_progress, "matte", count, count, "refining edges")
+    return alphas
+
+
+# --------------------------------------------------------------------- #
 # Export
 # --------------------------------------------------------------------- #
 def _alpha_for(frame_rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -326,8 +494,18 @@ def _alpha_for(frame_rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return soft_coverage(mask, feather=_EDGE_FEATHER)
 
 
-def _rgba(frame_rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    alpha = _alpha_for(frame_rgb, mask)
+def _rgba(
+    frame_rgb: np.ndarray, mask: np.ndarray, alpha: np.ndarray | None = None
+) -> np.ndarray:
+    """Compose RGBA. *alpha* (a learned matte) wins over the segment outline."""
+    if alpha is None:
+        alpha = _alpha_for(frame_rgb, mask)
+    elif alpha.shape[:2] != frame_rgb.shape[:2]:
+        alpha = cv2.resize(
+            alpha.astype(np.float32),
+            (frame_rgb.shape[1], frame_rgb.shape[0]),
+            interpolation=cv2.INTER_LINEAR,
+        )
     alpha_u8 = np.clip(alpha * 255.0, 0, 255).astype(np.uint8)
     return np.dstack([frame_rgb, alpha_u8])
 
@@ -407,6 +585,7 @@ def _streaming_mov(
     cancel_event: threading.Event | None,
     preview_path: Path | None = None,
     preview_idx: int | None = None,
+    alphas: dict[int, np.ndarray] | None = None,
 ) -> None:
     from src.export.exporter import _resolve_ffmpeg
 
@@ -476,7 +655,7 @@ def _streaming_mov(
                 mask = np.zeros(frame.shape[:2], dtype=bool)
             else:
                 last_mask = mask
-            rgba = _rgba(frame, mask)
+            rgba = _rgba(frame, mask, alphas.get(i) if alphas else None)
             proc.stdin.write(rgba.tobytes())
             if preview_path is not None and preview_idx is not None and i == preview_idx:
                 _write_rgba_png(preview_path, rgba)
@@ -515,6 +694,7 @@ def _png_sequence(
     cancel_event: threading.Event | None,
     preview_path: Path | None = None,
     preview_idx: int | None = None,
+    alphas: dict[int, np.ndarray] | None = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     last_mask: np.ndarray | None = None
@@ -526,7 +706,7 @@ def _png_sequence(
             mask = np.zeros(frame.shape[:2], dtype=bool)
         else:
             last_mask = mask
-        rgba = _rgba(frame, mask)
+        rgba = _rgba(frame, mask, alphas.get(i) if alphas else None)
         _write_rgba_png(out_dir / f"{i:05d}.png", rgba)
         if preview_path is not None and preview_idx is not None and i == preview_idx:
             _write_rgba_png(preview_path, rgba)
@@ -663,15 +843,34 @@ def run_job(
 
         phase = "finding the character"
         started = time.time()
-        selection, key_idx = _analyze(
-            manager, frames_dir, info.count, on_progress, cancel_event
-        )
+        if request.resume_dir:
+            selection, key_idx = _resume_seed(request, info, on_progress)
+        else:
+            selection, key_idx = _analyze(
+                manager, frames_dir, info.count, on_progress, cancel_event
+            )
         logger.info(
             "phase subject: %.1fs (key frame %d, confidence %.2f, face_seeded %s)",
             time.time() - started,
             key_idx,
             selection.confidence,
             selection.face_seeded,
+        )
+
+        # Persist the seed before tracking: a later brush correction re-tracks
+        # from exactly this frame, and the panel only needs the directory back.
+        _save_seed(
+            work,
+            selection.mask if selection.mask is not None else np.zeros(
+                (info.height, info.width), dtype=bool
+            ),
+            {
+                "key_idx": int(key_idx),
+                "confidence": float(selection.confidence),
+                "box": list(selection.box) if selection.box else None,
+                "count": int(info.count),
+                "source": str(source),
+            },
         )
 
         phase = "tracking the subject"
@@ -693,6 +892,35 @@ def run_job(
             info.count,
         )
 
+        alphas: dict[int, np.ndarray] | None = None
+        if request.matting and key_idx in masks:
+            phase = "refining the edges"
+            started = time.time()
+            try:
+                alphas = _matte(
+                    frames_dir,
+                    masks,
+                    key_idx,
+                    info.count,
+                    str(getattr(recommendation, "device", "cuda")),
+                    on_progress,
+                    cancel_event,
+                )
+                logger.info(
+                    "phase matte: %.1fs (%d/%d frames matted)",
+                    time.time() - started,
+                    len(alphas),
+                    info.count,
+                )
+            except JobCancelled:
+                raise
+            except Exception as exc:  # noqa: BLE001 - matting must never sink a job
+                # A missing download or an out-of-memory card should still ship
+                # the outline matte rather than fail the whole removal.
+                logger.warning("matting failed (%s); using the segment outline", exc)
+                _emit(on_progress, "matte", info.count, info.count, "matting unavailable")
+                alphas = None
+
         phase = "writing the alpha movie"
         started = time.time()
         fps = request.fps or info.fps or 24.0
@@ -712,6 +940,7 @@ def run_job(
                 cancel_event,
                 preview_path=preview,
                 preview_idx=key_idx,
+                alphas=alphas,
             )
             output_path = mov
         except PipelineError as exc:
@@ -728,6 +957,7 @@ def run_job(
                 cancel_event,
                 preview_path=preview,
                 preview_idx=key_idx,
+                alphas=alphas,
             )
             output_path = png_dir
             output_kind = "png_sequence"
@@ -752,13 +982,16 @@ def run_job(
             subject=subject,
             qc=_quality_report(masks, info.count),
             model=recommendation.model_size.value,
+            work_dir=str(work),
+            matting=alphas is not None,
         )
         logger.info(
-            "job finished: %s frames in %.1fs (%s, %s)",
+            "job finished: %s frames in %.1fs (%s, %s, matting=%s)",
             info.count,
             time.time() - job_started,
             recommendation.model_size.value,
             output_kind,
+            alphas is not None,
         )
         _emit(on_progress, "done", info.count, info.count, "finished")
         return result

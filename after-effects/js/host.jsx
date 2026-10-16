@@ -191,13 +191,25 @@ function bbApplyInner(comp, layer, file, mode, fps) {
                 newLayer.inPoint = layer.inPoint;
                 newLayer.outPoint = layer.outPoint;
             } catch (eTimes) {}
-            return bbJson({ ok: true, footage: footage.name, mode: "add" });
+            return bbJson({
+                ok: true,
+                footage: footage.name,
+                mode: "add",
+                layerId: newLayer.id,
+                compId: comp.id
+            });
         }
 
         var originalName = layer.name;
         layer.replaceSource(footage, false);
         try { layer.name = originalName; } catch (eName) {}
-        return bbJson({ ok: true, footage: footage.name, mode: "replace" });
+        return bbJson({
+            ok: true,
+            footage: footage.name,
+            mode: "replace",
+            layerId: layer.id,
+            compId: comp.id
+        });
     } finally {
         if (undoOpen) { app.endUndoGroup(); }
     }

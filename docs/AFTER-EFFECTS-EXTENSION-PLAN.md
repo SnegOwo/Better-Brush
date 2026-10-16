@@ -667,3 +667,58 @@ propagating, and no tier changes that.
 One panel bug fell out of adding the stage: `beginRun()` opened the checklist on
 `extract`, and the monotonic stage index then marked `load` as already done.
 Caught by rendering the panel and reading the DOM, not by the test suite.
+
+---
+
+## 19 · Round 4 — matting and a correction brush inside the panel
+
+The panel was signed off as "works perfectly", and the two asks were: refine the
+edges automatically, and let the user fix a wrong mask without leaving AE.
+
+### 19.1 Automatic matting
+
+The desktop app has always had a soft-alpha pass (`MattingRunner` /
+MatAnyone 2, `src/processing/matting.py`) that turns the tracked outline into a
+soft matte — hair, motion blur, partial coverage. The engine never called it;
+its `_alpha_for` only ran `soft_coverage` on the binary mask.
+
+- `JobRequest.matting` (default **off** on the wire, **on** in the panel) runs
+  `MattingRunner.matte` after propagation, with the propagated mask as both the
+  key-frame prompt and the per-frame clamp, so the learned matte can only soften
+  the edge the animator agreed with.
+- A new **`matte`** stage sits between `propagate` and `export` — the stages are
+  still emitted in checklist order, and the panel grew a sixth row.
+- Matting must never sink a job: a missing download or an out-of-memory card is
+  caught, logged, and the run ships the outline instead (`result.matting=false`).
+  The runner is unloaded in a `finally` — two networks on one card is the thing
+  an 8 GB GPU cannot afford.
+- `/health?full=1` reports `capabilities.matting`, so the switch greys out when
+  the weights are absent instead of failing a run.
+
+### 19.2 The correction brush
+
+The self-contained version: correct on the key frame, re-track the clip.
+
+- The engine writes `seed.png` + `seed.json` beside the alpha movie (the
+  key-frame mask, its index and the subject stats). They cost nothing next to
+  the movie and are what make a correction cheap.
+- A correction is just another `POST /job`, carrying `resume_dir` plus
+  `correction_add` / `correction_remove` (base64 PNG masks). No new route, no
+  new state: `_resume_seed` loads the stored seed, ORs the add strokes, subtracts
+  the remove strokes, and skips the subject search entirely.
+- The panel overlays a canvas on the key-frame preview (pinned to the footage
+  aspect ratio so pixels line up), paints with a green/red brush, and rasterises
+  the strokes into the two masks on Apply.
+- Applying targets the **result** layer, captured from `bbApplyResult`'s new
+  `layerId`/`compId`, so corrections replace the current cut-out whichever
+  `Result` mode produced it. The original footage is frozen in `state.source`
+  before the first run, because after a replace `state.selection` describes the
+  cut-out, not the source.
+
+Verified end-to-end in a QtWebEngine probe that stubs the host and the HTTP
+surface: at a 250 px and 300 px dock the page never exceeds the viewport
+(`bodyScrollW == innerWidth`), the brush tools have no internal overflow, six
+stage rows are present, and a painted stroke produces exactly one correction
+`POST` with the right fields. Engine-side, 37 pipeline/schema tests pass,
+including a correction that provably never calls `find_subject` again, and
+matting that both applies (flat 0.5 alpha reaches the export) and falls back.

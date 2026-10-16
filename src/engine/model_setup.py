@@ -142,6 +142,16 @@ def describe() -> dict[str, Any]:
             quality: resolve_model_name(quality) for quality in QUALITY_TIERS
         },
     }
+    # Whether the soft-matte network is on disk, so the panel can disable its
+    # matting switch instead of failing a job on a machine that never fetched it.
+    try:
+        from src.core.constants import CHECKPOINTS_DIR
+
+        info["matting"] = (
+            CHECKPOINTS_DIR / "matanyone2" / "model.safetensors"
+        ).is_file()
+    except Exception:  # noqa: BLE001 - capabilities are best-effort
+        info["matting"] = False
     try:
         from src.hardware.detector import HardwareDetector
 

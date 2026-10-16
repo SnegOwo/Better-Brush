@@ -336,3 +336,152 @@ def test_failed_export_reports_ffmpeg_stderr(monkeypatch, tmp_path):
         )
 
     assert "ffmpeg could not write the alpha movie" in str(exc.value)
+
+
+# --------------------------------------------------------------------- #
+# Matting + brush corrections
+# --------------------------------------------------------------------- #
+def _mask_png_b64(shape: tuple[int, int], value: int = 255) -> str:
+    import base64
+
+    image = np.full(shape, value, dtype=np.uint8)
+    ok, buf = cv2.imencode(".png", image)
+    assert ok
+    return base64.b64encode(buf.tobytes()).decode("ascii")
+
+
+class FakeMattingRunner:
+    """A matting model that returns a flat 0.5 alpha for every frame."""
+
+    def __init__(self, model, device="cuda", cancel_event=None) -> None:
+        self.model = model
+        self.device = device
+
+    def matte(
+        self, indices, frame_getter, prompt_masks, settings, on_alpha=None, mask_getter=None
+    ):
+        out = {}
+        for i in indices:
+            alpha = np.full(frame_getter(i).shape[:2], 0.5, dtype=np.float32)
+            out[i] = alpha
+            if on_alpha is not None:
+                on_alpha(i, alpha)
+        return out
+
+    def unload(self) -> None:
+        ...
+
+
+class BrokenMattingRunner(FakeMattingRunner):
+    def matte(self, *args, **kwargs):
+        raise RuntimeError("the matting weights are missing")
+
+
+def _matting_request(video: Path, out_dir: Path) -> JobRequest:
+    return JobRequest.from_dict(
+        {
+            "input_path": str(video),
+            "output_dir": str(out_dir),
+            "fps": 10.0,
+            "quality": "fast",
+            "matting": True,
+        }
+    )
+
+
+def test_matting_refines_the_alpha_and_reports_its_stage(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    monkeypatch.setattr("src.processing.matting.MattingRunner", FakeMattingRunner)
+
+    seen: list[str] = []
+    result = pipeline.run_job(
+        _matting_request(synth_video, tmp_path / "out"),
+        on_progress=lambda stage, cur, total, msg: seen.append(stage),
+    )
+
+    assert result.matting is True
+    assert "matte" in seen
+    order = ["load", "extract", "analyze", "propagate", "matte", "export", "done"]
+    positions = [order.index(s) for s in seen if s in order]
+    assert positions == sorted(positions), seen
+
+    # The 0.5 matte — not the outline — produced the alpha: an outline would be
+    # 0 in the background and 255 inside, never a flat mid value.
+    frame = cv2.imread(
+        str(Path(result.output_path) / "00000.png"), cv2.IMREAD_UNCHANGED
+    )
+    assert frame[:, :, 3].min() == 127
+    assert frame[:, :, 3].max() == 127
+
+
+def test_matting_failure_falls_back_to_the_outline(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    monkeypatch.setattr("src.processing.matting.MattingRunner", BrokenMattingRunner)
+
+    result = pipeline.run_job(_matting_request(synth_video, tmp_path / "out"))
+
+    # The removal still ships; only the soft refinement is dropped.
+    assert result.matting is False
+    assert result.frame_count == 10
+    frame = cv2.imread(
+        str(Path(result.output_path) / "00000.png"), cv2.IMREAD_UNCHANGED
+    )
+    assert frame[:, :, 3].min() == 0
+    assert frame[:, :, 3].max() == 255
+
+
+def test_a_correction_reuses_the_stored_seed(monkeypatch, synth_video, tmp_path):
+    """A brush correction must re-track, not search for the subject again."""
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    real = auto_subject.find_subject
+    calls = {"n": 0}
+
+    def counting(*args, **kwargs):
+        calls["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(auto_subject, "find_subject", counting)
+
+    first = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+    assert (Path(first.work_dir) / "seed.png").is_file()
+    assert (Path(first.work_dir) / "seed.json").is_file()
+    assert calls["n"] > 0
+
+    before = calls["n"]
+    correction = JobRequest.from_dict(
+        {
+            "input_path": str(synth_video),
+            "output_dir": str(tmp_path / "out2"),
+            "fps": 10.0,
+            "quality": "fast",
+            "resume_dir": first.work_dir,
+            "correction_remove": _mask_png_b64((256, 256)),
+        }
+    )
+    second = pipeline.run_job(correction)
+
+    assert calls["n"] == before, "a correction must not run the subject search"
+    assert second.frame_count == first.frame_count
+
+
+def test_apply_correction_adds_then_removes():
+    seed = np.zeros((4, 4), dtype=bool)
+    seed[1, 1] = True
+    add = np.zeros((4, 4), dtype=bool)
+    add[2, 2] = True
+    remove = np.zeros((4, 4), dtype=bool)
+    remove[1, 1] = True
+
+    out = pipeline._apply_correction(seed, add, remove)
+
+    assert out[2, 2]
+    assert not out[1, 1]

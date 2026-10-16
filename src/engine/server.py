@@ -10,6 +10,9 @@ Routes
 ``GET  /health?full=1``     adds the hardware/model description
 ``GET  /job/<id>``          job state / progress / result / error
 ``POST /job``               start a job -> 202 ``{"id": ...}`` (409 when busy)
+                            also the brush-correction entry point: the body
+                            carries ``resume_dir`` plus base64 ``correction_add``
+                            / ``correction_remove`` strokes
 ``POST /job/<id>/cancel``   request cancellation
 """
 

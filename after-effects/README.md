@@ -48,16 +48,28 @@ powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1 -Uninstall
 2. Click **Remove Background**.
 
 The first click of a session starts the engine (a few seconds). The panel then
-walks four stages — **reading the source → finding the character → tracking
-through the clip → writing the alpha movie** — with a live progress bar and an
-elapsed timer, and finishes on a preview of the key frame on a checkerboard so
-you can see the cut-out before touching the timeline.
+walks the pipeline with a live progress bar and an elapsed timer — **loading the
+model → reading the source → finding the character → tracking through the clip →
+refining the edges (when matting is on) → writing the alpha movie** — and
+finishes on a preview of the key frame on a checkerboard so you can see the
+cut-out before touching the timeline.
 
 - **Result → Replace layer** (default) swaps the layer's source, keeping trims
   and effects.
 - **Result → Add as new layer** places the cut-out above the original.
 
 Both are undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+
+### Correcting the mask with the brush
+
+If the tracked outline is wrong somewhere, fix it on the key-frame preview:
+pick **Add** (green) or **Remove** (red), set the brush size, and paint over the
+key frame. **Apply correction** re-runs the clip from that frame with your
+strokes layered onto the mask, then replaces the result layer. **Clear strokes**
+wipes the overlay; corrections are repeatable (paint, apply, paint again).
+
+The key frame is the one frame the panel shows; corrections there are re-tracked
+across the whole clip. For per-frame edits, use the full app.
 
 ### When it hands off to the full app
 
@@ -99,6 +111,12 @@ After Effects
   a careful pass), `Fast` (SAM 2.1 Small), `Balanced` (SAM 2.1 Base+), `Best`
   (your fine-tuned checkpoint if one is installed, Base+ otherwise).
 - **Result** — Replace layer / Add as new layer.
+- **Automatic matting** — on by default. After the outline is tracked, the
+  MatAnyone 2 network refines it into a soft alpha that keeps hair, motion blur
+  and partial edges instead of a hard cut. It is a second model pass and adds
+  time to every run; turn it off for a fast, hard-edged outline. If the matting
+  weights aren't installed the switch is disabled and the run falls back to the
+  outline automatically.
 
 The line under **Quality** always names the checkpoint the current choice will
 load (`Uses SAM 2.1 Base+`), and the finished card names the one that actually
@@ -106,12 +124,12 @@ ran, so the panel never quietly uses something other than what it says.
 
 Both settings persist between sessions.
 
-A run reports five steps — loading the model, reading the source, finding the
-character, tracking through the clip, writing the alpha movie — with a bar that
-fills per step and a running clock. The first job of a session pays for loading
-the checkpoint; later jobs in the same session reuse it and skip that step's
-wait, so running the same shot again with a different setting is much quicker
-than the first time.
+A run reports up to six steps — loading the model, reading the source, finding
+the character, tracking through the clip, refining the edges, writing the alpha
+movie — with a bar that fills per step and a running clock. The first job of a
+session pays for loading the checkpoint; later jobs in the same session reuse it
+and skip that step's wait, so running the same shot again with a different
+setting is much quicker than the first time.
 
 ---
 
@@ -121,6 +139,7 @@ than the first time.
 | --- | --- |
 | Alpha movie (`alpha.mov`) | `%LOCALAPPDATA%\BetterBrush\AfterEffects\<timestamp>_<id>\` |
 | Key-frame preview | `preview.png` beside it (shown in the panel) |
+| Correction seed (`seed.png`, `seed.json`) | beside them — the key-frame mask a brush correction re-tracks from |
 | Engine log | `%LOCALAPPDATA%\BetterBrush\engine.log` |
 
 Results deliberately live in application data rather than `%TEMP%`, which
@@ -141,7 +160,9 @@ that file has the full trace.
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
 | A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
 | A job seems to hang at 0% | Update the panel (`install.ps1`) — an unread output pipe used to block the engine mid-job. The log now records every step, so a genuine stall names the step it stalled in. |
-| A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. |
+| A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. Automatic matting adds another model pass — turn it off for speed. |
+| Matting switch is greyed out | The MatAnyone 2 weights aren't in `checkpoints\matanyone2\`. Run the app's model setup; until then runs fall back to the outline. |
+| "Apply correction" does nothing | Paint at least one stroke first; a correction with no strokes is ignored. Also update the panel (`install.ps1`) if it's an older build. |
 | Nothing happens when a fine-tuned model is picked | The sidecar in `checkpoints\custom\` must name a config the engine ships (`sam2.1_hiera_b+.yaml` and friends). |
 | Panel needs inspecting | `install.ps1 -DebugPort 8092`, then open `http://localhost:8092` in Chrome. |
 

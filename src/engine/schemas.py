@@ -63,6 +63,14 @@ def _as_float(value: Any, name: str) -> float:
     return float(value)
 
 
+def _as_optional_str(value: Any, name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise RequestError(f"'{name}' must be a string")
+    return value
+
+
 # --------------------------------------------------------------------- #
 # Request
 # --------------------------------------------------------------------- #
@@ -91,6 +99,19 @@ class JobRequest:
     #: lands with its subject near the centre of the analysis. ``None`` skips
     #: the hint. Reserved for hosts that ever pass a sub-region.
     roi: tuple[float, float, float, float] | None = None
+    #: Refine the tracked outline into a soft alpha matte (hair, motion blur,
+    #: partial coverage) with the MatAnyone 2 network. Off by default so a bare
+    #: engine request stays fast; the panel turns it on from its dock.
+    matting: bool = False
+    #: Output directory of an earlier job. When set, this job re-uses the seed
+    #: mask that job produced instead of searching for a subject again — the
+    #: panel's brush correction path.
+    resume_dir: str | None = None
+    #: Brush strokes from the panel, as base64 PNG masks at source resolution.
+    #: ``add`` forces those pixels to foreground, ``remove`` to background,
+    #: before the clip is re-tracked from the stored key frame.
+    correction_add: str | None = None
+    correction_remove: str | None = None
 
     @classmethod
     def from_dict(cls, data: Any) -> JobRequest:
@@ -135,6 +156,15 @@ class JobRequest:
         if output_dir is not None and not isinstance(output_dir, str):
             raise RequestError("'output_dir' must be a string")
 
+        resume_dir = _as_optional_str(data.get("resume_dir"), "resume_dir")
+        correction_add = _as_optional_str(
+            data.get("correction_add"), "correction_add"
+        )
+        correction_remove = _as_optional_str(
+            data.get("correction_remove"), "correction_remove"
+        )
+        matting = bool(data.get("matting", False))
+
         roi_raw = data.get("roi")
         roi: tuple[float, float, float, float] | None = None
         if roi_raw is not None:
@@ -154,6 +184,10 @@ class JobRequest:
             model=model,
             output_dir=output_dir,
             roi=roi,
+            matting=matting,
+            resume_dir=resume_dir,
+            correction_add=correction_add,
+            correction_remove=correction_remove,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,6 +202,10 @@ class JobRequest:
             "quality": self.quality,
             "model": self.model,
             "output_dir": self.output_dir,
+            "matting": self.matting,
+            "resume_dir": self.resume_dir,
+            # The correction strokes are one-shot payloads: echoing the base64
+            # in every progress poll would dwarf the job state itself.
         }
 
 
@@ -222,6 +260,12 @@ class JobResult:
     subject: SubjectInfo | None = None
     qc: dict[str, Any] = field(default_factory=dict)
     model: str = ""
+    #: Where the job left its working files (seed mask + metadata). The panel
+    #: hands this back as ``resume_dir`` so a brush correction re-tracks from
+    #: the same key frame instead of searching for the subject again.
+    work_dir: str = ""
+    #: Whether the soft matte was applied (False = the segment outline only).
+    matting: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -237,6 +281,8 @@ class JobResult:
             "subject": self.subject.to_dict() if self.subject else None,
             "qc": dict(self.qc),
             "model": self.model,
+            "work_dir": self.work_dir,
+            "matting": self.matting,
         }
 
 

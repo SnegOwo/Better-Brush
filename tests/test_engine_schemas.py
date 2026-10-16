@@ -91,3 +91,34 @@ def test_output_dir_must_be_string():
 def test_request_error_carries_kind():
     err = RequestError("nope")
     assert err.kind == "bad_request"
+
+
+def test_matting_defaults_off():
+    assert JobRequest.from_dict({"input_path": "a"}).matting is False
+
+
+def test_matting_and_correction_fields_round_trip():
+    req = JobRequest.from_dict(
+        {
+            "input_path": "a",
+            "matting": True,
+            "resume_dir": "C:/out/job1",
+            "correction_add": "AAAA",
+            "correction_remove": "BBBB",
+        }
+    )
+    assert req.matting is True
+    assert req.resume_dir == "C:/out/job1"
+    assert req.correction_add == "AAAA"
+    assert req.correction_remove == "BBBB"
+
+    body = req.to_dict()
+    assert body["matting"] is True
+    assert body["resume_dir"] == "C:/out/job1"
+    # The strokes are one-shot payloads, never echoed into every progress poll.
+    assert "correction_add" not in body
+
+
+def test_resume_dir_must_be_a_string():
+    with pytest.raises(RequestError):
+        JobRequest.from_dict({"input_path": "a", "resume_dir": 3})
