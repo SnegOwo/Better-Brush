@@ -132,6 +132,13 @@ function bbKindOfValue(value) {
 
 function bbClipKind(clip) {
     if (!clip) { return ""; }
+    /* A track item knows which track it sits on, and that is the one signal
+     * that does not depend on how a build spells a media type. */
+    try {
+        var onVideo = clip.parentTrack ? clip.parentTrack.video : null;
+        if (onVideo === true) { return "video"; }
+        if (onVideo === false) { return "audio"; }
+    } catch (eTrack) {}
     var kind = "";
     try { kind = bbKindOfValue(clip.type); } catch (eType) {}
     if (kind) { return kind; }
@@ -160,39 +167,102 @@ function bbToList(collection) {
     return out;
 }
 
-/* Two track items are the same clip when they sit at the same time under the
- * same name; Premiere gives us no id to compare. */
+/* Two track items are the same clip when they sit over the same span of time
+ * under the same name; Premiere gives us no id to compare. */
 function bbSameItem(a, b) {
     try {
         if (String(a.name) !== String(b.name)) { return false; }
-        return Math.abs(bbTicks(a.start) - bbTicks(b.start)) <= 1;
+        return bbSameSpan(a, b);
     } catch (e) { return false; }
 }
 
-/* Selecting a clip that carries linked audio hands back a video track item and
- * an audio one. Only the video half can be cut out, so the audio half is
- * dropped, and only when its kind can actually be read: a kind we cannot read
- * is not evidence of anything. */
-function bbVideoSelection(seq) {
-    var picked = [];
-    var unnamed = [];
+/* The time a track item occupies. A clip and its linked audio occupy exactly
+ * the same span, which is what makes them recognisable as one piece of footage
+ * when nothing else about them agrees. */
+function bbSameSpan(a, b) {
     try {
-        var items = bbToList(seq.getSelection());
-        for (var i = 0; i < items.length; i++) {
-            var kind = bbClipKind(items[i]);
-            if (kind === "audio") { continue; }
-            if (kind === "video") { picked.push(items[i]); }
-            else { unnamed.push(items[i]); }
-        }
-    } catch (eSel) { /* very old builds throw instead of returning an empty list */ }
-    for (var j = 0; j < unnamed.length; j++) {
-        var twin = false;
-        for (var k = 0; k < picked.length; k++) {
-            if (bbSameItem(unnamed[j], picked[k])) { twin = true; break; }
-        }
-        if (!twin) { picked.push(unnamed[j]); }
+        return Math.abs(bbTicks(a.start) - bbTicks(b.start)) <= 1 &&
+            Math.abs(bbTicks(a.end) - bbTicks(b.end)) <= 1;
+    } catch (e) { return false; }
+}
+
+function bbAddUnique(list, item) {
+    for (var i = 0; i < list.length; i++) {
+        if (bbSameItem(list[i], item)) { return list; }
     }
-    return picked;
+    list.push(item);
+    return list;
+}
+
+/* ------------------------------------------------------------------ */
+/* Walking the timeline                                                */
+/* ------------------------------------------------------------------ */
+/* Collections answer to numTracks/numItems, to length, or to a counting
+ * method, depending on the build. All of them are tried once, here, so that
+ * nothing downstream has to guess. */
+function bbVideoTrackCount(seq) {
+    var count = 0;
+    try { count = bbNum(seq.videoTracks.numTracks); } catch (eNum) {}
+    if (!count) { try { count = bbNum(seq.videoTracks.length); } catch (eLen) {} }
+    if (!count) { try { count = bbNum(seq.getVideoTrackCount()); } catch (eCall) {} }
+    return count > 0 ? count : 0;
+}
+
+function bbVideoTrackAt(seq, index) {
+    try { if (seq.videoTracks[index]) { return seq.videoTracks[index]; } } catch (eItem) {}
+    try { return seq.getVideoTrackAtIndex(index); } catch (eCall) {}
+    return null;
+}
+
+function bbClipCount(track) {
+    var count = 0;
+    try { count = bbNum(track.clips.numItems); } catch (eNum) {}
+    if (!count) { try { count = bbNum(track.clips.length); } catch (eLen) {} }
+    return count > 0 ? count : 0;
+}
+
+function bbClipAt(track, index) {
+    try { return track.clips[index] || null; } catch (eItem) {}
+    return null;
+}
+
+/* The clip on a video track that a selected item refers to, or null when the
+ * item sits on no video track at all. Premiere gives a selection item no id,
+ * so the match is the span it occupies under its name. */
+function bbVideoClipFor(seq, item) {
+    var tracks = bbVideoTrackCount(seq);
+    for (var t = 0; t < tracks; t++) {
+        var track = bbVideoTrackAt(seq, t);
+        if (!track) { continue; }
+        var clips = bbClipCount(track);
+        for (var j = 0; j < clips; j++) {
+            var clip = bbClipAt(track, j);
+            if (clip && bbSameItem(clip, item)) { return clip; }
+        }
+    }
+    return null;
+}
+
+/* Which selected items are clips on a video track.
+ *
+ * This is resolved against the timeline rather than trusted to the items'
+ * account of themselves. Selecting a clip that carries linked audio hands back
+ * two items for one piece of footage, and a build may describe both of them the
+ * same way, so what decides is the track a clip sits on. Where nothing can be
+ * decided the item is still offered, so that a mismatch shows up as a failed
+ * job rather than as an empty selection. */
+function bbVideoSelection(seq) {
+    var items = [];
+    try { items = bbToList(seq.getSelection()); } catch (eSel) { return []; }
+    var onTracks = [];
+    var loose = [];
+    for (var i = 0; i < items.length; i++) {
+        if (bbClipKind(items[i]) === "audio") { continue; }
+        var clip = bbVideoClipFor(seq, items[i]);
+        if (clip) { bbAddUnique(onTracks, clip); }
+        else { bbAddUnique(loose, items[i]); }
+    }
+    return onTracks.length ? onTracks : loose;
 }
 
 /* "It doesn't see my clip" is a dead end to debug from a distance, so when the
@@ -205,8 +275,8 @@ function bbSelectionHint(seq) {
     for (var i = 0; i < items.length && i < 4; i++) {
         var name = "?";
         try { name = String(items[i].name); } catch (eName) {}
-        var kind = bbClipKind(items[i]);
-        bits.push('"' + name + '"' + (kind ? " (" + kind + ")" : ""));
+        var place = bbVideoClipFor(seq, items[i]) ? "video track" : "no video track";
+        bits.push('"' + name + '" (' + (bbClipKind(items[i]) || "kind unknown") + ", " + place + ")");
     }
     if (items.length > 4) { bits.push("..."); }
     return " (Premiere reports " + items.length + " selected: " + bits.join(", ") + ".)";
@@ -222,10 +292,13 @@ function bbTrackIndexOf(seq, clip) {
             return parseInt(direct, 10);
         }
     } catch (eDirect) {}
-    for (var i = 0; i < seq.videoTracks.numTracks; i++) {
-        var track = seq.videoTracks[i];
-        for (var j = 0; j < track.clips.numItems; j++) {
-            if (track.clips[j] === clip) { return i; }
+    var tracks = bbVideoTrackCount(seq);
+    for (var i = 0; i < tracks; i++) {
+        var track = bbVideoTrackAt(seq, i);
+        if (!track) { continue; }
+        var clips = bbClipCount(track);
+        for (var j = 0; j < clips; j++) {
+            if (bbClipAt(track, j) === clip) { return i; }
         }
     }
     return -1;
@@ -239,21 +312,27 @@ function bbFindClip(seq, target) {
     if (!target) { return null; }
     var wanted = target.startTicks;
     var byPosition = null;
-    for (var i = 0; i < seq.videoTracks.numTracks; i++) {
-        var track = seq.videoTracks[i];
-        for (var j = 0; j < track.clips.numItems; j++) {
-            var clip = track.clips[j];
-            if (Math.abs(bbTicks(clip.start) - wanted) > 1) { continue; }
+    var tracks = bbVideoTrackCount(seq);
+    for (var i = 0; i < tracks; i++) {
+        var track = bbVideoTrackAt(seq, i);
+        if (!track) { continue; }
+        var clips = bbClipCount(track);
+        for (var j = 0; j < clips; j++) {
+            var clip = bbClipAt(track, j);
+            if (!clip || Math.abs(bbTicks(clip.start) - wanted) > 1) { continue; }
             if (i === target.trackIndex || target.trackIndex < 0) { return clip; }
             if (!byPosition) { byPosition = clip; }
         }
     }
     if (byPosition) { return byPosition; }
     /* Last resort: the clip was moved, but kept its name. */
-    for (var k = 0; k < seq.videoTracks.numTracks; k++) {
-        var t = seq.videoTracks[k];
-        for (var m = 0; m < t.clips.numItems; m++) {
-            if (String(t.clips[m].name) === target.clipName) { return t.clips[m]; }
+    for (var k = 0; k < tracks; k++) {
+        var t = bbVideoTrackAt(seq, k);
+        if (!t) { continue; }
+        var named = bbClipCount(t);
+        for (var m = 0; m < named; m++) {
+            var candidate = bbClipAt(t, m);
+            if (candidate && String(candidate.name) === target.clipName) { return candidate; }
         }
     }
     return null;
@@ -405,8 +484,10 @@ function bbSelectedLayer() {
 /* Apply result                                                        */
 /* ------------------------------------------------------------------ */
 function bbTrackFreeBetween(track, startTicks, endTicks) {
-    for (var i = 0; i < track.clips.numItems; i++) {
-        var clip = track.clips[i];
+    var clips = bbClipCount(track);
+    for (var i = 0; i < clips; i++) {
+        var clip = bbClipAt(track, i);
+        if (!clip) { continue; }
         var s = bbTicks(clip.start);
         var e = bbTicks(clip.end);
         if (s < endTicks && e > startTicks) { return false; }
@@ -416,23 +497,26 @@ function bbTrackFreeBetween(track, startTicks, endTicks) {
 
 /* Mode "add": put the cut-out on the video track directly above the original
  * and switch the original off, so the edit underneath is untouched. Premiere's
- * scripting cannot create a track, so if there is nothing above — or something
- * already occupies that span — this says so instead of scribbling over it. */
+ * scripting cannot create a track, so if there is nothing above, or something
+ * already occupies that span, this says so instead of scribbling over it. */
 function bbPlaceAbove(seq, clip, item) {
     var above = bbTrackIndexOf(seq, clip) + 1;
-    if (above <= 0 || above >= seq.videoTracks.numTracks) {
+    if (above <= 0 || above >= bbVideoTrackCount(seq)) {
         return bbJson({
             ok: false,
-            reason: "There is no empty video track above this clip — add one and try again, or use Replace."
+            reason: "There is no empty video track above this clip - add one and try again, or use Replace."
         });
     }
     var startTicks = bbTicks(clip.start);
     var endTicks = bbTicks(clip.end);
-    var track = seq.videoTracks[above];
+    var track = bbVideoTrackAt(seq, above);
+    if (!track) {
+        return bbJson({ ok: false, reason: "The video track above this clip could not be reached." });
+    }
     if (!bbTrackFreeBetween(track, startTicks, endTicks)) {
         return bbJson({
             ok: false,
-            reason: "The video track above this clip already has footage there — use Replace, or move the clip down a track."
+            reason: "The video track above this clip already has footage there - use Replace, or move the clip down a track."
         });
     }
     track.overwriteClip(item, clip.start);
@@ -518,8 +602,8 @@ function bbApplyResult(outputPath, mode, fps, compId, layerId) {
         /* changeMediaPath isn't available (or refused): fall back to dropping
          * the cut-out where the clip was. That loses the clip's effects but
          * still leaves the sequence looking right. */
-        var track = seq.videoTracks[bbTrackIndexOf(seq, clip) >= 0 ? bbTrackIndexOf(seq, clip) : 0];
-        track.overwriteClip(item, clip.start);
+        var track = bbVideoTrackAt(seq, Math.max(0, bbTrackIndexOf(seq, clip)));
+        if (track) { track.overwriteClip(item, clip.start); }
         return bbJson({
             ok: true,
             footage: String(item.name),
@@ -539,11 +623,22 @@ function bbApplyResult(outputPath, mode, fps, compId, layerId) {
 /* ------------------------------------------------------------------ */
 /* Process launching                                                   */
 /* ------------------------------------------------------------------ */
+/* After Effects gives ExtendScript a `system` object with callSystem on it.
+ * Premiere Pro has no `system` object at all, so the panel starts processes
+ * itself through the Node runtime CEP hands it, and these functions are the
+ * fallback for a host that offers neither. Returns whether it launched. */
 function bbRunDetached(inner) {
+    if (typeof system === "undefined" || !system || typeof system.callSystem !== "function") {
+        return false;
+    }
     // `start "" /b` keeps the launched process in the background; pythonw.exe
     // means there is no console window to close.
     system.callSystem('cmd.exe /c ' + inner);
+    return true;
 }
+
+var BB_NO_LAUNCHER = "The panel has no way to launch a program in this host. " +
+    "Reinstall the panel (premiere-pro/install.ps1) and restart Premiere Pro.";
 
 function bbLaunchEngine(pythonw, root, port) {
     try {
@@ -558,7 +653,9 @@ function bbLaunchEngine(pythonw, root, port) {
             });
         }
         var inner = 'cd /d "' + root + '" && start "" /b "' + pythonw + '" -m src.engine --port ' + port + ' --quiet';
-        bbRunDetached(inner);
+        if (!bbRunDetached(inner)) {
+            return bbJson({ ok: false, reason: "Could not start the engine: " + BB_NO_LAUNCHER });
+        }
         return bbJson({ ok: true });
     } catch (e) {
         return bbJson({ ok: false, reason: "Could not start the engine: " + e.toString() });
@@ -585,7 +682,9 @@ function bbOpenFullApp(python, root, file) {
             // panel was working on, instead of the welcome launcher.
             inner += ' "' + file + '"';
         }
-        bbRunDetached(inner);
+        if (!bbRunDetached(inner)) {
+            return bbJson({ ok: false, reason: "Could not open Better Brush: " + BB_NO_LAUNCHER });
+        }
         return bbJson({ ok: true });
     } catch (e) {
         return bbJson({ ok: false, reason: "Could not open Better Brush: " + e.toString() });

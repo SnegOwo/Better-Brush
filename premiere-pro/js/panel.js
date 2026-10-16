@@ -281,6 +281,88 @@
     return { ok: false, reason: "The panel is not connected to Premiere Pro." };
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Launching programs                                                  */
+  /* ------------------------------------------------------------------ */
+  /* After Effects gives ExtendScript a `system` object with callSystem on it;
+   * Premiere Pro has no `system` object at all. So the panel starts programs
+   * itself where CEP hands it a Node.js runtime (the manifest asks for one),
+   * and falls back to the host script where it does not. */
+  var lastSpawnError = null;
+
+  function nodeRequire(name) {
+    try {
+      if (typeof require === "function") {
+        return require(name);
+      }
+      if (window.cep_node && window.cep_node.require) {
+        return window.cep_node.require(name);
+      }
+    } catch (err) { /* no Node in this host: the host script takes over */ }
+    return null;
+  }
+
+  /* Detached and windowless, so closing the host does not close the engine and
+   * no console flashes up. Returns whether Node was able to try at all. */
+  function spawnDetached(exe, args) {
+    var childProcess = nodeRequire("child_process");
+    if (!childProcess || !childProcess.spawn || !exe) {
+      return false;
+    }
+    try {
+      var child = childProcess.spawn(exe, args, {
+        cwd: state.config.projectRoot || undefined,
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true
+      });
+      lastSpawnError = null;
+      child.on("error", function (err) {
+        lastSpawnError = err;
+      });
+      if (child && typeof child.unref === "function") {
+        child.unref();
+      }
+      return true;
+    } catch (err) {
+      lastSpawnError = err;
+      return false;
+    }
+  }
+
+  function launchEngine() {
+    var port = state.config.port || 8765;
+    var exe = state.config.pythonwPath || state.config.pythonPath;
+    if (spawnDetached(exe, ["-m", "src.engine", "--port", String(port), "--quiet"])) {
+      return Promise.resolve(null);
+    }
+    return callHost(
+      "bbLaunchEngine(" +
+        csString(state.config.pythonwPath) + "," +
+        csString(state.config.projectRoot) + "," +
+        port +
+      ")"
+    );
+  }
+
+  function launchFullApp(file) {
+    var exe = state.config.pythonwPath || state.config.pythonPath;
+    var args = ["-m", "src.main"];
+    if (file) {
+      args.push(file);
+    }
+    if (spawnDetached(exe, args)) {
+      return Promise.resolve(null);
+    }
+    return callHost(
+      "bbOpenFullApp(" +
+        csString(state.config.pythonwPath || state.config.pythonPath) + "," +
+        csString(state.config.projectRoot) + "," +
+        csString(file) +
+      ")"
+    );
+  }
+
   function csString(value) {
     return JSON.stringify(value == null ? "" : String(value));
   }
@@ -373,7 +455,9 @@
       }
       if (Date.now() > deadline) {
         throw new Error(
-          "The engine did not start in time. Open Better Brush once to finish setup."
+          "The engine did not start in time." +
+          (lastSpawnError ? " (" + lastSpawnError.message + ")" : "") +
+          " Open Better Brush once to finish setup."
         );
       }
       return new Promise(function (resolve) {
@@ -392,13 +476,7 @@
       }
       setStatus("busy", "starting");
       render();
-      return callHost(
-        "bbLaunchEngine(" +
-          csString(state.config.pythonwPath) + "," +
-          csString(state.config.projectRoot) + "," +
-          (state.config.port || 8765) +
-        ")"
-      ).then(function (res) {
+      return launchEngine().then(function (res) {
         if (res && res.ok === false) {
           throw new Error(res.reason || "Could not start the engine.");
         }
@@ -1616,13 +1694,7 @@
     /* pythonw, not python: the app is a window, so it needs no console — and a
      * console child launched from the host is what took the host down with it
      * on close. */
-    return callHost(
-      "bbOpenFullApp(" +
-        csString(state.config.pythonwPath || state.config.pythonPath) + "," +
-        csString(state.config.projectRoot) + "," +
-        csString(file) +
-      ")"
-    ).catch(function () {});
+    return launchFullApp(file).catch(function () {});
   }
 
   /* Attach to a job the engine is already running (the panel was reopened, or

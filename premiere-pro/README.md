@@ -185,6 +185,14 @@ Premiere Pro
 - The panel starts the engine on demand via `config.json` and polls `/health`.
   It also attaches to a job that is already running, so reopening the panel
   never hides progress.
+- **The panel does the launching here, not the host script.** After Effects
+  gives ExtendScript a `system` object with `callSystem` on it; Premiere has no
+  `system` object at all, so the engine and the full app are started with
+  `child_process` through the Node.js runtime CEP hands the panel (the manifest
+  asks for it). Both are launched detached and windowless, so closing Premiere
+  leaves them alone and no console flashes up. Where that runtime is missing the
+  host script is still tried, which is why the panel also works in hosts that
+  have `callSystem`.
 - Cancelling is supported (`Cancel` while working).
 - **The engine reads the clip's real frame size, rate and length from the media
   file**, not from the panel: Premiere's scripting API does not expose a clip's
@@ -272,6 +280,8 @@ that file has the full trace.
 | --- | --- |
 | Panel missing from the Extensions menu | Re-run `install.ps1` (elevated), restart Premiere. Check `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro\CSXS\manifest.xml` exists. |
 | The panel doesn't see the clip you selected | Click the clip once in the timeline so it highlights, and give the panel a second — it polls. If it still refuses, the panel now repeats what Premiere reported, which is the useful part. |
+| "The panel has no way to launch a program in this host" | The panel was updated but the manifest it loaded was not. Re-run `install.ps1` (elevated) and **restart Premiere Pro** — CEP reads the manifest once, at startup. |
+| "The engine did not start in time" | The message now carries the reason from the operating system when it has one (for example `spawn ... ENOENT`, which means the Python path in `config.json` is wrong). Re-run `install.ps1` to rewrite `config.json` from this machine's Python. |
 | The installer says it needs administrator rights | It installs for all users by default. Re-run it from an **Administrator** PowerShell, or add `-Scope User` to install for your account only. |
 | The panel is listed twice | There is a copy in two CEP folders. Re-run `install.ps1` — it removes the copies it isn't using — and restart Premiere. |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
@@ -313,4 +323,5 @@ The engine itself lives in the repository under `src/engine/`.
 | "Keep the original" mode | New layer above the source layer | Overwrite onto the free track above; the original is disabled |
 | Clip handle for a correction | `compId` / `layerId` | Track index + clip start time (Premiere has no ids) |
 | Clip dimensions | `FootageItem.width` / `.height` / `.frameRate` | Not exposed at all — the engine reads the media instead |
+| Starting the engine / app | `system.callSystem` in the host script | `child_process.spawn` in the panel — Premiere's ExtendScript has no `system` object |
 | Installer target | `%APPDATA%\...\CEP\extensions\BetterBrush` | `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro` |

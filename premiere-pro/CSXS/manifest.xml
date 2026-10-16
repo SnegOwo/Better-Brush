@@ -9,6 +9,11 @@
   CEP is used rather than UXP because the work needs the ExtendScript object
   model: Sequence.getSelection + ProjectItem.changeMediaPath are only reliably
   scriptable through ExtendScript today.
+
+  Node.js is asked for because Premiere's ExtendScript has no `system` object:
+  system.callSystem, which the After Effects panel uses to start the engine, does
+  not exist here. The panel starts it with child_process instead, detached and
+  windowless, so closing Premiere does not close the engine.
 -->
 <ExtensionManifest Version="7.0"
                    ExtensionBundleId="com.snegdev.betterbrush.premiere"
@@ -41,6 +46,10 @@
             <Parameter>--allow-file-access</Parameter>
             <Parameter>--allow-file-access-from-files</Parameter>
             <Parameter>--disable-features=OutOfBlinkCors</Parameter>
+            <!-- Lets js/panel.js reach child_process, so the panel can start the
+                 engine and the full app itself. -->
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
           </CEFCommandLine>
         </Resources>
         <Lifecycle>

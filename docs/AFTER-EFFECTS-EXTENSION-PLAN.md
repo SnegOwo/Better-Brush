@@ -1148,4 +1148,48 @@ CSXS.16 rather than stopping at 13.
   and a host script that throws is reported as such instead of being shown as an
   empty selection.
 
+### 23.7 The second real test: one clip read as two, and nothing to launch with
+
+Two more faults, both found by the first run in Premiere Pro 26.0 rather than by
+reading the documentation.
+
+**A selected clip and its linked audio came back as two clips.** The first fix had
+separated them by asking each item what it was, and 26.0 answers that question the
+same way for both halves. So the question was dropped: the selection is now
+resolved *against the timeline*. Every clip on every video track is compared with
+the selected items by the span it occupies under its name, and a clip that sits on
+a video track is the only thing that can be cut out. Each clip is therefore
+considered once however many of its halves were selected, and what comes back is
+the timeline's own clip object rather than the selection's copy of it — which is
+also what `bbTrackIndexOf` and `bbFindClip` want. `clip.parentTrack.video` is
+consulted first where a build offers it, then `type`, then `mediaType`, and an item
+that matches nothing is still offered rather than thrown away, so an unfamiliar
+build fails in the engine where the reason is visible instead of here where it is
+not.
+
+**The engine could not be started, because `system` does not exist in Premiere.**
+`system.callSystem` — how the After Effects panel starts the engine and the full
+app — is an After Effects addition to ExtendScript. Premiere has no `system`
+object at all, and the host script therefore threw `ReferenceError: system is
+undefined` on the first click. The panel now starts both programs itself with
+`child_process`, through the Node.js runtime that CEP provides when the manifest
+asks for it (`--enable-nodejs`, `--mixed-context`). They are spawned detached,
+with `stdio: "ignore"` and `windowsHide`, so closing Premiere leaves the engine
+running and no console window appears. The host script is still the fallback for a
+host that has `callSystem` and no Node, and `bbRunDetached` now reports rather than
+throws when it has neither.
+
+The collection shape was hardened at the same time: `videoTracks` and `clips` are
+read through one set of helpers that accept `numTracks`/`numItems`, a bare
+`length`, or `getVideoTrackCount`/`getVideoTrackAtIndex`, because all three turn up
+in the wild and a silent zero there would look exactly like this bug again.
+
+Verified: `host.jsx` runs unmodified against the mock Premiere DOM — 40 checks,
+covering the linked pair with both halves described as video, the audio half
+described as audio, all four collection shapes, two different clips, an audio-only
+clip, offline media, the remembered target, and both launch entry points in a host
+with no `system` object. The launch itself was run for real outside CEP with the
+same call the panel makes: `pythonw -m src.engine --port 8765 --quiet`, detached
+and windowless from the repository root, and `/health` answered in six seconds.
+
 

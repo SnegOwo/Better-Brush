@@ -68,6 +68,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
   both panels can be installed side by side.
 
 ### Fixed
+- **The Premiere Pro panel starts the engine again.** It could not: `system` is an
+  After Effects addition to ExtendScript, and Premiere has no `system` object at
+  all, so the first click failed with `ReferenceError: system is undefined`. The
+  panel now starts the engine and the full app itself with `child_process`,
+  through the Node runtime CEP gives it, detached and windowless. The host script
+  is still the fallback where `callSystem` exists.
+- **The Premiere Pro panel counts a clip and its linked audio as one clip.** The
+  earlier fix told the two halves apart by asking each one what it was; Premiere
+  2026 answers that the same way for both. The selection is now resolved against
+  the timeline instead: the clip that sits on a video track is the one that can be
+  cut out, so a clip is considered once however many halves were selected.
 - **The Premiere Pro panel can see the clip you selected.** `TrackItem.type` is a
   *number* — 1 for video, 2 for audio — while `TrackItem.mediaType` is the string
   "Video"/"Audio". The host read `type`, turned it into `"1"`, and compared it to
