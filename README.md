@@ -107,9 +107,10 @@ powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1    # After 
 powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1     # Premiere Pro (elevated)
 ```
 
-One character per click; multi-subject and oddball layers are handed to the full app. Both
-panels drive the same local engine, so install one or both. Windows, AE 2022+ / Premiere
-Pro 2022+ — see **[after-effects/README.md](after-effects/README.md)** and
+One character per click; multi-subject and oddball layers are handed to the full app. A replace
+keeps the clip's own audio — the cut-out is the same footage minus the background. Both panels
+drive the same local engine, so install one or both. Windows, AE 2022+ / Premiere Pro 2022+ — see
+**[after-effects/README.md](after-effects/README.md)** and
 **[premiere-pro/README.md](premiere-pro/README.md)**.
 
 ## Editions

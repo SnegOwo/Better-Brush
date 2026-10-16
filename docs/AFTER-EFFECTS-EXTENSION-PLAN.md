@@ -1130,15 +1130,19 @@ CSXS.16 rather than stopping at 13.
 - The Premiere install was rehearsed in both scopes and then run for real, and the
   installed files were confirmed byte-identical to the repository with the shared
   copy in place and the per-user copy gone.
-- **The Premiere host has still only run its selection path.** The first real test
-  in Premiere Pro 26.0 found that `TrackItem.type` is a *number* (1 is video, 2 is
+- **The Premiere host has since run the whole path.** The first real test in
+  Premiere Pro 26.0 found that `TrackItem.type` is a *number* (1 is video, 2 is
   audio) where `TrackItem.mediaType` is the string "Video"/"Audio"; the host read
   the number and compared it to "Video", so it rejected the clip that was plainly
   selected and every other one. Fixed, and the fix is now covered: `host.jsx` runs
   unmodified against a mock Premiere DOM (`TrackItem.type` as a number, a linked
   audio twin in the selection) and the old expression is kept in the test as the
-  guard that proves what was wrong. The rest of `js/host.jsx` — the apply half —
-  is still written against the documented API and defended call by call.
+  guard that proves what was wrong. The apply half has run for real too: a
+  **Replace** reached `ProjectItem.changeMediaPath` on a real timeline and came
+  back on the timeline, which is what turned up the missing audio in §23.8.
+  **Above** (`Track.overwriteClip` and `clip.disabled`) is the one branch still
+  written against the documented API and defended call by call, because it needs a
+  free track above the clip to run at all.
 - The selection path is also tested for a `getSelection()` that answers with a
   keyed collection rather than an array, for an audio-only selection, for two
   different clips (it asks for one), for an offline clip, and for the track index

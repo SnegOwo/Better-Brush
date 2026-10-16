@@ -184,6 +184,7 @@ Premiere Pro
        └─ Better Brush engine (python -m src.engine)
             VideoReader → SAM 2 auto-subject → propagate → close gaps
                         → MatAnyone 2 (soft alpha) → ffmpeg (ProRes 4444)
+                        → the clip's own audio muxed back in
 ```
 
 - The engine is **out of process** on purpose: no torch inside Premiere, no
@@ -291,11 +292,13 @@ that file has the full trace.
 | The installer says it needs administrator rights | It installs for all users by default. Re-run it from an **Administrator** PowerShell, or add `-Scope User` to install for your account only. |
 | The panel is listed twice | There is a copy in two CEP folders. Re-run `install.ps1` — it removes the copies it isn't using — and restart Premiere. |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
+| An update changed nothing | The engine is a separate process, so a run that started before the update is still the old code. Quit Better Brush (or end the `pythonw` task) and click again — the panel starts a fresh engine. |
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
 | "Several clips are selected" | Premiere hands the panel whatever is selected; deselect the others (or select just the one clip) and it resumes on the next poll. |
 | "This clip isn't linked to a file on disk" | The clip is offline, or it is a synthetic (colour matte, adjustment, transparent video). Relink it, or use the full app. |
 | "No empty video track above this clip" | Premiere's scripting cannot create tracks. Add a track above and try again, or switch **Result** to Replace. |
+| Replace asks about the audio, or silences the clip | Update both (`install.ps1`). An older engine exported picture only, and `changeMediaPath` will not swap a media file that had sound for one that has none. The cut-out now carries the clip's own audio. |
 | "The clip moved or was renamed while the job ran" | The panel re-finds the clip by its track and start time; a move that changes either one during a run loses the thread. Select the clip and run again. |
 | A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
 | A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. Matting adds another model pass — turn it off for speed. |

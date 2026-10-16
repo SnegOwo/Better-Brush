@@ -299,14 +299,16 @@
 
   /* Detached and windowless, so closing the host does not close the engine and
    * no console flashes up. Returns whether Node was able to try at all. */
-  function spawnDetached(exe, args) {
+  function spawnDetached(exe, args, cwd) {
     var childProcess = nodeRequire("child_process");
-    if (!childProcess || !childProcess.spawn || !exe) {
+    if (!childProcess || !childProcess.spawn || !exe || !cwd) {
+      /* A missing Python path or project root is config.json's business, and the
+       * host script reports that in a sentence rather than as a timeout. */
       return false;
     }
     try {
       var child = childProcess.spawn(exe, args, {
-        cwd: state.config.projectRoot || undefined,
+        cwd: cwd,
         detached: true,
         stdio: "ignore",
         windowsHide: true
@@ -328,7 +330,11 @@
   function launchEngine() {
     var port = state.config.port || 8765;
     var exe = state.config.pythonwPath || state.config.pythonPath;
-    if (spawnDetached(exe, ["-m", "src.engine", "--port", String(port), "--quiet"])) {
+    if (spawnDetached(
+      exe,
+      ["-m", "src.engine", "--port", String(port), "--quiet"],
+      state.config.projectRoot
+    )) {
       return Promise.resolve(null);
     }
     return callHost(
@@ -346,7 +352,7 @@
     if (file) {
       args.push(file);
     }
-    if (spawnDetached(exe, args)) {
+    if (spawnDetached(exe, args, state.config.projectRoot)) {
       return Promise.resolve(null);
     }
     return callHost(

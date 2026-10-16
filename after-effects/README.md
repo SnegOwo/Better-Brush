@@ -138,6 +138,7 @@ After Effects
        └─ Better Brush engine (python -m src.engine)
             VideoReader → SAM 2 auto-subject → propagate → close gaps
                         → MatAnyone 2 (soft alpha) → ffmpeg (ProRes 4444)
+                        → the clip's own audio muxed back in
 ```
 
 - The engine is **out of process** on purpose: no torch inside After Effects,
@@ -145,6 +146,10 @@ After Effects
 - The panel starts the engine on demand via `config.json` and polls `/health`.
   It also attaches to a job that is already running, so reopening the panel
   never hides progress.
+- The engine is started by the host script (`system.callSystem`), detached and
+  console-free. Where CEP hands the panel a Node.js runtime the panel starts it
+  itself instead — which is what the Premiere Pro port has to do, since
+  Premiere's ExtendScript has no `system` object at all.
 - Cancelling is supported (`Cancel` while working).
 - Before tracking, the found character is **re-prompted once with a box around
   it**. A point prompt only segments the part it happens to land on, and hair is
@@ -227,6 +232,7 @@ that file has the full trace.
 | --- | --- |
 | Panel missing from the Extensions menu | Re-run `install.ps1`, restart AE. Check that `CSXS\manifest.xml` exists in the folder it installed to (`%APPDATA%\Adobe\CEP\extensions\BetterBrush`, or `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrush` if you used `-Scope System`). |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
+| An update changed nothing | The engine is a separate process, so a run that started before the update is still the old code. Quit Better Brush (or end the `pythonw` task) and click again — the panel starts a fresh engine. |
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
 | A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
@@ -240,6 +246,7 @@ that file has the full trace.
 | "Apply correction" does nothing | Paint at least one stroke first; a correction with no strokes is ignored. Also update the panel (`install.ps1`) if it's an older build. |
 | The **Add** brush had no visible effect | Update both (`install.ps1`). The soft matte used to be allowed to hollow out a region the mask covered, so painting hair *in* came back transparent. Paint the stroke again after updating. |
 | A `cmd` window flashes as a run finishes | Update both (`install.ps1`). The export's ffmpeg child used to open a console of its own on the way out. |
+| The replace loses the sound | Update both (`install.ps1`). An older engine exported picture only, so replacing a source that had audio dropped it; the cut-out now carries the clip's own audio. |
 | After Effects crashes after closing the full app | Update both (`install.ps1`). The app is now launched console-free (`pythonw`) and detached, and its `.bbproj` registration only tells the shell when the association actually changed instead of broadcasting to every window on the desktop. |
 | Holes in hair or between fingers | The panel closes enclosed gaps automatically; update the panel (`install.ps1`) if you still see them. If a gap is genuinely open to the background, paint it in with the brush. |
 | The brush shows the mask, not the soft matte | Expected: the brush surface is the tracked mask, which is what you are editing. The layer itself still uses the matted alpha. |
