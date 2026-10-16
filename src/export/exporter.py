@@ -34,6 +34,143 @@ def _resolve_ffmpeg() -> str:
     return shutil.which("ffmpeg") or "ffmpeg"
 
 
+def _ffprobe_path(ffmpeg_path: str | None = None) -> str | None:
+    """ffprobe usually ships beside ffmpeg. ``None`` means we cannot ask."""
+    ffmpeg = ffmpeg_path or _resolve_ffmpeg()
+    beside = Path(ffmpeg).with_name(
+        "ffprobe.exe" if ffmpeg.lower().endswith(".exe") else "ffprobe"
+    )
+    if beside.is_file():
+        return str(beside)
+    return shutil.which("ffprobe")
+
+
+def has_audio_stream(path: Path | str, ffmpeg_path: str | None = None) -> bool:
+    """Whether *path* carries an audio stream.
+
+    A question we cannot answer counts as "yes": the mux tolerates a source with
+    no audio, so guessing wrong that way only costs a stream copy, while
+    guessing wrong the other way would drop the sound.
+    """
+    probe = _ffprobe_path(ffmpeg_path)
+    if probe is None:
+        return True
+    cmd = [
+        probe,
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        str(path),
+    ]
+    try:
+        done = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30, **no_window()
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.debug("ffprobe could not be run (%s); assuming audio", exc)
+        return True
+    if done.returncode != 0:
+        logger.debug("ffprobe failed on %s; assuming audio", path)
+        return True
+    return bool(done.stdout.strip())
+
+
+def mux_audio(
+    video_file: Path,
+    audio_source: Path,
+    ffmpeg_path: str | None = None,
+    start: float = 0.0,
+    duration: float | None = None,
+) -> Path:
+    """Mux *audio_source*'s audio into *video_file* (fast, copy-first).
+
+    Audio is copied losslessly when the codec is container-compatible,
+    otherwise re-encoded to AAC.  If audio cannot be muxed for any reason
+    the export is kept silent instead of failing — audio must never
+    brick an otherwise-finished render.
+
+    ``start`` and ``duration`` window the audio, for a job that covers part of
+    its source; they are applied to the audio input alone, so the video is
+    copied whole rather than trimmed to the audio's length.
+    """
+    ffmpeg = ffmpeg_path or _resolve_ffmpeg()
+    # Keep a real container extension so ffmpeg can infer the output format
+    # (a bare ".mux.tmp" suffix makes ffmpeg fail with "Invalid argument").
+    tmp = video_file.with_name(video_file.stem + ".mux" + video_file.suffix)
+
+    audio_in: list[str] = []
+    if start > 0:
+        audio_in += ["-ss", f"{start:.6f}"]
+    if duration is not None and duration > 0:
+        audio_in += ["-t", f"{duration:.6f}"]
+    # A window already bounds the audio; -shortest would bound the video too.
+    closing = [] if audio_in else ["-shortest"]
+
+    for audio_args in (["-c:a", "copy"], ["-c:a", "aac", "-b:a", "192k"]):
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-nostdin",
+            "-i",
+            str(video_file),
+            *audio_in,
+            "-i",
+            str(audio_source),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0?",
+            "-c:v",
+            "copy",
+            *audio_args,
+            *closing,
+            str(tmp),
+        ]
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            **no_window(),
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=3600)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            logger.warning("Audio mux timed out; keeping the export silent")
+            tmp.unlink(missing_ok=True)
+            break
+        if proc.returncode == 0:
+            del stdout
+            video_file.unlink(missing_ok=True)
+            tmp.replace(video_file)
+            return video_file
+        # Log detail, then fall through to the next strategy.
+        tail = (
+            " | ".join(stderr.strip().splitlines()[-4:])
+            if stderr.strip()
+            else "no stderr"
+        )
+        logger.warning(
+            "Audio mux attempt failed (code %s, args %s): %s",
+            proc.returncode,
+            " ".join(audio_args),
+            tail,
+        )
+        tmp.unlink(missing_ok=True)
+
+    logger.warning(
+        "Could not mux original audio; keeping export silent: %s", video_file
+    )
+    return video_file
+
+
 class Exporter:
     """Handle export of mask sequences to PNG alpha and video via FFmpeg."""
 
@@ -256,74 +393,11 @@ class Exporter:
         return out_file
 
     def _mux_audio(self, video_file: Path, audio_source: Path) -> Path:
-        """Mux *audio_source*'s audio into *video_file* (fast, copy-first).
+        """Mux the original clip's audio into the export, silent on failure.
 
-        Audio is copied losslessly when the codec is container-compatible,
-        otherwise re-encoded to AAC.  If audio cannot be muxed for any reason
-        the export is kept silent instead of failing — audio must never
-        brick an otherwise-finished render.
+        The work is module level so the headless engine can use the same code.
         """
-        # Keep a real container extension so ffmpeg can infer the output format
-        # (a bare ".mux.tmp" suffix makes ffmpeg fail with "Invalid argument").
-        tmp = video_file.with_name(video_file.stem + ".mux" + video_file.suffix)
-
-        for audio_args in (["-c:a", "copy"], ["-c:a", "aac", "-b:a", "192k"]):
-            cmd = [
-                self._ffmpeg_path,
-                "-y",
-                "-nostdin",
-                "-i",
-                str(video_file),
-                "-i",
-                str(audio_source),
-                "-map",
-                "0:v:0",
-                "-map",
-                "1:a:0?",
-                "-c:v",
-                "copy",
-                *audio_args,
-                "-shortest",
-                str(tmp),
-            ]
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                **no_window(),
-            )
-            try:
-                stdout, stderr = proc.communicate(timeout=3600)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.communicate()
-                logger.warning("Audio mux timed out; keeping the export silent")
-                tmp.unlink(missing_ok=True)
-                break
-            if proc.returncode == 0:
-                del stdout
-                video_file.unlink(missing_ok=True)
-                tmp.replace(video_file)
-                return video_file
-            # Log detail, then fall through to the next strategy.
-            tail = (
-                " | ".join(stderr.strip().splitlines()[-4:])
-                if stderr.strip()
-                else "no stderr"
-            )
-            logger.warning(
-                "Audio mux attempt failed (code %s, args %s): %s",
-                proc.returncode,
-                " ".join(audio_args),
-                tail,
-            )
-            tmp.unlink(missing_ok=True)
-
-        logger.warning(
-            "Could not mux original audio; keeping export silent: %s", video_file
-        )
-        return video_file
+        return mux_audio(video_file, audio_source, self._ffmpeg_path)
 
     def export_transparent_video(
         self,

@@ -1192,4 +1192,38 @@ with no `system` object. The launch itself was run for real outside CEP with the
 same call the panel makes: `pythonw -m src.engine --port 8765 --quiet`, detached
 and windowless from the repository root, and `/health` answered in six seconds.
 
+### 23.8 The third real test: the replacement had no sound
+
+The panel then worked end to end, and Premiere stopped it with a question: *"Le
+fichier sélectionné ne contient pas audio média utilisé par les références d'élément
+dans une ou plusieurs séquences. Ces audio références d'élément seront supprimées..."*
+— the chosen file has none of the audio the timeline's references to that media
+expect, and proceeding deletes those references. The alpha movie is picture only,
+and `changeMediaPath` will not quietly swap a media file that had sound for one
+that has none.
+
+Accepting the warning is not a fix: it drops the audio either way. The cut-out
+should carry the clip's own audio, since the engine read the whole source and the
+result *is* that clip minus the background. So the job request gained
+`keep_audio`, and the pipeline muxes the source's audio into the finished movie
+after the export — a stream copy, so it costs a pass over the file rather than a
+re-encode, windowed to the frames the job actually covered so a partial range
+still lands in sync, and applied to the audio input alone so the video is copied
+whole instead of being trimmed to the audio's length.
+
+The mux is the application's own `_mux_audio`, lifted to module level so the
+headless engine runs the same code: lossless when the codec fits the container,
+re-encoded to AAC when it does not, and silent-if-it-cannot rather than a failed
+render that was otherwise finished. The engine asks whether the source has audio
+at all before doing that work (ffprobe beside ffmpeg, and "assume yes" when it
+cannot tell), so a silent source is never copied for nothing. `keep_audio` is off
+by default — a bare API request still returns picture only — and both panels set
+it, because a replace that silences the clip is the wrong answer in either host.
+
+Verified with real files: a two-second clip with sound muxed into a silent ProRes
+4444 movie came back carrying the audio, with the video still 2.000 s and still
+ProRes; windowing the mux to `start=1.0, duration=1.0` gave 1.000 s of audio
+against the same 2.000 s of picture; and a source with no audio was reported as
+having none, so nothing was copied.
+
 

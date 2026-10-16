@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 ## [Unreleased]
 
 ### Added
+- **`keep_audio` on the engine's job request.** Mux the source file's own audio
+  into the alpha movie, as a stream copy, windowed to the frames the job actually
+  covered. Off by default, so a bare API request still returns picture only; both
+  host panels ask for it, since the cut-out stands in for the clip it came from.
 - **Soft matte coverage and edge decontamination on video export.** The exported
   alpha was hard 0/255, which is what made edges read as a staircase: a one-pixel
   hair strand was either fully in or fully gone, and the compositor had no
@@ -68,6 +72,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
   both panels can be installed side by side.
 
 ### Fixed
+- **The cut-out keeps the clip's audio.** Premiere refused the swap with *"the
+  selected file does not contain the audio media used by the element references"*:
+  the alpha movie had no sound where the media it replaced did, so replacing a
+  clip silenced it (and, pushed through, deleted the project's audio references).
+  The engine now muxes the source file's audio into the alpha movie, so a replace
+  keeps the sound as well as the picture.
 - **The Premiere Pro panel starts the engine again.** It could not: `system` is an
   After Effects addition to ExtendScript, and Premiere has no `system` object at
   all, so the first click failed with `ReferenceError: system is undefined`. The

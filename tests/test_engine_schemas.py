@@ -15,6 +15,7 @@ def test_minimal_request_defaults():
     assert req.preset == "anime"
     assert req.quality == "balanced"
     assert req.model is None
+    assert req.keep_audio is False
 
 
 def test_full_request_round_trips():
@@ -31,12 +32,14 @@ def test_full_request_round_trips():
             "model": "small",
             "output_dir": "C:/out",
             "roi": [0.1, 0.2, 0.5, 0.5],
+            "keep_audio": True,
         }
     )
     assert req.frame_out == 42
     assert req.model == "small"
     assert req.roi == (0.1, 0.2, 0.5, 0.5)
-    assert set(req.to_dict()) >= {"input_path", "frame_out", "model"}
+    assert req.keep_audio is True
+    assert set(req.to_dict()) >= {"input_path", "frame_out", "model", "keep_audio"}
 
 
 @pytest.mark.parametrize("body", [{}, {"input_path": ""}, {"input_path": 5}])

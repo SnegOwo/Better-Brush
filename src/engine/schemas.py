@@ -111,6 +111,13 @@ class JobRequest:
     #: partial coverage) with the MatAnyone 2 network. Off by default so a bare
     #: engine request stays fast; the panel turns it on from its dock.
     matting: bool = False
+    #: Mux the source file's own audio into the alpha movie. Off by default —
+    #: the bare API returns the picture — but the host panels ask for it, since
+    #: the cut-out stands in for the clip it came from: Premiere's
+    #: ``changeMediaPath`` refuses a replacement that has no audio where the
+    #: media it replaces had some, and silently losing the sound is the wrong
+    #: answer in either host.
+    keep_audio: bool = False
     #: Output directory of an earlier job. When set, this job re-uses the seed
     #: mask that job produced instead of searching for a subject again — the
     #: panel's brush correction path.
@@ -180,6 +187,7 @@ class JobRequest:
             data.get("correction_frame"), "correction_frame"
         )
         matting = bool(data.get("matting", False))
+        keep_audio = bool(data.get("keep_audio", False))
 
         roi_raw = data.get("roi")
         roi: tuple[float, float, float, float] | None = None
@@ -201,6 +209,7 @@ class JobRequest:
             output_dir=output_dir,
             roi=roi,
             matting=matting,
+            keep_audio=keep_audio,
             resume_dir=resume_dir,
             correction_add=correction_add,
             correction_remove=correction_remove,
@@ -220,6 +229,7 @@ class JobRequest:
             "model": self.model,
             "output_dir": self.output_dir,
             "matting": self.matting,
+            "keep_audio": self.keep_audio,
             "resume_dir": self.resume_dir,
             "correction_frame": self.correction_frame,
             # The correction strokes are one-shot payloads: echoing the base64

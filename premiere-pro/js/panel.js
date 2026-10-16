@@ -1369,7 +1369,13 @@
       height: src.height,
       preset: "anime",
       quality: state.quality,
-      matting: !!state.matting && mattingAvailable()
+      matting: !!state.matting && mattingAvailable(),
+      /* The cut-out stands in for the clip it came from, so it carries that
+       * clip's audio: the engine read the whole source, and a replacement that
+       * silently drops the sound is the wrong answer in either host. Premiere
+       * is the one that refuses it outright, since changeMediaPath will not
+       * swap in a file with no audio where the media it replaces had some. */
+      keep_audio: true
     };
     if (extra) {
       Object.keys(extra).forEach(function (key) {

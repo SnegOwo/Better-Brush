@@ -65,6 +65,9 @@ cut-out before touching the timeline.
   and effects.
 - **Result → Above** places the cut-out on a new layer above the original.
 
+The alpha movie carries the clip's own audio, so a replace keeps the sound as
+well as the picture: the same footage, minus the background.
+
 Both are undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
 
 ### Correcting the mask with the brush

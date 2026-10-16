@@ -1132,6 +1132,38 @@ def _manager_for(recommendation: SAM2Recommendation) -> SAM2Manager:
     return manager
 
 
+def _add_source_audio(
+    movie: Path,
+    source: Path,
+    frame_in: int,
+    count: int,
+    fps: float,
+) -> Path:
+    """Hand the alpha movie back the audio of the clip it was cut from.
+
+    The engine read the whole source, so the cut-out is the same footage minus
+    the background — and a cut-out that quietly loses the sound is the wrong
+    answer. Premiere is the host that notices: ``changeMediaPath`` refuses a file
+    with no audio where the media it replaces had some, and deletes the audio
+    references if it is forced through.
+
+    The mux is a stream copy, and it gives up quietly rather than failing a
+    render that is otherwise finished.
+    """
+    from src.export.exporter import has_audio_stream, mux_audio
+
+    try:
+        if not has_audio_stream(source):
+            logger.info("source has no audio to keep: %s", source)
+            return movie
+        start = max(0.0, frame_in / fps) if fps > 0 else 0.0
+        duration = count / fps if fps > 0 else None
+        return mux_audio(movie, source, start=start, duration=duration)
+    except Exception as exc:  # noqa: BLE001 - audio is never worth a failed job
+        logger.warning("could not add the source audio (%s); keeping it silent", exc)
+        return movie
+
+
 def run_job(
     request: JobRequest,
     on_progress=None,
@@ -1325,6 +1357,11 @@ def run_job(
             )
             output_path = png_dir
             output_kind = "png_sequence"
+
+        if request.keep_audio and output_kind == "mov_alpha":
+            output_path = _add_source_audio(
+                output_path, source, info.frame_in, info.count, fps
+            )
 
         subject = SubjectInfo(
             confidence=selection.confidence,

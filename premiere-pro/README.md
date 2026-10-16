@@ -99,6 +99,12 @@ source) first.
 Also note the panel needs the clip to be **on disk** — an offline or unlinked
 clip is reported as such rather than half-processed.
 
+The cut-out carries the clip's own audio, so a replace keeps the sound: the
+engine muxes the source file's audio into the alpha movie. Without it Premiere
+refuses the swap — *"the selected file does not contain the audio media used by
+the element references"* — and deletes the audio references from the project if
+it is pushed through anyway.
+
 ### "Above" needs a free track
 
 Premiere's scripting cannot create a video track. So **Above** uses the track
