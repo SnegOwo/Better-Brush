@@ -577,6 +577,10 @@ def _snap_flat_regions(
     """
     if seg_mask is None or frame_rgb is None:
         return alpha
+    if getattr(frame_rgb, "ndim", 0) < 3:
+        # Flatness is measured on colour; anything else is a caller error we
+        # would rather ignore than crash a run over.
+        return alpha
     mask = np.asarray(seg_mask)
     if not mask.any():
         return alpha
