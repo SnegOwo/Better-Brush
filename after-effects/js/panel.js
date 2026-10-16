@@ -24,9 +24,12 @@
   var HEALTH_POLL_MS = 5000;
   var PRO_REQUIRED = "__pro_required__";
 
-  /* Engine progress stages, in the order the pipeline reports them. */
-  var STAGES = ["extract", "analyze", "propagate", "export"];
+  /* Engine progress stages, in the order the pipeline reports them. "load" is
+   * the cold-start model load: it has no frame count, so it reports 0/0 and
+   * the bar runs indeterminate rather than sitting still at zero. */
+  var STAGES = ["load", "extract", "analyze", "propagate", "export"];
   var STAGE_TEXT = {
+    load: "Loading the model",
     extract: "Reading the source",
     analyze: "Finding the character",
     propagate: "Tracking through the clip",
@@ -492,7 +495,12 @@
       percent = state.lastPercent;
     }
     state.lastPercent = percent;
-    ui.progressBar.style.width = Math.round(percent) + "%";
+    /* A stage with no frame count (loading the model) has nothing to divide,
+     * so it sweeps instead of sitting at zero percent. The inline width has to
+     * step aside or it would beat the stylesheet's animation. */
+    var indeterminate = total <= 0;
+    ui.progressWrap.classList.toggle("indeterminate", indeterminate);
+    ui.progressBar.style.width = indeterminate ? "" : Math.round(percent) + "%";
 
     var label = STAGE_TEXT[STAGES[idx]] || "Working";
     ui.progressMeta.textContent =
@@ -528,7 +536,9 @@
     state.lastPercent = 0;
     state.startedAt = Date.now();
     startTick();
-    renderProgress("extract", 0, 0, "starting");
+    /* Open on the first stage the engine reports ("load"), or the monotonic
+     * stage index below would mark it done and sit on "reading source". */
+    renderProgress("load", 0, 0, "starting");
     render();
   }
 

@@ -26,6 +26,7 @@ def test_quality_loads_the_model_the_panel_names(monkeypatch: pytest.MonkeyPatch
     no entry for that tier, the job failed instead.
     """
     _with_custom(monkeypatch)
+    assert model_setup.resolve_model_name("tiny") == "tiny"
     assert model_setup.resolve_model_name("fast") == "small"
     assert model_setup.resolve_model_name("balanced") == "base_plus"
     assert model_setup.resolve_model_name("best") == "custom"
@@ -51,6 +52,7 @@ def test_describe_names_the_model_behind_each_quality(
     assert info["custom_model"] is True
     assert info["custom_label"] == "Anime AMV v1"
     assert info["quality_models"] == {
+        "tiny": "tiny",
         "fast": "small",
         "balanced": "base_plus",
         "best": "custom",

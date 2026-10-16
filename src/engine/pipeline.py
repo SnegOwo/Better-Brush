@@ -22,6 +22,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -40,6 +41,10 @@ from src.engine.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.hardware.profiler import SAM2Recommendation
+    from src.models.sam2_manager import SAM2Manager
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".exr"}
 _SAMPLE_FRAMES = 3
@@ -553,12 +558,62 @@ def _quality_report(masks: dict[int, np.ndarray], count: int) -> dict:
 # --------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------- #
+#: The engine serves one job at a time — ``JobRegistry.submit`` refuses a second
+#: — so a loaded model can be kept warm between runs. Loading a checkpoint costs
+#: ten to twenty seconds and a fresh CUDA context costs more; that is the whole
+#: difference between "adjust and run it again" and "wait again".
+_MANAGER_CACHE: dict[tuple[str, str, bool, bool], SAM2Manager] = {}
+
+
+def _manager_key(recommendation: SAM2Recommendation) -> tuple[str, str, bool, bool]:
+    """Identity of a *loaded model*: the checkpoint, device and offload flags.
+
+    Built field by field rather than hashing the recommendation itself so any
+    recommendation object works, including the small stand-ins the tests use.
+    """
+    return (
+        str(getattr(recommendation, "model_size", "")),
+        str(getattr(recommendation, "device", "")),
+        bool(getattr(recommendation, "offload_state_to_cpu", False)),
+        bool(getattr(recommendation, "offload_video_to_cpu", False)),
+    )
+
+
+def _manager_for(recommendation: SAM2Recommendation) -> SAM2Manager:
+    """Return a SAM 2 manager for *recommendation*, reusing a loaded model."""
+    key = _manager_key(recommendation)
+    cached = _MANAGER_CACHE.get(key)
+    if cached is not None:
+        logger.info("reusing the loaded %s model", key[0])
+        return cached
+
+    from src.models.sam2_manager import SAM2Manager
+
+    manager = SAM2Manager(recommendation)
+    if not manager.is_available:
+        raise PipelineError(
+            "SAM 2 is not installed for this environment.", ERR_UNSUPPORTED
+        )
+    # Load the weights here rather than lazily inside the first analysis call:
+    # otherwise the slowest part of a cold run is invisible to the progress
+    # stages (the panel would sit on "finding the character"), the phase timings
+    # lie, and a checkpoint that fails to load reads like a detection failure.
+    manager.load_image_predictor()
+    manager.load_video_predictor()
+    # One model at a time: a second would put two checkpoints on the same GPU,
+    # and the previous job's is the one worth keeping warm.
+    _MANAGER_CACHE.clear()
+    _MANAGER_CACHE[key] = manager
+    return manager
+
+
 def run_job(
     request: JobRequest,
     on_progress=None,
     cancel_event: threading.Event | None = None,
 ) -> JobResult:
     """Run one background-removal job to completion."""
+    job_started = time.time()
     source = Path(request.input_path)
     if not source.exists():
         raise PipelineError(f"input not found: {source}", ERR_UNSUPPORTED)
@@ -582,26 +637,45 @@ def run_job(
     phase = "starting up"
 
     try:
+        # The model is loaded first, before frames are extracted, so the panel's
+        # first reported step is the one that takes longest and otherwise looks
+        # like nothing happening — and so the stage order matches the panel's
+        # checklist, which only ever moves forwards.
+        phase = "loading the model"
+        started = time.time()
+        _emit(on_progress, "load", 0, 0, f"loading {recommendation.model_size.value}")
+        manager = _manager_for(recommendation)
+        logger.info("phase model: %.1fs", time.time() - started)
+
         phase = "reading the source"
+        started = time.time()
         _emit(on_progress, "extract", 0, 0, "reading source")
         info = _extract_range(request, source, frames_dir, on_progress, cancel_event)
         if info.count <= 0:
             raise PipelineError("source has no frames", ERR_UNSUPPORTED)
-
-        from src.models.sam2_manager import SAM2Manager
-
-        phase = "loading the model"
-        manager = SAM2Manager(recommendation)
-        if not manager.is_available:
-            raise PipelineError(
-                "SAM 2 is not installed for this environment.", ERR_UNSUPPORTED
-            )
+        logger.info(
+            "phase source: %.1fs (%d frames @ %dx%d)",
+            time.time() - started,
+            info.count,
+            info.width,
+            info.height,
+        )
 
         phase = "finding the character"
+        started = time.time()
         selection, key_idx = _analyze(
             manager, frames_dir, info.count, on_progress, cancel_event
         )
+        logger.info(
+            "phase subject: %.1fs (key frame %d, confidence %.2f, face_seeded %s)",
+            time.time() - started,
+            key_idx,
+            selection.confidence,
+            selection.face_seeded,
+        )
+
         phase = "tracking the subject"
+        started = time.time()
         masks = _propagate(
             manager,
             frames_dir,
@@ -612,8 +686,15 @@ def run_job(
             cancel_event,
         )
         manager.reset_video_state()
+        logger.info(
+            "phase tracking: %.1fs (%d/%d frames masked)",
+            time.time() - started,
+            len(masks),
+            info.count,
+        )
 
         phase = "writing the alpha movie"
+        started = time.time()
         fps = request.fps or info.fps or 24.0
         preview = work / "preview.png"
         mov = work / "alpha.mov"
@@ -657,6 +738,7 @@ def run_job(
             face_seeded=selection.face_seeded,
             reasons=selection.reasons,
         )
+        logger.info("phase export: %.1fs", time.time() - started)
         result = JobResult(
             output_path=str(output_path),
             output_kind=output_kind,
@@ -670,6 +752,13 @@ def run_job(
             subject=subject,
             qc=_quality_report(masks, info.count),
             model=recommendation.model_size.value,
+        )
+        logger.info(
+            "job finished: %s frames in %.1fs (%s, %s)",
+            info.count,
+            time.time() - job_started,
+            recommendation.model_size.value,
+            output_kind,
         )
         _emit(on_progress, "done", info.count, info.count, "finished")
         return result

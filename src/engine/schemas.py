@@ -34,7 +34,8 @@ ERR_BAD_REQUEST = "bad_request"
 ERR_INTERNAL = "internal"
 
 VALID_PRESETS = ("anime", "human", "object")
-VALID_QUALITIES = ("fast", "balanced", "best")
+#: Cheapest first. ``tiny`` is SAM 2.1 Tiny — the fastest option, for iterating.
+VALID_QUALITIES = ("tiny", "fast", "balanced", "best")
 VALID_MODELS = ("tiny", "small", "base_plus", "large", "custom")
 
 

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import subprocess
+import sys
 import threading
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
-from src.engine import API_VERSION, ENGINE_NAME
+from src.engine import API_VERSION, ENGINE_NAME, server
 from src.engine.schemas import JobCancelled
 from src.engine.server import create_server
 from tests.engine_helpers import make_result
@@ -168,3 +172,89 @@ def test_options_preflight(start_server):
     with urllib.request.urlopen(req, timeout=10) as resp:
         assert resp.status == 204
         assert resp.headers.get("Access-Control-Allow-Origin") == "*"
+
+
+# --------------------------------------------------------------------- #
+# Windowless operation: the panel's engine has no console and no reader
+# --------------------------------------------------------------------- #
+def test_tiny_quality_is_accepted(start_server):
+    """SAM 2.1 Tiny is the fastest tier; the request schema must allow it."""
+    _srv, client = start_server(_ok_pipeline)
+    status, payload = client.post("/job", {"input_path": "clip.mov", "quality": "tiny"})
+    assert status == 202
+    assert "id" in payload
+
+
+def test_quiet_keeps_the_log_file_at_info(monkeypatch, tmp_path):
+    """``--quiet`` silences the console, never the log.
+
+    The panel starts the engine windowless, so the file is the only evidence a
+    run leaves behind. With the level applied to the root logger instead, a
+    quiet engine wrote a log with no job in it at all — which is how a fifteen
+    minute hang produced zero diagnostics.
+    """
+    log_path = tmp_path / "engine.log"
+    monkeypatch.setattr(server, "log_file_path", lambda: log_path)
+    root = logging.getLogger()
+    previous_level = root.level
+    try:
+        server._configure_logging(quiet=True)
+        logging.getLogger("src.engine.test").info("a job stage worth keeping")
+        for handler in root.handlers:
+            handler.flush()
+
+        console = [
+            h
+            for h in root.handlers
+            if getattr(h, "_better_brush", False)
+            # Ours, and not the log file: pytest's own capture handler is a
+            # StreamHandler too.
+            and not isinstance(h, logging.FileHandler)
+        ]
+        assert console and all(h.level == logging.WARNING for h in console)
+    finally:
+        root.setLevel(previous_level)
+        for handler in list(root.handlers):
+            if getattr(handler, "_better_brush", False):
+                root.removeHandler(handler)
+                handler.close()
+
+    assert "a job stage worth keeping" in log_path.read_text(encoding="utf-8")
+
+
+def test_a_job_survives_a_pipe_nobody_reads(tmp_path):
+    """The regression test for the fifteen-minute hang.
+
+    The panel starts the engine from After Effects with ``start /b``, so the
+    engine inherits an output pipe that After Effects never drains. SAM 2 draws
+    a tqdm bar while it loads frames; once the pipe's buffer filled, that write
+    blocked forever and the job sat at 0% with the GPU idle. The child here does
+    exactly that on purpose: it writes far more than a pipe buffer to both
+    streams and must still exit.
+    """
+    script = tmp_path / "sink_probe.py"
+    repo = Path(__file__).resolve().parents[1]
+    script.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, r'{repo}')\n"
+        "from src.engine.server import _detach_stdio\n"
+        "detached = _detach_stdio()\n"
+        "sys.stdout.write('x' * 200_000)\n"
+        "sys.stdout.flush()\n"
+        "sys.stderr.write('y' * 200_000)\n"
+        "sys.stderr.flush()\n"
+        "raise SystemExit(0 if detached else 2)\n",
+        encoding="utf-8",
+    )
+    # Popen, not run(): run() would drain the pipes for the child and hide the
+    # very bug this covers.
+    proc = subprocess.Popen(
+        [sys.executable, str(script)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        assert proc.wait(timeout=60) == 0
+    finally:
+        if proc.poll() is None:
+            proc.kill()

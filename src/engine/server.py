@@ -58,20 +58,90 @@ def log_file_path() -> Path:
     return root / "BetterBrush" / "engine.log"
 
 
+def _stdio_is_detached() -> bool:
+    """True when this process must not write to its inherited streams.
+
+    ``pythonw.exe`` has no streams at all, and the panel starts the engine from
+    After Effects with ``start /b``, so the engine also inherits the parent's
+    output pipe. Windows blocks a write once such a pipe fills with nobody
+    draining it, and libraries do print.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            return True
+        try:
+            if not stream.isatty():
+                return True
+        except (AttributeError, OSError, ValueError):
+            return True
+    return False
+
+
+def _detach_stdio() -> bool:
+    """Point a windowless engine's streams at the null device.
+
+    This is the fix for a job that "runs" for fifteen minutes at 0% with the
+    GPU idle: SAM 2 draws a ``tqdm`` bar while it loads video frames, the bar
+    goes to an output pipe nobody reads, and the write blocks. The engine
+    reports progress over HTTP, so it has nothing to say to a console it does
+    not own — the log file is the diagnostic channel.
+
+    Only called from :func:`main`, and only when the streams are not a console,
+    so running the engine in a terminal still prints.
+    """
+    if not _stdio_is_detached():
+        return False
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+    except OSError:  # pragma: no cover - devnull always opens
+        return False
+    try:
+        for fd in (1, 2):
+            os.dup2(devnull, fd)
+    finally:
+        os.close(devnull)
+    try:
+        # Deliberately not a context manager: this is the process-lifetime sink
+        # for a windowless engine, closed when the process exits.
+        sink = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    except OSError:  # pragma: no cover
+        return False
+    sys.stdout = sink
+    sys.stderr = sink
+    return True
+
+
 def _configure_logging(quiet: bool) -> Path | None:
-    """Set up console + rotating-file logging; returns the log path in use."""
-    logging.basicConfig(
-        level=logging.WARNING if quiet else logging.INFO,
-        format=_LOG_FORMAT,
-    )
+    """Attach a console handler and a rotating file handler.
+
+    ``quiet`` silences the *console* only. The file always keeps INFO: the panel
+    launches the engine windowless, so the file is the only evidence a run
+    leaves behind, and "it hung for fifteen minutes" is impossible to answer
+    from a log that recorded nothing.
+    """
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    # Idempotent: tests call this more than once in a process.
+    for existing in list(root.handlers):
+        if getattr(existing, "_better_brush", False):
+            root.removeHandler(existing)
+
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING if quiet else logging.INFO)
+    console.setFormatter(logging.Formatter(_LOG_FORMAT))
+    console._better_brush = True  # type: ignore[attr-defined]
+    root.addHandler(console)
+
     path = log_file_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(
             path, maxBytes=_LOG_MAX_BYTES, backupCount=_LOG_BACKUPS, encoding="utf-8"
         )
+        handler.setLevel(logging.INFO)
         handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-        logging.getLogger().addHandler(handler)
+        handler._better_brush = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
     except OSError as exc:
         logger.warning("could not open the engine log at %s: %s", path, exc)
         return None
@@ -321,7 +391,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args(argv)
 
+    # Order matters: the console handler captures sys.stderr when it is built,
+    # so detach first or it keeps writing to the inherited pipe.
+    detached = _detach_stdio()
     log_path = _configure_logging(args.quiet)
+    if detached:
+        logger.info(
+            "stdout/stderr are not a console: detached to %s so nothing can "
+            "block on an unread pipe (log: %s)",
+            os.devnull,
+            log_path,
+        )
 
     if _engine_running(args.host, args.port):
         _say(f"Better Brush engine already running on http://{args.host}:{args.port}")

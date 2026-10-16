@@ -264,6 +264,19 @@ body { display: flex; flex-direction: column; }
   transition: width .25s ease;
 }
 
+/* A stage with no frame count — loading the model — sweeps, so the panel never
+   looks frozen during the one step that has nothing to count. */
+.progress.indeterminate .progress-bar {
+  width: 35%;
+  transition: none;
+  animation: sweep 1.15s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0% { margin-left: -35%; }
+  100% { margin-left: 100%; }
+}
+
 .progress-meta {
   width: 100%;
   margin: 0;

@@ -576,3 +576,94 @@ by looking at the panel's own output rather than at the code.
   SDK)**, and creates the shared engine that Premiere/Resolve panels can reuse.
 - The one-button promise is honest only with a confidence gate — which the
   product already believes in ("never change a shot silently").
+
+---
+
+## 18 · Round 3 — the panel worked, then never finished
+
+Reported after the second live test: *"I saw no error, but it takes so much time
+even with my 5060 RTX, and I couldn't see the result because even after 10–15
+minutes it was still working. The standalone app is way faster."*
+
+### 18.1 The job was not slow — it was blocked, and the log was empty
+
+The engine was still running, so it could be inspected while it was stuck.
+`nvidia-smi` showed **0% GPU and 0 MiB allocated**: nothing was computing. The
+job reported `propagate 0/49` — a **49-frame** clip, eight minutes in.
+
+`py-spy dump` on the live process named the cause in one line:
+
+```
+Thread 24392 (idle)
+    status_printer (tqdm\std.py:447)
+    __init__ (tqdm\std.py:1101)
+    load_video_frames_from_jpg_images (sam2\utils\misc.py:268)
+    init_state (sam2\sam2_video_predictor.py:51)
+    init_video (src\models\sam2_manager.py:604)
+    _propagate (src\engine\pipeline.py:285)
+```
+
+SAM 2 draws a `tqdm` bar while it loads frames. The panel launches the engine
+from After Effects with `start /b`, so the engine inherits an output pipe that
+After Effects never drains; once the pipe's buffer filled, that write blocked
+*forever*. The pythonw case is a red herring on its own — a direct
+`pythonw -m run_job` finished in 79 s while the same job through the engine hung,
+and the only difference was an unread pipe.
+
+Two things made it undiagnosable:
+
+- **`--quiet` was applied to the root logger**, so the file handler never saw
+  INFO either. The engine log for that run contained no job at all. `--quiet`
+  now silences only the console; the file always keeps INFO.
+- **Nothing was written about the 20 s model load.** The panel sat on "Reading
+  the source" with the bar at 0% for the whole cold start.
+
+Fixes, in `src/engine/server.py`: `_detach_stdio()` points a non-console
+stdout/stderr at the null device (and `dup2`s fds 1 and 2, so a C library cannot
+block either), called *before* logging is configured because `StreamHandler`
+captures `sys.stderr` when it is built. Running the engine in a terminal still
+prints — the redirect only happens when the streams are not a console.
+
+### 18.2 It was genuinely slower than it needed to be
+
+Measured through the engine itself — piped, `--quiet`, `fast` (SAM 2.1 Small),
+`TanjiroTest.mp4`, 120 frames at 1920×1080:
+
+| Phase | First job | Same shot again |
+| --- | --- | --- |
+| Loading the model | 3.9 s | **0.0 s** (reused) |
+| Reading the source | 8.4 s | 9.1 s |
+| Finding the character | 7.2 s | 6.8 s |
+| Tracking through the clip | 28.6 s | 29.3 s |
+| Writing the alpha movie | 10.9 s | 8.4 s |
+| **Total** | **63.5 s** | **53.9 s** |
+
+Two changes:
+
+- **The engine built a fresh `SAM2Manager` per job**, so every run paid to read
+  the checkpoint and to build a new CUDA context. `_manager_for()` keeps one
+  loaded model (matching checkpoint, device and offload flags) and the engine
+  serves one job at a time, so a second run on the same shot skips that wait.
+  The weights are also loaded **eagerly** in that step: previously SAM 2 loaded
+  them lazily inside the first analysis call, which is why the old log read
+  `phase model: 0.0s` and then charged the wait to "finding the character".
+- **`Tiny` (SAM 2.1 Tiny) joins the quality tiers** as the cheapest option. The
+  checkpoint was already on disk, so it needs no download. It is honestly a
+  draft tier — on the same clip it cuts out the character with visible gaps and
+  light speckle (coverage 0.29 against Small's 0.54) — and both the button's
+  tooltip and the README say so.
+
+Tracking, not the model, is the bulk of a run: ~29 s for 120 frames is SAM 2
+propagating, and no tier changes that.
+
+### 18.3 Progress that matches the work
+
+- A new **`load`** stage is emitted before the model is built, and the panel
+  lists it first, so the cold start is visible instead of looking frozen.
+- A stage with no frame count sweeps instead of sitting at 0%.
+- Each phase logs its own duration (`phase model: 3.9s`), so the next "why is
+  this slow" answer takes one look at the log.
+
+One panel bug fell out of adding the stage: `beginRun()` opened the checklist on
+`extract`, and the monotonic stage index then marked `load` as already done.
+Caught by rendering the panel and reading the DOM, not by the test suite.

@@ -94,7 +94,9 @@ After Effects
 
 ## Settings
 
-- **Quality** — `Fast` (SAM 2.1 Small), `Balanced` (SAM 2.1 Base+), `Best`
+- **Quality** — `Tiny` (SAM 2.1 Tiny — the fastest tier, and the roughest:
+  expect thin gaps and speckle around edges; good for blocking in timing before
+  a careful pass), `Fast` (SAM 2.1 Small), `Balanced` (SAM 2.1 Base+), `Best`
   (your fine-tuned checkpoint if one is installed, Base+ otherwise).
 - **Result** — Replace layer / Add as new layer.
 
@@ -103,6 +105,13 @@ load (`Uses SAM 2.1 Base+`), and the finished card names the one that actually
 ran, so the panel never quietly uses something other than what it says.
 
 Both settings persist between sessions.
+
+A run reports five steps — loading the model, reading the source, finding the
+character, tracking through the clip, writing the alpha movie — with a bar that
+fills per step and a running clock. The first job of a session pays for loading
+the checkpoint; later jobs in the same session reuse it and skip that step's
+wait, so running the same shot again with a different setting is much quicker
+than the first time.
 
 ---
 
@@ -131,6 +140,8 @@ that file has the full trace.
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
 | A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
+| A job seems to hang at 0% | Update the panel (`install.ps1`) — an unread output pipe used to block the engine mid-job. The log now records every step, so a genuine stall names the step it stalled in. |
+| A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. |
 | Nothing happens when a fine-tuned model is picked | The sidecar in `checkpoints\custom\` must name a config the engine ships (`sam2.1_hiera_b+.yaml` and friends). |
 | Panel needs inspecting | `install.ps1 -DebugPort 8092`, then open `http://localhost:8092` in Chrome. |
 

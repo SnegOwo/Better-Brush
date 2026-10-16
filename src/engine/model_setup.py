@@ -20,11 +20,19 @@ logger = logging.getLogger(__name__)
 #: at Base+ because that is the largest SAM 2 checkpoint a stock 8 GB laptop
 #: GPU propagates comfortably. ``best`` additionally prefers an installed
 #: fine-tuned ("Lugnica SAM") checkpoint — see :func:`resolve_model_name`.
+#: ``tiny`` is the "just show me something now" tier: SAM 2.1 Tiny is the
+#: smallest checkpoint SAM 2 ships, and on a long clip it is several times
+#: faster than Base+ — the panel offers it for iterating on the look before
+#: committing to a careful pass.
 _QUALITY_TO_MODEL = {
+    "tiny": "tiny",
     "fast": "small",
     "balanced": "base_plus",
     "best": "base_plus",
 }
+
+#: Every quality the engine accepts, cheapest first.
+QUALITY_TIERS = ("tiny", "fast", "balanced", "best")
 
 _MODEL_TO_ENUM = {
     "tiny": "TINY",
@@ -131,8 +139,7 @@ def describe() -> dict[str, Any]:
         # Resolved per quality so the panel can name the exact model each
         # option will load instead of guessing a label of its own.
         "quality_models": {
-            quality: resolve_model_name(quality)
-            for quality in ("fast", "balanced", "best")
+            quality: resolve_model_name(quality) for quality in QUALITY_TIERS
         },
     }
     try:

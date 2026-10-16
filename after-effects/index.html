@@ -27,6 +27,7 @@
         <div id="elapsed" class="elapsed hidden">0:00</div>
 
         <ol id="stages" class="stages hidden">
+          <li data-stage="load"><i></i><span>Loading the model</span></li>
           <li data-stage="extract"><i></i><span>Reading the source</span></li>
           <li data-stage="analyze"><i></i><span>Finding the character</span></li>
           <li data-stage="propagate"><i></i><span>Tracking through the clip</span></li>
@@ -54,9 +55,10 @@
       <div class="opt">
         <span class="label">Quality</span>
         <div id="qualitySeg" class="seg">
-          <button type="button" data-value="fast">Fast</button>
-          <button type="button" data-value="balanced" class="on">Balanced</button>
-          <button type="button" data-value="best">Best</button>
+          <button type="button" data-value="tiny" title="SAM 2.1 Tiny — fastest, rough edges">Tiny</button>
+          <button type="button" data-value="fast" title="SAM 2.1 Small">Fast</button>
+          <button type="button" data-value="balanced" class="on" title="SAM 2.1 Base+">Balanced</button>
+          <button type="button" data-value="best" title="Best installed checkpoint">Best</button>
         </div>
         <span id="modelNote" class="note">—</span>
       </div>

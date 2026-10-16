@@ -31,6 +31,12 @@ class FakeManager:
         self.count = 0
         self.frames_dir = None
 
+    def load_image_predictor(self):
+        ...
+
+    def load_video_predictor(self):
+        ...
+
     def init_video(self, frames_dir, progress_cb=None):
         self.frames_dir = Path(frames_dir)
         files = sorted(self.frames_dir.glob("*.jpg"))
@@ -185,9 +191,65 @@ def test_progress_is_reported(monkeypatch, synth_video, tmp_path):
         _request(synth_video, tmp_path / "out"),
         on_progress=lambda stage, cur, total, msg: seen.append(stage),
     )
+    assert "load" in seen
     assert "extract" in seen
     assert "propagate" in seen
     assert "done" in seen
+
+
+def test_stages_are_reported_in_the_panel_order(monkeypatch, synth_video, tmp_path):
+    """The engine must report its stages in the panel's checklist order.
+
+    The panel only ever moves its checklist forwards, so a stage that arrives
+    late is marked "done" the moment it appears. "Loading the model" used to be
+    emitted *after* "reading the source", so the cold model load showed up as
+    "Reading the source" — the exact silence it exists to remove.
+    """
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    order = ["load", "extract", "analyze", "propagate", "export", "done"]
+    seen: list[str] = []
+    pipeline.run_job(
+        _request(synth_video, tmp_path / "out"),
+        on_progress=lambda stage, cur, total, msg: seen.append(stage),
+    )
+
+    positions = [order.index(stage) for stage in seen if stage in order]
+    assert positions == sorted(positions), seen
+    assert seen[0] == "load"
+    assert "done" in seen
+
+
+def test_the_loaded_model_is_reused_between_jobs(monkeypatch):
+    """Reloading a checkpoint costs ~15s a run; the engine serves one job at a
+    time, so the second run must not pay for it again."""
+    built: list[object] = []
+
+    class Counting(FakeManager):
+        is_available = True
+
+        def __init__(self, rec):
+            super().__init__(rec)
+            built.append(rec)
+
+    monkeypatch.setattr("src.models.sam2_manager.SAM2Manager", Counting)
+    first_rec = SimpleNamespace(model_size=SimpleNamespace(value="fake_model"))
+    other_rec = SimpleNamespace(model_size=SimpleNamespace(value="other_model"))
+    pipeline._MANAGER_CACHE.clear()
+    try:
+        first = pipeline._manager_for(first_rec)
+        assert pipeline._manager_for(first_rec) is first
+        assert len(built) == 1
+
+        other = pipeline._manager_for(other_rec)
+        assert other is not first
+        assert len(built) == 2
+        # One model at a time: two checkpoints would not both fit the card.
+        assert list(pipeline._MANAGER_CACHE) == [pipeline._manager_key(other_rec)]
+    finally:
+        pipeline._MANAGER_CACHE.clear()
 
 
 # --------------------------------------------------------------------- #
