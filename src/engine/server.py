@@ -18,11 +18,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 from src.engine import API_VERSION, ENGINE_NAME, ENGINE_VERSION
@@ -37,6 +40,42 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
+
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_LOG_MAX_BYTES = 1_000_000
+_LOG_BACKUPS = 2
+
+
+def log_file_path() -> Path:
+    """Where the engine keeps its log file.
+
+    The panel starts the engine with ``pythonw.exe``, which has no console, so
+    ``sys.stderr`` goes nowhere. Without a file, a failure would leave only the
+    one line of text the panel happens to show as evidence.
+    """
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CACHE_HOME")
+    root = Path(base) if base else Path.home() / ".cache"
+    return root / "BetterBrush" / "engine.log"
+
+
+def _configure_logging(quiet: bool) -> Path | None:
+    """Set up console + rotating-file logging; returns the log path in use."""
+    logging.basicConfig(
+        level=logging.WARNING if quiet else logging.INFO,
+        format=_LOG_FORMAT,
+    )
+    path = log_file_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            path, maxBytes=_LOG_MAX_BYTES, backupCount=_LOG_BACKUPS, encoding="utf-8"
+        )
+        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        logging.getLogger().addHandler(handler)
+    except OSError as exc:
+        logger.warning("could not open the engine log at %s: %s", path, exc)
+        return None
+    return path
 
 _CORS = {
     "Access-Control-Allow-Origin": "*",
@@ -192,6 +231,7 @@ class EngineHandler(BaseHTTPRequestHandler):
             "ready": True,
             "busy": self.server.registry.busy,
             "job": self.server.registry.snapshot(),
+            "log_path": str(log_file_path()),
         }
         if full:
             try:
@@ -226,6 +266,14 @@ class EngineHandler(BaseHTTPRequestHandler):
             )
             return
 
+        logger.info(
+            "accepted job %s: %s (quality=%s, preset=%s, model=%s)",
+            record.id,
+            request.input_path,
+            request.quality,
+            request.preset,
+            request.model or "auto",
+        )
         self._send_json(202, {"id": record.id, "state": record.state})
 
 
@@ -273,10 +321,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.WARNING if args.quiet else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    log_path = _configure_logging(args.quiet)
 
     if _engine_running(args.host, args.port):
         _say(f"Better Brush engine already running on http://{args.host}:{args.port}")
@@ -292,6 +337,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     _say(f"Better Brush engine ready on http://{args.host}:{args.port}")
+    if log_path is not None:
+        _say(f"Logging to {log_path}")
+    logger.info(
+        "engine ready on http://%s:%s (log: %s)", args.host, args.port, log_path
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

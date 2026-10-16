@@ -47,9 +47,11 @@ powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1 -Uninstall
 1. Open a comp and select the **footage layer** you want cut out.
 2. Click **Remove Background**.
 
-The first click of a session starts the engine (a few seconds — you can see the
-progress line). The panel then reads the clip, finds the character, tracks it,
-and writes an alpha movie.
+The first click of a session starts the engine (a few seconds). The panel then
+walks four stages — **reading the source → finding the character → tracking
+through the clip → writing the alpha movie** — with a live progress bar and an
+elapsed timer, and finishes on a preview of the key frame on a checkerboard so
+you can see the cut-out before touching the timeline.
 
 - **Result → Replace layer** (default) swaps the layer's source, keeping trims
   and effects.
@@ -84,17 +86,39 @@ After Effects
 - The engine is **out of process** on purpose: no torch inside After Effects,
   no AEGP, nothing to crash the host.
 - The panel starts the engine on demand via `config.json` and polls `/health`.
+  It also attaches to a job that is already running, so reopening the panel
+  never hides progress.
 - Cancelling is supported (`Cancel` while working).
 
 ---
 
 ## Settings
 
-- **Quality** — `Fast` (SAM 2 Small), `Balanced` (Base+, or your fine-tuned
-  "Lugnica SAM" if installed), `Best`.
+- **Quality** — `Fast` (SAM 2.1 Small), `Balanced` (SAM 2.1 Base+), `Best`
+  (your fine-tuned checkpoint if one is installed, Base+ otherwise).
 - **Result** — Replace layer / Add as new layer.
 
-Both persist between sessions.
+The line under **Quality** always names the checkpoint the current choice will
+load (`Uses SAM 2.1 Base+`), and the finished card names the one that actually
+ran, so the panel never quietly uses something other than what it says.
+
+Both settings persist between sessions.
+
+---
+
+## Where things are written
+
+| What | Where |
+| --- | --- |
+| Alpha movie (`alpha.mov`) | `%LOCALAPPDATA%\BetterBrush\AfterEffects\<timestamp>_<id>\` |
+| Key-frame preview | `preview.png` beside it (shown in the panel) |
+| Engine log | `%LOCALAPPDATA%\BetterBrush\engine.log` |
+
+Results deliberately live in application data rather than `%TEMP%`, which
+Windows is free to clear out from under a project that links to the file.
+
+If something fails internally, the panel prints the log path in the error card —
+that file has the full trace.
 
 ---
 
@@ -106,6 +130,8 @@ Both persist between sessions.
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
+| A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
+| Nothing happens when a fine-tuned model is picked | The sidecar in `checkpoints\custom\` must name a config the engine ships (`sam2.1_hiera_b+.yaml` and friends). |
 | Panel needs inspecting | `install.ps1 -DebugPort 8092`, then open `http://localhost:8092` in Chrome. |
 
 ---

@@ -86,6 +86,40 @@ def test_evaluate_flags_multiple_subjects():
     assert not selection.found
 
 
+def test_evaluate_prefers_the_whole_character_over_its_face():
+    """SAM 2 returns a face inside a head inside a character for one seed.
+
+    The face is the cleaner mask (solid, away from the frame edge), so it wins
+    on score — and the job rotoscopes a face. The whole subject is what was
+    asked for, so it has to be promoted.
+    """
+    character = _blob(200, 200, 100, 110, 70)
+    face = _blob(200, 200, 100, 60, 18)
+    whole = A.make_candidate(character, 0.90)
+    part = A.make_candidate(face, 0.95, face_center=(100.0, 60.0))
+    assert whole is not None
+    assert part is not None
+    assert part.score > whole.score, "the part is expected to score higher"
+
+    selection = A.evaluate([part, whole])
+
+    assert selection.found, selection.reasons
+    np.testing.assert_array_equal(selection.mask, character)
+
+
+def test_evaluate_does_not_call_a_part_a_second_subject():
+    character = _blob(200, 200, 100, 110, 70)
+    face = _blob(200, 200, 100, 60, 18)
+    whole = A.make_candidate(character, 0.90)
+    part = A.make_candidate(face, 0.95, face_center=(100.0, 60.0))
+    assert whole is not None
+    assert part is not None
+
+    selection = A.evaluate([whole, part])
+
+    assert not selection.multiple, selection.reasons
+
+
 def test_evaluate_refuses_when_below_confidence():
     mask = _blob(100, 100, 50, 50, 8)  # small, so the blended score is low
     cand = A.make_candidate(mask, 0.01)
@@ -93,6 +127,51 @@ def test_evaluate_refuses_when_below_confidence():
     selection = A.evaluate([cand], min_confidence=0.95)
     assert not selection.found
     assert not selection.multiple
+
+
+def test_the_frame_background_loses_to_the_face_bearing_character():
+    """Measured on a real clip: SAM 2 rates the set far above the subject.
+
+    The background mask scored 0.99 against the character's 0.06, and it is
+    the better mask on every signal except one — it never contains the face.
+    Anchoring on the face is what makes the character win.
+    """
+    character = _blob(200, 200, 100, 110, 70)
+    background = ~character
+    face = _blob(200, 200, 100, 60, 18)
+    face_ctr = (100.0, 60.0)
+
+    whole = A.make_candidate(character, 0.06, face_center=face_ctr)
+    part = A.make_candidate(face, 0.66, face_center=face_ctr)
+    bg = A.make_candidate(background, 0.99, face_center=face_ctr)
+    assert whole is not None
+    assert part is not None
+    assert bg is not None
+    assert bg.sam_score > whole.sam_score, "the set is the more confident mask"
+
+    # The set does not overlap the character, so it also reads as a second
+    # subject and the whole job would refuse.
+    assert A.evaluate([bg, part, whole]).multiple
+
+    anchored = A._anchor_on_face([bg, part, whole])
+
+    assert all(cand is not bg for cand in anchored), "the set must not survive"
+    selection = A.evaluate(anchored)
+    assert selection.found, selection.reasons
+    np.testing.assert_array_equal(selection.mask, character)
+
+
+def test_face_anchor_stands_down_when_no_mask_holds_the_face():
+    """A wrong face hit must not throw away every candidate."""
+    character = _blob(120, 120, 60, 60, 30)
+
+    only = A.make_candidate(character, 0.9, face_center=(3.0, 3.0))
+    assert only is not None
+    assert not only.face_inside
+
+    kept = A._anchor_on_face([only])
+    assert len(kept) == 1
+    assert kept[0] is only
 
 
 class _FakeResult:

@@ -17,6 +17,7 @@ or standalone:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -114,6 +115,42 @@ def test_recommendation_stays_below_vram_limit() -> None:
     assert not _run_cases(), "policy mismatches:\n" + "\n".join(_run_cases())
 
 
+def test_custom_tier_resolves_from_the_sidecar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fine-tuned checkpoint must be addressable like any other tier.
+
+    Selecting it used to raise ``KeyError(ModelSize.CUSTOM)``: the static
+    config/checkpoint maps only describe built-in downloads, and the fine-tuned
+    model is not one of them. That is what made "Balanced"/"Best" fail in the
+    After Effects panel (and silently do nothing in the desktop app).
+    """
+    from src.models import checkpoint_manager as ckpt
+
+    custom_dir = tmp_path / "custom"
+    custom_dir.mkdir()
+    (custom_dir / "anime_amv_v1.pt").write_bytes(b"weights")
+    (custom_dir / ckpt._CUSTOM_SIDECAR).write_text(
+        json.dumps(
+            {
+                "checkpoint": "anime_amv_v1.pt",
+                "config": "sam2.1_hiera_b+.yaml",
+                "label": "Anime AMV v1",
+            }
+        ),
+        encoding="utf-8",
+    )
+    original = ckpt.CheckpointManager
+    monkeypatch.setattr(
+        ckpt, "CheckpointManager", lambda *a, **k: original(checkpoints_dir=tmp_path)
+    )
+
+    rec = _SUT.recommend(_profile(_gpu(16_000, 14_000)), force_model=ModelSize.CUSTOM)
+
+    assert rec.model_size is ModelSize.CUSTOM
+    assert rec.model_config.endswith("sam2.1_hiera_b+.yaml")
+    assert Path(rec.checkpoint_url).name == "anime_amv_v1.pt"
+    assert "fine-tuné" in rec.user_message
 def test_weak_gpus_fall_back_to_efficienttam() -> None:
     """Cards that cannot host SAM 2.1 Tiny get a lightweight model."""
     failures: list[str] = []

@@ -6,6 +6,8 @@ streaming export and the ffmpeg-free fallback — everything except the GPU.
 
 from __future__ import annotations
 
+import io
+import shutil
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -186,3 +188,89 @@ def test_progress_is_reported(monkeypatch, synth_video, tmp_path):
     assert "extract" in seen
     assert "propagate" in seen
     assert "done" in seen
+
+
+# --------------------------------------------------------------------- #
+# Streaming export: the failure modes that used to be invisible
+# --------------------------------------------------------------------- #
+def _write_frames(tmp_path: Path, count: int, size: tuple[int, int]) -> Path:
+    frames = tmp_path / "frames"
+    frames.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        image = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+        cv2.imwrite(str(frames / f"{i:05d}.jpg"), image)
+    return frames
+
+
+def _require_ffmpeg(monkeypatch) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg is not on PATH")
+    monkeypatch.setattr("src.export.exporter._resolve_ffmpeg", lambda: ffmpeg)
+
+
+def test_ffmpeg_failure_names_the_cause_and_the_exit_code():
+    """A broken pipe alone ("[Errno 22] Invalid argument") explains nothing.
+
+    The write error is the symptom; ffmpeg's own stderr is the cause, so it has
+    to survive into the message the panel shows.
+    """
+    proc = SimpleNamespace(
+        stderr=io.BytesIO(b"Picture size 0x0 is invalid\n"),
+        poll=lambda: 1,
+    )
+    message = pipeline._ffmpeg_failure(proc, OSError(22, "Invalid argument"), 1)
+
+    assert "Invalid argument" in message
+    assert "exit code 1" in message
+    assert "Picture size 0x0 is invalid" in message
+
+
+def test_png_frames_keep_colour_and_alpha(tmp_path):
+    """Regression: a whole-array reverse puts a colour channel into alpha.
+
+    The preview and the PNG-sequence fallback were written with
+    ``rgba[:, :, ::-1]``, which also moved alpha to the front — so the matte was
+    replaced by the red channel (opaque, rotated colours) in the panel preview
+    and in what After Effects imported.
+    """
+    path = tmp_path / "preview.png"
+    rgba = np.zeros((4, 4, 4), dtype=np.uint8)
+    rgba[..., 0] = 200  # red
+    rgba[..., 1] = 40  # green
+    rgba[..., 2] = 10  # blue
+    rgba[..., 3] = 0  # fully transparent
+
+    pipeline._write_rgba_png(path, rgba)
+
+    back = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    assert back.shape == (4, 4, 4)
+    assert back[:, :, 3].max() == 0, "alpha must survive the write"
+    assert back[2, 2].tolist() == [10, 40, 200, 0], "colour (BGR on read) preserved"
+
+
+def test_movie_export_size_change_is_explained(monkeypatch, tmp_path):
+    _require_ffmpeg(monkeypatch)
+    frames = _write_frames(tmp_path, 2, (32, 32))
+
+    with pytest.raises(pipeline.PipelineError) as exc:
+        pipeline._streaming_mov(
+            frames, {}, 2, 24.0, 64, 64, tmp_path / "alpha.mov", None, None
+        )
+
+    assert "32x32" in str(exc.value)
+    assert "64x64" in str(exc.value)
+
+
+def test_failed_export_reports_ffmpeg_stderr(monkeypatch, tmp_path):
+    _require_ffmpeg(monkeypatch)
+    frames = _write_frames(tmp_path, 1, (64, 64))
+    blocked = tmp_path / "alpha.mov"
+    blocked.mkdir()  # ffmpeg cannot write a movie over a directory
+
+    with pytest.raises(pipeline.PipelineError) as exc:
+        pipeline._streaming_mov(
+            frames, {}, 1, 24.0, 64, 64, blocked, None, None
+        )
+
+    assert "ffmpeg could not write the alpha movie" in str(exc.value)

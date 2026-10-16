@@ -284,7 +284,7 @@ def _propagate(
     _emit(on_progress, "propagate", 0, count, "tracking…")
     manager.init_video(
         frames_dir,
-        progress_cb=lambda c, t: _emit(on_progress, "extract", c, t, "preparing"),
+        progress_cb=lambda c, t: _emit(on_progress, "propagate", c, t, "reading frames"),
     )
     manager.add_mask_to_video(key_idx, 1, seed_mask)
 
@@ -327,6 +327,69 @@ def _rgba(frame_rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return np.dstack([frame_rgb, alpha_u8])
 
 
+def _write_rgba_png(path: Path, rgba: np.ndarray) -> None:
+    """Write an RGBA frame to a PNG.
+
+    ``_rgba`` builds RGBA while OpenCV reads and writes colour as BGR(A), so
+    only the three colour channels are swapped — the alpha has to stay last.
+    Reversing the whole array instead (as this used to) puts a colour channel
+    into alpha: the frame renders opaque with rotated colours, both in the
+    panel preview and in After Effects for a PNG-sequence result.
+    """
+    cv2.imwrite(str(path), rgba[:, :, [2, 1, 0, 3]])
+
+
+def _stop_process(proc: subprocess.Popen) -> None:
+    """Stop an ffmpeg we can no longer feed, and reap it.
+
+    Without this the child outlives the failed job with the output file still
+    open, so the next attempt cannot replace it.
+    """
+    if proc.poll() is None:
+        try:
+            proc.kill()
+        except OSError:  # pragma: no cover - already gone
+            pass
+    try:
+        proc.wait(timeout=10)
+    except (subprocess.TimeoutExpired, OSError):  # pragma: no cover
+        logger.warning("ffmpeg did not exit after being killed")
+
+
+def _ffmpeg_stderr(proc: subprocess.Popen) -> str:
+    if proc.stderr is None:
+        return ""
+    try:
+        return proc.stderr.read()[-400:].decode("utf-8", errors="replace").strip()
+    except (OSError, ValueError):  # pragma: no cover - closed pipe
+        return ""
+
+
+def _ffmpeg_failure(
+    proc: subprocess.Popen,
+    error: Exception | None = None,
+    code: int | None = None,
+) -> str:
+    """Explain a failed export using ffmpeg's *own* diagnostics.
+
+    When the frame pipe breaks, the write error is the symptom, not the cause:
+    on Windows a dead ffmpeg surfaces as ``[Errno 22] Invalid argument``, which
+    says nothing about why it died. ffmpeg's stderr is the part that names the
+    reason, so it is always folded into the message.
+    """
+    detail = _ffmpeg_stderr(proc)
+    parts = ["ffmpeg could not write the alpha movie"]
+    if error is not None:
+        parts.append(f"({type(error).__name__}: {error})")
+    if code is None:
+        code = proc.poll()
+    if code is not None:
+        parts.append(f"— exit code {code}")
+    if detail:
+        parts.append(f"— {detail}")
+    return " ".join(parts)
+
+
 def _streaming_mov(
     frames_dir: Path,
     masks: dict[int, np.ndarray],
@@ -346,6 +409,14 @@ def _streaming_mov(
     if shutil.which(ffmpeg) is None and not Path(ffmpeg).is_file():
         raise PipelineError(
             "ffmpeg was not found, so the alpha movie could not be written.",
+            ERR_UNSUPPORTED,
+        )
+    if not fps or not np.isfinite(fps) or fps <= 0:
+        fps = 24.0
+    if width <= 0 or height <= 0:
+        raise PipelineError(
+            "the source frames have no usable size, so the alpha movie "
+            "could not be written.",
             ERR_UNSUPPORTED,
         )
 
@@ -380,11 +451,19 @@ def _streaming_mov(
         stderr=subprocess.PIPE,
     )
     last_mask: np.ndarray | None = None
+    failure: BaseException | None = None
     try:
         assert proc.stdin is not None
         for i in range(count):
             _check_cancel(cancel_event)
             frame = _read_rgb(frames_dir / f"{i:05d}.jpg")
+            if frame.shape[1] != width or frame.shape[0] != height:
+                raise PipelineError(
+                    f"frame {i} is {frame.shape[1]}x{frame.shape[0]} but the movie "
+                    f"was started as {width}x{height}: the source changes size "
+                    "mid-clip, which cannot be muxed into one file.",
+                    ERR_INTERNAL,
+                )
             mask = masks.get(i)
             if mask is None:
                 mask = last_mask
@@ -395,26 +474,31 @@ def _streaming_mov(
             rgba = _rgba(frame, mask)
             proc.stdin.write(rgba.tobytes())
             if preview_path is not None and preview_idx is not None and i == preview_idx:
-                cv2.imwrite(str(preview_path), rgba[:, :, ::-1])
+                _write_rgba_png(preview_path, rgba)
             if i % _PROGRESS_EVERY == 0 or i == count - 1:
                 _emit(on_progress, "export", i + 1, count, "writing alpha movie")
     except (BrokenPipeError, OSError) as exc:
-        raise PipelineError(f"ffmpeg failed: {exc}", ERR_INTERNAL) from exc
+        failure = exc
+    except BaseException as exc:  # noqa: BLE001 - re-raised below, after cleanup
+        # Cancellation or a bad frame: re-raised below, but only after the
+        # child is stopped, so no ffmpeg is left holding the output file.
+        failure = exc
     finally:
         if proc.stdin is not None:
             try:
                 proc.stdin.close()
             except OSError:
                 pass
+
+    if failure is not None:
+        _stop_process(proc)
+        if isinstance(failure, (PipelineError, JobCancelled)):
+            raise failure
+        raise PipelineError(_ffmpeg_failure(proc, failure), ERR_INTERNAL)
+
     code = proc.wait()
     if code != 0:
-        err = b""
-        if proc.stderr is not None:
-            err = proc.stderr.read()[-400:]
-        raise PipelineError(
-            f"ffmpeg exited with code {code}: {err.decode(errors='replace').strip()}",
-            ERR_INTERNAL,
-        )
+        raise PipelineError(_ffmpeg_failure(proc, None, code), ERR_INTERNAL)
 
 
 def _png_sequence(
@@ -438,9 +522,9 @@ def _png_sequence(
         else:
             last_mask = mask
         rgba = _rgba(frame, mask)
-        cv2.imwrite(str(out_dir / f"{i:05d}.png"), rgba[:, :, ::-1])
+        _write_rgba_png(out_dir / f"{i:05d}.png", rgba)
         if preview_path is not None and preview_idx is not None and i == preview_idx:
-            cv2.imwrite(str(preview_path), rgba[:, :, ::-1])
+            _write_rgba_png(preview_path, rgba)
         if i % _PROGRESS_EVERY == 0 or i == count - 1:
             _emit(on_progress, "export", i + 1, count, "writing PNG frames")
 
@@ -493,8 +577,12 @@ def run_job(
         work = Path(tempfile.mkdtemp(prefix=f"{stamp}_", dir=str(_makedirs(root))))
     work.mkdir(parents=True, exist_ok=True)
     frames_dir = work / "frames"
+    #: Names the step a failure happened in. The panel shows a single line of
+    #: text, so "… (while tracking the subject)" saves a whole round trip.
+    phase = "starting up"
 
     try:
+        phase = "reading the source"
         _emit(on_progress, "extract", 0, 0, "reading source")
         info = _extract_range(request, source, frames_dir, on_progress, cancel_event)
         if info.count <= 0:
@@ -502,15 +590,18 @@ def run_job(
 
         from src.models.sam2_manager import SAM2Manager
 
+        phase = "loading the model"
         manager = SAM2Manager(recommendation)
         if not manager.is_available:
             raise PipelineError(
                 "SAM 2 is not installed for this environment.", ERR_UNSUPPORTED
             )
 
+        phase = "finding the character"
         selection, key_idx = _analyze(
             manager, frames_dir, info.count, on_progress, cancel_event
         )
+        phase = "tracking the subject"
         masks = _propagate(
             manager,
             frames_dir,
@@ -522,6 +613,7 @@ def run_job(
         )
         manager.reset_video_state()
 
+        phase = "writing the alpha movie"
         fps = request.fps or info.fps or 24.0
         preview = work / "preview.png"
         mov = work / "alpha.mov"
@@ -586,8 +678,8 @@ def run_job(
     except PipelineError:
         raise
     except Exception as exc:
-        logger.exception("job failed")
-        raise PipelineError(str(exc), ERR_INTERNAL) from exc
+        logger.exception("job failed while %s", phase)
+        raise PipelineError(f"{exc} (while {phase})", ERR_INTERNAL) from exc
     finally:
         # The extracted frames are disposable; the alpha movie next to them is
         # not, so only the frames sub-folder is removed.

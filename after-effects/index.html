@@ -2,67 +2,78 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Better Brush</title>
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
-    <header class="bar">
-      <span class="logo">Better&nbsp;Brush</span>
-      <span class="status">
-        <i id="statusDot" class="dot"></i>
-        <span id="statusText">connecting…</span>
+    <header class="topbar">
+      <span class="brand"><i class="mark"></i>Better&nbsp;Brush</span>
+      <span id="statusPill" class="pill" title="Local engine status">
+        <i id="statusDot" class="dot"></i><span id="statusText">connecting</span>
       </span>
     </header>
 
-    <div id="proBanner" class="banner hidden">
-      Better Brush <b>Pro</b> is required. Activate it in the desktop app,
-      then reopen this panel.
-    </div>
+    <main class="body">
+      <section id="hero" class="hero">
+        <div id="heroIcon" class="hero-icon"></div>
+        <h1 id="heroTitle" class="hero-title">Checking the selection…</h1>
+        <p id="heroText" class="hero-text"></p>
 
-    <section class="card">
-      <div class="card-title">
-        <span>Layer</span>
-        <button id="refreshBtn" class="ghost" title="Re-check the selection">↻</button>
+        <div id="layerChip" class="chip hidden">
+          <span id="layerName" class="chip-name">—</span>
+          <span id="layerMeta" class="chip-meta">—</span>
+        </div>
+
+        <div id="elapsed" class="elapsed hidden">0:00</div>
+
+        <ol id="stages" class="stages hidden">
+          <li data-stage="extract"><i></i><span>Reading the source</span></li>
+          <li data-stage="analyze"><i></i><span>Finding the character</span></li>
+          <li data-stage="propagate"><i></i><span>Tracking through the clip</span></li>
+          <li data-stage="export"><i></i><span>Writing the alpha movie</span></li>
+        </ol>
+
+        <div id="progressWrap" class="progress hidden">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <p id="progressMeta" class="progress-meta"></p>
+
+        <figure id="previewWrap" class="preview hidden">
+          <div class="checker"><img id="previewImg" alt="Preview of the cut-out" /></div>
+          <figcaption id="previewCaption"></figcaption>
+        </figure>
+
+        <button id="heroAction" type="button" class="ghost hidden"></button>
+      </section>
+
+      <p id="notice" class="notice hidden"></p>
+      <p id="noticeDetail" class="notice-detail hidden"></p>
+    </main>
+
+    <footer class="dock">
+      <div class="opt">
+        <span class="label">Quality</span>
+        <div id="qualitySeg" class="seg">
+          <button type="button" data-value="fast">Fast</button>
+          <button type="button" data-value="balanced" class="on">Balanced</button>
+          <button type="button" data-value="best">Best</button>
+        </div>
+        <span id="modelNote" class="note">—</span>
       </div>
-      <dl id="layerInfo" class="info">
-        <div><dt>Comp</dt><dd id="infoComp">—</dd></div>
-        <div><dt>Layer</dt><dd id="infoLayer">—</dd></div>
-        <div><dt>Size</dt><dd id="infoSize">—</dd></div>
-        <div><dt>Frames</dt><dd id="infoFrames">—</dd></div>
-      </dl>
-      <p id="selectionHint" class="hint"></p>
-    </section>
 
-    <section class="controls">
-      <label class="field">
-        <span>Quality</span>
-        <select id="qualitySelect">
-          <option value="fast">Fast (Small)</option>
-          <option value="balanced" selected>Balanced (Base+)</option>
-          <option value="best">Best</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>Result</span>
-        <select id="modeSelect">
-          <option value="replace" selected>Replace layer</option>
-          <option value="add">Add as new layer</option>
-        </select>
-      </label>
-    </section>
+      <div class="opt">
+        <span class="label">Result</span>
+        <div id="modeSeg" class="seg">
+          <button type="button" data-value="replace" class="on">Replace layer</button>
+          <button type="button" data-value="add">New layer</button>
+        </div>
+      </div>
 
-    <button id="runBtn" class="primary">Remove Background</button>
-    <button id="cancelBtn" class="danger hidden">Cancel</button>
-
-    <div id="progressWrap" class="progress hidden">
-      <div id="progressBar" class="progress-bar"></div>
-    </div>
-    <p id="message" class="message"></p>
-
-    <footer class="bar foot">
-      <span id="engineInfo">engine: —</span>
-      <button id="openAppBtn" class="ghost">Open full app</button>
+      <button id="runBtn" type="button" class="primary">Remove Background</button>
+      <div class="dock-row">
+        <button id="cancelBtn" type="button" class="ghost hidden">Cancel</button>
+        <button id="openAppBtn" type="button" class="ghost">Open full app</button>
+      </div>
     </footer>
 
     <script src="js/panel.js"></script>

@@ -30,6 +30,15 @@ MULTI_SCORE_MARGIN = 0.08
 MULTI_MIN_AREA_RATIO = 0.02
 MULTI_MAX_IOU = 0.25
 
+#: Share of a mask's pixels that must sit inside another mask before the two
+#: count as "the same subject, one part and one whole". SAM 2 answers a single
+#: seed with nested masks (a face inside a head inside a character) and its
+#: parts are often the *cleaner* ones, so without this a job rotoscopes a face.
+_PART_OF_SUBJECT = 0.85
+#: A mask covering more than this share of the frame's edge is a set, not a
+#: character, however plausible its area looks.
+_BACKGROUND_EDGE = 0.60
+
 # Weighting of the six character-likeness signals. They sum to 1.0 so the
 # result reads as a confidence in [0, 1].
 _W_SAM = 0.30
@@ -107,18 +116,31 @@ def iou(a: np.ndarray, b: np.ndarray) -> float:
     return float(inter) / float(union) if union else 0.0
 
 
+def contained_fraction(inner: np.ndarray, outer: np.ndarray) -> float:
+    """Share of *inner*'s pixels that also fall inside *outer*."""
+    area = float(inner.sum())
+    if area <= 0:
+        return 0.0
+    return float(np.logical_and(inner, outer).sum()) / area
+
+
 # --------------------------------------------------------------------- #
 # Scoring
 # --------------------------------------------------------------------- #
 def _area_pref(area_ratio: float) -> float:
-    """1.0 across the 'a character' band, tapering to 0 outside it."""
+    """1.0 across the 'a character' band, tapering to 0 outside it.
+
+    The band reaches to 0.65 because a close-up character legitimately fills
+    most of the frame (the test clip's subject is 0.49), and a band that stops
+    at 0.45 makes the whole character look less plausible than a face.
+    """
     if area_ratio <= 0.0:
         return 0.0
-    if 0.03 <= area_ratio <= 0.45:
+    if MIN_AREA_RATIO <= area_ratio <= 0.65:
         return 1.0
-    if area_ratio < 0.03:
-        return area_ratio / 0.03
-    return max(0.0, 1.0 - (area_ratio - 0.45) / 0.35)
+    if area_ratio < MIN_AREA_RATIO:
+        return area_ratio / MIN_AREA_RATIO
+    return max(0.0, 1.0 - (area_ratio - 0.65) / 0.30)
 
 
 def _border_ratio(mask: np.ndarray) -> float:
@@ -200,6 +222,31 @@ def score_candidate(cand: Candidate) -> float:
     return max(0.0, min(1.0, score))
 
 
+def _plausible_whole(cand: Candidate) -> bool:
+    """Big enough to be the character, small enough not to be the set."""
+    return _area_pref(cand.area_ratio) >= 1.0 and cand.border_ratio <= _BACKGROUND_EDGE
+
+
+def _prefer_whole(ranked: list[Candidate]) -> Candidate:
+    """Promote a part to the whole subject it sits inside. See ``_PART_OF_SUBJECT``.
+
+    Among the candidates that contain the best one, the largest plausible one
+    wins: for a face inside a head inside a character that is the character,
+    which is what "remove the background behind the character" means.
+    """
+    best = ranked[0]
+    containers = [
+        cand
+        for cand in ranked[1:]
+        if cand.area_ratio > best.area_ratio
+        and _plausible_whole(cand)
+        and contained_fraction(best.mask, cand.mask) >= _PART_OF_SUBJECT
+    ]
+    if not containers:
+        return best
+    return max(containers, key=lambda cand: cand.area_ratio)
+
+
 def evaluate(
     candidates: list[Candidate],
     min_confidence: float = MIN_CONFIDENCE,
@@ -210,7 +257,7 @@ def evaluate(
         return SubjectSelection(reasons=["no mask candidate passed the size gate"])
 
     usable.sort(key=lambda c: c.score, reverse=True)
-    best = usable[0]
+    best = _prefer_whole(usable)
     reasons = [
         f"best score {best.score:.2f}",
         f"area {best.area_ratio:.3f}",
@@ -223,12 +270,17 @@ def evaluate(
             reasons=reasons + ["below confidence gate"],
         )
 
+    # A candidate sitting inside the winner is the same subject seen smaller,
+    # not a second one — otherwise picking the character would immediately
+    # report "several subjects" because its own face is also a candidate.
     rivals = [
         c
-        for c in usable[1:]
-        if c.score >= best.score - MULTI_SCORE_MARGIN
+        for c in usable
+        if c is not best
+        and c.score >= best.score - MULTI_SCORE_MARGIN
         and c.area_ratio >= MULTI_MIN_AREA_RATIO
         and iou(best.mask, c.mask) < MULTI_MAX_IOU
+        and contained_fraction(c.mask, best.mask) < _PART_OF_SUBJECT
     ]
     if rivals:
         return SubjectSelection(
@@ -287,6 +339,20 @@ def _prompt_sets(
     return sets
 
 
+def _anchor_on_face(candidates: list[Candidate]) -> list[Candidate]:
+    """Keep only the masks that contain the detected face, when any do.
+
+    The subject is the character whose face we found. The background mask is
+    the rest of the frame: SAM 2 is far more confident about the set than
+    about the subject (0.99 against 0.06 on the test clip), so the background
+    outscores the character on every signal except this one. It never contains
+    the face, so anchoring on the face removes it outright — and when the face
+    detector was wrong and nothing contains it, the full list is kept.
+    """
+    with_face = [cand for cand in candidates if cand.face_inside]
+    return with_face or candidates
+
+
 def find_subject(
     manager,
     frame_rgb: np.ndarray,
@@ -327,14 +393,20 @@ def find_subject(
         if cand is not None:
             candidates.append(cand)
 
-    selection = evaluate(candidates)
+    anchored = _anchor_on_face(candidates)
+    selection = evaluate(anchored)
     if face_center is not None:
         selection.reasons.append("face detector seeded the probe")
+        if len(anchored) < len(candidates):
+            selection.reasons.append(
+                f"kept {len(anchored)} masks holding the face of {len(candidates)}"
+            )
     logger.info(
-        "auto-subject: found=%s multiple=%s conf=%.3f candidates=%d",
+        "auto-subject: found=%s multiple=%s conf=%.3f candidates=%d anchored=%d",
         selection.found,
         selection.multiple,
         selection.confidence,
         len(candidates),
+        len(anchored),
     )
     return selection

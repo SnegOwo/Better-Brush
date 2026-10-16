@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 #: Conservative tiers per requested quality. ``best`` and ``balanced`` both cap
 #: at Base+ because that is the largest SAM 2 checkpoint a stock 8 GB laptop
-#: GPU propagates comfortably; a fine-tuned ("Lugnica SAM") model is preferred
-#: when installed.
+#: GPU propagates comfortably. ``best`` additionally prefers an installed
+#: fine-tuned ("Lugnica SAM") checkpoint — see :func:`resolve_model_name`.
 _QUALITY_TO_MODEL = {
     "fast": "small",
     "balanced": "base_plus",
@@ -55,10 +55,17 @@ def custom_model_label() -> str | None:
 
 
 def resolve_model_name(quality: str, override: str | None = None) -> str:
-    """Map ``(quality, explicit model)`` to a concrete model name."""
+    """Map ``(quality, explicit model)`` to a concrete model name.
+
+    ``fast`` and ``balanced`` mean exactly what the panel says they mean —
+    SAM 2.1 Small and SAM 2.1 Base+ — so a user who picks "Balanced (Base+)"
+    is never silently given something else. ``best`` is the tier where quality
+    is the point, so it prefers an installed fine-tuned checkpoint when there
+    is one.
+    """
     if override:
         return override
-    if quality in ("balanced", "best") and custom_model_available():
+    if quality == "best" and custom_model_available():
         return "custom"
     return _QUALITY_TO_MODEL.get(quality, "base_plus")
 
@@ -121,6 +128,12 @@ def describe() -> dict[str, Any]:
     info: dict[str, Any] = {
         "custom_model": custom,
         "custom_label": custom_model_label() if custom else None,
+        # Resolved per quality so the panel can name the exact model each
+        # option will load instead of guessing a label of its own.
+        "quality_models": {
+            quality: resolve_model_name(quality)
+            for quality in ("fast", "balanced", "best")
+        },
     }
     try:
         from src.hardware.detector import HardwareDetector

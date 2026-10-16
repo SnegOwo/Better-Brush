@@ -169,6 +169,7 @@ class JobRegistry:
             else:
                 record.result = result
                 record.state = DONE
+                logger.info("job %s finished: %s", record.id, result.output_path)
         except JobCancelled:
             record.state = CANCELLED
         except Exception as exc:  # noqa: BLE001 - every failure is a job error

@@ -420,7 +420,7 @@ timeline grab) fastest.
 | --- | --- |
 | `src/engine/__init__.py` | Version + API contract constants |
 | `src/engine/schemas.py` | `JobRequest` / `JobResult` / progress / error kinds (stdlib only) |
-| `src/engine/model_setup.py` | Deterministic model selection by total VRAM; prefers an installed custom ("Lugnica SAM") model |
+| `src/engine/model_setup.py` | Deterministic model selection by total VRAM; `best` prefers an installed custom ("Lugnica SAM") model |
 | `src/engine/auto_subject.py` | Character scoring + the "refuse when ambiguous" gate |
 | `src/engine/pipeline.py` | Extract → auto-subject → propagate → stream ProRes 4444 (PNG fallback) |
 | `src/engine/jobs.py` | Single-slot job registry, progress, cancel, error mapping |
@@ -442,7 +442,132 @@ engine shares code rather than forking it.
 
 ---
 
-## 16 · Why this is the right next platform
+## 16 · Round 2 — after the first real test in After Effects
+
+Three things came out of the first hands-on run. All three are fixed; the
+reasoning is recorded here because two of them were **not** panel bugs.
+
+### 16.1 "Invalid fine-tune model" on Balanced / Best
+
+Root cause was one line in the profiler, and it hit the **desktop app too**:
+`SAM2Profiler.recommend(force_model=ModelSize.CUSTOM)` raised
+`KeyError(ModelSize.CUSTOM)`, because `_CONFIG_MAP` / `_CHECKPOINT_MAP` only
+describe built-in downloads and a fine-tuned checkpoint is not one of them.
+Picking "Anime AMV v1" in the app therefore did nothing (the `KeyError` died
+inside a Qt slot), and in the panel it surfaced as a job error.
+
+- `SAM2Profiler._refs_for()` now resolves `CUSTOM` from the sidecar
+  (`checkpoints/custom/sam2_custom.json`) — the same source
+  `CheckpointManager` already used for the weights — so every tier is
+  addressable through one code path.
+- **Policy change:** `resolve_model_name()` no longer upgrades `balanced` to the
+  fine-tuned model. `balanced` means SAM 2.1 Base+ because that is what the
+  control says; only `best` prefers the fine-tuned checkpoint. The panel now
+  also *names* the resolved checkpoint (`Uses SAM 2.1 Base+`) and the finished
+  card names the one that actually ran, so a label cannot drift from reality
+  again.
+
+### 16.2 "Errno 22 / Invalid argument" on Fast
+
+`[Errno 22] Invalid argument` is what **Windows** raises when writing to a
+subprocess pipe whose child has already exited — it is the symptom of ffmpeg
+dying, not the cause. The old code caught that and threw ffmpeg's stderr away,
+so the message named the symptom and nothing else.
+
+Fixes, in order of usefulness:
+
+1. The pipe-write failure path now **stops the child, reaps it, and folds
+   ffmpeg's exit code and stderr into the message**. The next occurrence will
+   say *why* ffmpeg refused, instead of "Invalid argument".
+2. The export is validated before ffmpeg is launched: non-finite/zero fps falls
+   back to 24, and a zero-sized source is refused with a plain explanation.
+3. The frame size is checked against the `-s` ffmpeg was given, so a clip whose
+   frames change size mid-stream fails with *"frame 42 is 1920x1088 but the movie
+   was started as 1920x1080"* rather than a broken pipe.
+4. An ffmpeg that dies mid-job is killed instead of being left holding the
+   output file, and a cancelled job no longer leaks the child process.
+5. Unexpected failures now carry the **step** they happened in
+   (`… (while tracking the subject)`), which is the difference between a
+   one-line report and a round trip.
+6. The engine writes to `%LOCALAPPDATA%\BetterBrush\engine.log` (rotating,
+   1 MB × 3). It runs under `pythonw.exe`, which has no console — until now a
+   failed job left *no* trace anywhere.
+
+`tests/test_engine_pipeline.py` covers the two diagnostic paths directly
+(ffmpeg stderr surfaced; a mid-clip size change explained).
+
+### 16.3 Panel UX
+
+The first panel was a generic form: a `<dl>` of facts nobody needs, native
+light-themed `<select>`s inside AE's dark chrome, a purple accent that matched
+nothing else in the product, and no feedback beyond a text line. Rebuilt around
+a single **hero state**:
+
+- Palette taken from `src/ui/theme.py` (the desktop app's own theme), so the
+  docked panel reads as the same product and sits comfortably in AE.
+- Four states, each with one clear action: *select a layer* → *ready* →
+  *working* (four-stage checklist, progress bar, elapsed timer, cancel) →
+  *done* (key-frame preview on a checkerboard, frame count, and the model that
+  ran).
+- Segmented Quality / Result controls instead of dropdowns, with the resolved
+  model named underneath.
+- Failures get their own card, titled by error kind, and the hand-off cases
+  ("no character", "several subjects") offer *Open full app*.
+- It reattaches to a job that is already running, so reopening the panel never
+  hides progress.
+
+### 16.4 Found while reproducing
+
+- **OpenCV 5** removed `CascadeClassifier` / `cv2.data.haarcascades`. The Haar
+  stage of `face_parts` was throwing an `AttributeError` on every frame and
+  quietly doing nothing. It is now probed once and cached; the remaining stages
+  (mediapipe, skin-tone) still work, and `auto_subject` continues to function
+  without a face seed. Mediapipe is not installed in the test environment, so
+  in practice anime face seeding leans on the skin heuristic.
+- `init_video` progress was reported as the `extract` stage, which made a
+  stage-based UI jump *backwards* mid-job. It now reports `propagate`.
+
+### 16.5 Found by rendering real results (panel preview and key frame)
+
+Two defects only visible once a real clip had run end to end. Both were found
+by looking at the panel's own output rather than at the code.
+
+- **The preview (and the PNG-sequence fallback) wrote the wrong channels.**
+  `_rgba()` builds RGBA; `cv2.imwrite` wants BGRA. The code reversed the *whole*
+  array (`rgba[:, :, ::-1]`), which also moved alpha to the front, so the file's
+  alpha channel held the red channel. Measured on a real result: 0% of pixels
+  transparent, alpha mean 170.8. After the fix: 92% transparent, alpha mean 20.6
+  (the subject's true 6–8% coverage plus feathering), with the colours right.
+  A PNG-sequence result imported into AE was affected the same way. Fixed with
+  `_write_rgba_png()`, which swaps only the three colour channels.
+- **Auto-subject rotoscoped the *face*.** On the test clip the matte covered
+  6.4% of the frame — Tanjiro's face — with the body left out. Probing the real
+  candidate set explained it, and the numbers matter:
+  - the **background** mask is what SAM 2 is most confident about
+    (`sam_score` 0.99 against the character's 0.06), and it is the *better*
+    mask on area, centring and solidity too, so it outscored the subject;
+  - the **face** mask is the tidiest small mask and beat everything on score;
+  - the **whole character** mask (area 0.44–0.49 on this close-up) scored third,
+    and was excluded from promotion by a "character" band that stopped at 0.45.
+
+  Three changes, all in `src/engine/auto_subject.py`:
+  1. `_anchor_on_face()` — when a face is detected, only masks that contain it
+     are considered. The background never does. If nothing contains it (a bad
+     face hit) the full list is kept, so a wrong detector cannot refuse a clip.
+  2. `_area_pref()`'s band now runs to 0.65, because a close-up character
+     legitimately fills most of the frame.
+  3. Nested masks count as *one* subject: `_prefer_whole()` promotes a part to
+     the largest plausible mask containing it, and a candidate that sits inside
+     the winner is no longer reported as a rival subject (previously the
+     character's own face would have refused the job).
+
+  Result on the same clip: coverage 0.064 → 0.543, the whole character cut out,
+  and the multi-subject gate still refuses the two-subject dance clip ("More than
+  one character is visible"), which is exactly the "opens the full app" path.
+
+---
+
+## 17 · Why this is the right next platform
 
 - The value is already in the engine; the AE panel is a **thin** surface over it.
 - `render_queue.py` proves the codebase can host a Qt-free, lazily-importing

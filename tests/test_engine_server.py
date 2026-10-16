@@ -92,6 +92,13 @@ def test_health_full_includes_capabilities(start_server):
     assert "capabilities" in payload
 
 
+def test_health_reports_the_log_path(start_server):
+    """The panel points the user at the log when a job fails internally."""
+    _srv, client = start_server(_ok_pipeline)
+    _status, payload = client.get("/health")
+    assert payload["log_path"].endswith("engine.log")
+
+
 def test_post_job_then_poll_result(start_server):
     _srv, client = start_server(_ok_pipeline)
     status, payload = client.post("/job", {"input_path": "clip.mov"})

@@ -202,11 +202,12 @@ class SAM2Profiler:
             and 0 < target_gpu.total_vram_mb < self._OFFLOAD_BELOW_MB
         )
         msg = self._build_user_message(model_size, backend, mixed_precision, target_gpu)
+        model_config, checkpoint_url = self._refs_for(model_size)
 
         return SAM2Recommendation(
             model_size=model_size,
-            model_config=self._CONFIG_MAP[model_size],
-            checkpoint_url=self._url_for(model_size),
+            model_config=model_config,
+            checkpoint_url=checkpoint_url,
             device=device,
             backend=backend,
             mixed_precision=mixed_precision,
@@ -320,6 +321,23 @@ class SAM2Profiler:
             return False
         return bool(gpu.compute_capability and gpu.compute_capability[0] >= 8)
 
+    def _refs_for(self, size: ModelSize) -> tuple[str, str]:
+        """Hydra config + checkpoint reference for *size*.
+
+        Each built-in tier maps to a downloadable pair, so the two static maps
+        above cover them. ``CUSTOM`` is not a download: its config and
+        checkpoint live in ``checkpoints/custom/`` behind a sidecar, and only
+        the sidecar knows which base architecture was fine-tuned. Resolving it
+        here keeps the tier addressable through the same code path as the
+        built-ins instead of raising ``KeyError``.
+        """
+        if size is ModelSize.CUSTOM:
+            from src.models.checkpoint_manager import CheckpointManager
+
+            custom = CheckpointManager().custom_model()
+            return str(custom.config), str(custom.checkpoint)
+        return self._CONFIG_MAP[size], self._url_for(size)
+
     def _url_for(self, size: ModelSize) -> str:
         if size is ModelSize.SAM3_1:
             return "https://huggingface.co/facebook/sam3.1"
@@ -346,4 +364,6 @@ class SAM2Profiler:
             parts.append("Aucun GPU détecté — inférence sur CPU (lente)")
         if amp:
             parts.append("Mixed precision (bfloat16) activée")
+        if model is ModelSize.CUSTOM:
+            parts.append("Modèle fine-tuné (checkpoints/custom) sélectionné")
         return " | ".join(parts)

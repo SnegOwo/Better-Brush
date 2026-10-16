@@ -453,13 +453,47 @@ def _detect_mediapipe(
         return None
 
 
-def _detect_haar(
-    frame_rgb: np.ndarray,
-) -> dict[int, tuple[float, float]] | None:
+#: Once resolved, the Haar cascade is reused; ``_HAAR_MISSING`` latches the
+#: "this OpenCV has none" answer so the log line is emitted once.
+_HAAR_CASCADE = None
+_HAAR_MISSING = False
+
+
+def _haar_cascade():
+    """Frontal-face cascade, or ``None`` when this OpenCV has none.
+
+    OpenCV 5 dropped the legacy ``CascadeClassifier`` API (and with it
+    ``cv2.data.haarcascades``), so the capability has to be probed rather than
+    assumed — otherwise every frame logs an AttributeError and the Haar stage
+    of the detector chain silently does nothing. The cascade is also built once
+    instead of per frame.
+    """
+    global _HAAR_CASCADE, _HAAR_MISSING
+    if _HAAR_CASCADE is not None or _HAAR_MISSING:
+        return _HAAR_CASCADE
     try:
         cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
+    except AttributeError:
+        _HAAR_MISSING = True
+        logger.info(
+            "This OpenCV build (%s) has no Haar cascades — skipping that stage "
+            "of face detection",
+            getattr(cv2, "__version__", "?"),
+        )
+        return None
+    _HAAR_CASCADE = cascade
+    return cascade
+
+
+def _detect_haar(
+    frame_rgb: np.ndarray,
+) -> dict[int, tuple[float, float]] | None:
+    try:
+        cascade = _haar_cascade()
+        if cascade is None:
+            return None
         gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
         faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(40, 40))
         if len(faces) == 0:
