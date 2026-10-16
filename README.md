@@ -104,7 +104,7 @@ nothing leaves your machine and the host never loads torch.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1    # After Effects
-powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1     # Premiere Pro
+powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1     # Premiere Pro (elevated)
 ```
 
 One character per click; multi-subject and oddball layers are handed to the full app. Both

@@ -1097,18 +1097,42 @@ Because both panels drive one engine on port 8765, the engine's work folder was
 renamed from `BetterBrush\AfterEffects` to `BetterBrush\Plugins` — it is the
 engine's folder, not After Effects'.
 
-### 23.5 Verified, and what is not
+### 23.5 Where the Premiere panel is installed
 
-- The panel changes are covered by the QtWebEngine probe: at 250 px nothing
-  overflows the dock, the wheel scrolls the view without painting a stroke,
-  `Ctrl`+wheel zooms, the `+`/`-`/`Fit` buttons still step the fixed levels, and
-  the ring reports the tool's colour.
+Premiere Pro is a channel of CEP that expects panels in the **shared** folder,
+`C:\Program Files\Common Files\Adobe\CEP\extensions`, which is scanned for every
+user and every Adobe host (the manifest's `HostList` is what keeps it out of After
+Effects). The Premiere installer therefore defaults to that folder, and to a
+preflight that says plainly what to do when PowerShell is not elevated rather than
+failing with an access-denied from `Copy-Item` halfway through. `-Scope User`
+installs for one account with no admin rights, as before.
+
+CEP scans three extension roots — the app's own, the shared `Program Files` one,
+and `%APPDATA%` — so an extension present in two of them is listed twice. The
+installer removes the copies it is not installing into, in both scopes, on install
+and on uninstall.
+
+This is also what confirmed the target: Premiere Pro 2026 reports itself as
+26.0 with `PlugPlug.dll` 12.0.1 on board, i.e. CEP 12, so the `CSXS.12` key is the
+one its player-debug setting lives under, and the manifest's `[22.0,99.9]` host
+range covers it. The installer now writes the debug flag for CSXS.9 through
+CSXS.16 rather than stopping at 13.
+
+### 23.6 Verified, and what is not
+
+- The panel changes are covered by the QtWebEngine probe: at 200 px and 250 px
+  nothing overflows the dock, the wheel scrolls the view without painting a
+  stroke, `Ctrl`+wheel zooms, the `+`/`-`/`Fit` buttons still step the fixed
+  levels, and the ring reports the tool's colour.
 - `panel.js` and `host.jsx` are parsed by the same JavaScript parser the rest of
-  the panel code goes through.
+  the panel code goes through, and both installers are checked by the PowerShell
+  parser.
+- The Premiere install was rehearsed in both scopes and then run for real, and the
+  installed files were confirmed byte-identical to the repository with the shared
+  copy in place and the per-user copy gone.
 - **The Premiere host is written against the documented ExtendScript API and has
-  not been run**: Premiere Pro is not installed on the development machine, so
-  every call in `js/host.jsx` is defended (feature-checked, wrapped, and given a
-  fallback or a clear message) rather than trusted. The first real test in
-  Premiere Pro is what will confirm it.
+  not been run**: every call in `js/host.jsx` is defended (feature-checked,
+  wrapped, and given a fallback or a clear message) rather than trusted. The first
+  real test in Premiere Pro is what will confirm it.
 
 

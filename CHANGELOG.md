@@ -61,9 +61,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
   comes from `Sequence.getSelection()`, and the cut-out goes back through
   `ProjectItem.changeMediaPath`, which repoints the clip's media while leaving its
   trims, speed and effects alone. **Result → Above** instead places the cut-out on
-  the free video track above and switches the original clip off. It installs to its
-  own extensions folder (`BetterBrushPPro`) and drives the same engine on port
-  8765, so both panels can be installed side by side.
+  the free video track above and switches the original clip off. It installs to the
+  shared CEP folder
+  (`C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro`, with
+  `-Scope User` for a no-admin install) and drives the same engine on port 8765, so
+  both panels can be installed side by side.
 
 ### Fixed
 - **The spill cleaner panel no longer looks dead on a fresh project.** The Pick,

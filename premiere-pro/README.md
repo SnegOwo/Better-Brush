@@ -23,7 +23,8 @@ engine listens on `127.0.0.1` only.
 
 ## Install
 
-One command, from the repository root:
+One command, from the repository root. Premiere Pro panels live in the **shared**
+CEP folder, so this installs for all users and needs an elevated PowerShell:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1
@@ -33,10 +34,21 @@ What it does:
 
 1. Locates the Python interpreter that has Better Brush installed (or use
    `-Python "C:\path\to\python.exe"`).
-2. Copies this folder to `%APPDATA%\Adobe\CEP\extensions\BetterBrushPPro`.
+2. Copies this folder to
+   `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro`.
 3. Writes `config.json` (repo path, Python paths, port).
-4. Enables CEP player-debug mode for the current user (these are per-user
-   registry values — no admin rights, nothing system-wide).
+4. Enables CEP player-debug mode for the current user (a per-user registry value
+   — that part needs no admin, but writing to `Program Files` does).
+
+No administrator rights? Install for this account only:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1 -Scope User
+```
+
+That uses `%APPDATA%\Adobe\CEP\extensions\BetterBrushPPro` instead. CEP scans both
+locations, so the installer removes any copy in the other one on the way — two
+copies of the same extension would otherwise show up twice in the menu.
 
 Then **restart Premiere Pro** and open **Window → Extensions → Better Brush**.
 Drag it into a dock if you want it permanent.
@@ -45,7 +57,7 @@ The installer uses its own extensions folder (`BetterBrushPPro`), so it sits
 alongside the After Effects panel (`BetterBrush`) without disturbing it. Both
 panels drive the **same** local engine on port 8765 — install one, or both.
 
-To remove it:
+To remove it (from every folder it might be in):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1 -Uninstall
@@ -258,7 +270,9 @@ that file has the full trace.
 
 | Symptom | Fix |
 | --- | --- |
-| Panel missing from the Extensions menu | Re-run `install.ps1`, restart Premiere. Check `%APPDATA%\Adobe\CEP\extensions\BetterBrushPPro\CSXS\manifest.xml` exists. |
+| Panel missing from the Extensions menu | Re-run `install.ps1` (elevated), restart Premiere. Check `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro\CSXS\manifest.xml` exists. |
+| The installer says it needs administrator rights | It installs for all users by default. Re-run it from an **Administrator** PowerShell, or add `-Scope User` to install for your account only. |
+| The panel is listed twice | There is a copy in two CEP folders. Re-run `install.ps1` — it removes the copies it isn't using — and restart Premiere. |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
@@ -284,7 +298,7 @@ that file has the full trace.
 | `js/panel.js` | Panel logic (engine client + UI), same except for the wording |
 | `js/host.jsx` | **The port**: Premiere selection, media replacement, process launching |
 | `config.sample.json` | Shape of the `config.json` the installer writes |
-| `install.ps1` | Per-user installer / uninstaller |
+| `install.ps1` | Installer / uninstaller (`-Scope System` by default, `-Scope User` for one account) |
 
 The engine itself lives in the repository under `src/engine/`.
 
@@ -298,4 +312,4 @@ The engine itself lives in the repository under `src/engine/`.
 | "Keep the original" mode | New layer above the source layer | Overwrite onto the free track above; the original is disabled |
 | Clip handle for a correction | `compId` / `layerId` | Track index + clip start time (Premiere has no ids) |
 | Clip dimensions | `FootageItem.width` / `.height` / `.frameRate` | Not exposed at all — the engine reads the media instead |
-| Installer target | `...\CEP\extensions\BetterBrush` | `...\CEP\extensions\BetterBrushPPro` |
+| Installer target | `%APPDATA%\...\CEP\extensions\BetterBrush` | `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro` |

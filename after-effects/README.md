@@ -34,6 +34,13 @@ What it does:
 Then **restart After Effects** and open **Window → Extensions → Better Brush**.
 Drag it into a dock if you want it permanent.
 
+It installs for your account only, which needs no administrator rights. To install
+it for every user instead, open an **Administrator** PowerShell and add
+`-Scope System` — that writes to
+`C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrush` (CEP scans both
+locations; the installer removes the copy it isn't using, so the panel can never
+be listed twice).
+
 To remove it:
 
 ```powershell
@@ -215,7 +222,7 @@ that file has the full trace.
 
 | Symptom | Fix |
 | --- | --- |
-| Panel missing from the Extensions menu | Re-run `install.ps1`, restart AE. Check `%APPDATA%\Adobe\CEP\extensions\BetterBrush\CSXS\manifest.xml` exists. |
+| Panel missing from the Extensions menu | Re-run `install.ps1`, restart AE. Check that `CSXS\manifest.xml` exists in the folder it installed to (`%APPDATA%\Adobe\CEP\extensions\BetterBrush`, or `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrush` if you used `-Scope System`). |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |
 | Engine starts then dies | That Python can't import `src.engine`/`torch`. Install the app into it: `python -m pip install -e .`. |
@@ -247,6 +254,6 @@ that file has the full trace.
 | `js/panel.js` | Panel logic (engine client + UI) |
 | `js/host.jsx` | ExtendScript: selection, apply-result, process launching |
 | `config.sample.json` | Shape of the `config.json` the installer writes |
-| `install.ps1` | Per-user installer / uninstaller |
+| `install.ps1` | Installer / uninstaller (`-Scope User` by default, `-Scope System` for all users) |
 
 The engine itself lives in the repository under `src/engine/`.
