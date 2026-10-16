@@ -109,6 +109,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
   installed, so post-processing runs and masks are smooth and complete.
 
 ### Changed
+- **The soft matte is now snapped back to the mask in flat colour regions.** The
+  matte network is trained on photography, where subject and background mix
+  gradually; anime is flat colour inside hard lines, so its half-covered answer
+  in the middle of a cel was a ghost of the background rather than detail. Where
+  the source has no gradient and the mask says subject, the mask now wins — but
+  only *inside* the mask, so hair the network finds beyond a loose outline still
+  survives, and real drawn edges are still the matte's call. Applied when the
+  content profile is **Anime / AMV**.
 - **UI polish pass — hierarchy, keyboard access, and dead-control clarity.** No
   layout or workflow changes; every addition is either a theme rule or a small
   component fix.

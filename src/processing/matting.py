@@ -60,6 +60,11 @@ class MattingSettings:
     #: says there. The matte refines the edge; it must not hollow out what the
     #: animator already marked as the subject (see ``_clamp_alpha_to_mask``).
     clamp_solid_interior: bool = False
+    #: Where the *source image* is flat, trust the mask instead of the network
+    #: (see ``_snap_flat_regions``). Anime colour regions are flat by
+    #: construction, so this removes the network's ghost of the background from
+    #: the middle of a cel while leaving real edges to the matte.
+    flat_snap: bool = False
 
     def __post_init__(self) -> None:
         model = str(self.model or "matanyone2").strip().lower()
@@ -277,9 +282,10 @@ class MattingRunner:
         core = self._core
         assert core is not None
 
-        source_h, source_w = frame_getter(prompt).shape[:2]
+        prompt_frame = frame_getter(prompt)
+        source_h, source_w = prompt_frame.shape[:2]
         height, width = _fit_resolution(source_h, source_w, settings.resolution)
-        prompt_image = self._image_tensor(frame_getter(prompt), height, width)
+        prompt_image = self._image_tensor(prompt_frame, height, width)
         prompt_tensor = self._mask_tensor(
             prompt_mask, height, width, erode=_PROMPT_ERODE, dilate=_PROMPT_DILATE
         )
@@ -297,16 +303,22 @@ class MattingRunner:
                 core.step(prompt_image, first_frame_pred=True)
                 prob = core.step(prompt_image)
                 results[prompt] = self._postprocess(
-                    prob, settings, source_h, source_w, prompt_mask
+                    prob, settings, source_h, source_w, prompt_mask, prompt_frame
                 )
                 for index in sequence:
                     self._check_cancel()
                     if index == prompt:
                         continue
-                    image = self._image_tensor(frame_getter(index), height, width)
+                    frame = frame_getter(index)
+                    image = self._image_tensor(frame, height, width)
                     prob = core.step(image)
                     results[index] = self._postprocess(
-                        prob, settings, source_h, source_w, self._mask_at(index)
+                        prob,
+                        settings,
+                        source_h,
+                        source_w,
+                        self._mask_at(index),
+                        frame,
                     )
         return results
 
@@ -384,11 +396,13 @@ class MattingRunner:
         source_h: int,
         source_w: int,
         seg_mask: np.ndarray | None = None,
+        frame_rgb: np.ndarray | None = None,
     ) -> np.ndarray:
         """Convert a raw network output to a full-resolution float alpha.
 
         *seg_mask* is the animator's binary segmentation mask for this frame;
-        the clamp uses it so the matte cannot wander into background.
+        the clamp uses it so the matte cannot wander into background. *frame_rgb*
+        is the source frame, which the flat-region snap measures.
         """
         core = self._core
         assert core is not None
@@ -415,6 +429,8 @@ class MattingRunner:
                 seg_mask,
                 solid_interior=settings.clamp_solid_interior,
             )
+        if settings.flat_snap and frame_rgb is not None:
+            alpha = _snap_flat_regions(alpha, frame_rgb, seg_mask)
         return np.clip(alpha, 0.0, 1.0).astype(np.float32)
 
 
@@ -497,6 +513,97 @@ def _solid_core(mask: np.ndarray) -> np.ndarray:
     if not core.any():
         return np.zeros(mask.shape[:2], dtype=np.float32)
     return cv2.GaussianBlur(core.astype(np.float32), (0, 0), 1.0)
+
+
+#: Sobel gradient magnitude at or above which a source pixel counts as detail.
+#: Anime is drawn as flat colour regions bounded by hard black lines, so the two
+#: populations are far apart: flats sit near 0, a line sits in the hundreds.
+_FLAT_EDGE_SCALE = 40.0
+#: Blur applied to the gradient before thresholding, so a hair-width line still
+#: registers as detail even after the network's downscale.
+_FLAT_EDGE_BLUR = 1.2
+#: Flatness is a per-region property, not a per-pixel one, so it is measured on
+#: a reduced copy. At 1080p this is the difference between a few milliseconds and
+#: twenty, on every frame that gets matted.
+_FLAT_MAX_SIDE = 640
+
+
+def _flat_weight(frame_rgb: np.ndarray) -> np.ndarray:
+    """Float 1 where the source is flat, 0 where it carries real detail.
+
+    Returned at reduced resolution; the caller scales it to the matte.
+    """
+    gray = cv2.cvtColor(frame_rgb[:, :, :3], cv2.COLOR_RGB2GRAY)
+    height, width = gray.shape[:2]
+    longest = max(height, width)
+    if longest > _FLAT_MAX_SIDE:
+        scale = _FLAT_MAX_SIDE / float(longest)
+        gray = cv2.resize(
+            gray,
+            (max(1, int(width * scale)), max(1, int(height * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    magnitude = cv2.magnitude(gx, gy)
+    magnitude = cv2.GaussianBlur(magnitude, (0, 0), _FLAT_EDGE_BLUR)
+    return np.clip(1.0 - magnitude / _FLAT_EDGE_SCALE, 0.0, 1.0).astype(np.float32)
+
+
+def _snap_flat_regions(
+    alpha: np.ndarray,
+    frame_rgb: np.ndarray,
+    seg_mask: np.ndarray | None,
+) -> np.ndarray:
+    """Hand flat source regions back to the mask, keeping the matte for edges.
+
+    The matting network is trained on photography, where "subject" and
+    "background" mix gradually. Anime does not work that way: a cel is flat
+    colour with a hard line around it, so the network's half-covered answer in
+    the middle of a flat region is not detail, it is a ghost of whatever was
+    behind the character. Where the source is flat, the mask is the better
+    answer and the network is put aside.
+
+    Only *inside* the animator's mask. Outside it the network is left alone, so
+    the hair it finds beyond the painted outline still survives.
+
+    Args:
+        alpha: Soft matte in [0, 1], after the mask clamp.
+        frame_rgb: The source frame the matte was measured from.
+        seg_mask: The animator's binary mask for this frame, when known.
+
+    Returns:
+        The matte with flat, in-mask regions pulled to the mask's own answer.
+    """
+    if seg_mask is None or frame_rgb is None:
+        return alpha
+    mask = np.asarray(seg_mask)
+    if not mask.any():
+        return alpha
+    if frame_rgb.shape[:2] != alpha.shape[:2]:
+        frame_rgb = cv2.resize(
+            frame_rgb, (alpha.shape[1], alpha.shape[0]), interpolation=cv2.INTER_AREA
+        )
+    mask = mask.astype(bool)
+    if mask.shape[:2] != alpha.shape[:2]:
+        mask = cv2.resize(
+            (mask.astype(np.uint8) * 255),
+            (alpha.shape[1], alpha.shape[0]),
+            interpolation=cv2.INTER_NEAREST,
+        ) > 127
+    flat = _flat_weight(frame_rgb)
+    if flat.shape[:2] != alpha.shape[:2]:
+        flat = cv2.resize(
+            flat, (alpha.shape[1], alpha.shape[0]), interpolation=cv2.INTER_LINEAR
+        )
+    # The mask's own answer in that region: opaque, with the anti-aliased ramp
+    # only where the region genuinely ends.
+    from src.processing.edge_finish import soft_coverage
+
+    target = soft_coverage(mask, feather=1.0)
+    blend = flat * mask.astype(np.float32)
+    mixed = alpha * (1.0 - blend) + target * blend
+    return np.clip(mixed, 0.0, 1.0).astype(np.float32)
 
 
 def _grow_alpha(alpha: np.ndarray, grow: int) -> np.ndarray:

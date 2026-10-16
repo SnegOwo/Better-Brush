@@ -872,3 +872,133 @@ when the association actually changed, which after the first run it never does.
 - Panel: the QtWebEngine probe at 250 px still has no overflow, still paints and
   corrects frame 42, and now reports `bbOpenFullApp("…/pythonw.exe", …)`.
 
+## 22 · Round 7 — zoom, anime matting, and doing less work
+
+Round 6 works. This round is the seven-item list that followed it: two of them
+are features in the panel, one is a quality pass on the matte, one is speed, and
+three are designs that are written down rather than built.
+
+### 22.1 Zooming the brush surface
+
+A docked panel is about 200 px wide and the source is 1920: at fit, one source
+pixel is a tenth of a screen pixel, so a hair correction is guesswork. The brush
+stage now has zoom and pan.
+
+The implementation is deliberately the smallest one that works. The image and
+the stroke canvas are wrapped in `#brushLayer`, and zoom is a single CSS
+transform on that layer — `translate(-x0·z, -y0·z) scale(z)`, with the visible
+window given as the top-left corner `(x0, y0)` and a span of `1/z` in normalised
+source coordinates. Three things fall out of that choice for free:
+
+- The image and the strokes can never drift apart, because one transform moves
+  both.
+- `canvasPoint()` needs no change at all. It maps through
+  `getBoundingClientRect()`, and a zoomed canvas simply reports a proportionally
+  bigger box, so the arithmetic lands back on the same source pixel.
+- Zoom is therefore also a **brush-size** control: the width in source pixels is
+  `size × (canvas.width / rect.width)`, so at 8× the same slider paints an
+  eighth as wide a stroke on the artwork. That is the whole point of zooming in
+  for detail.
+
+The brush footprint is drawn as a DOM circle rather than on the canvas — it is
+`size` screen pixels by definition, so it costs nothing per mouse move and it
+stays exactly round at every zoom. The wheel zooms about the cursor, the middle
+button and space-drag pan, `Fit`/`0` returns to the whole frame, and panning is
+clamped so the window cannot leave the artwork. Zoom deliberately survives a
+frame change (you zoom on the ear, scrub, and stay on the ear) and resets on a
+new result.
+
+### 22.2 Matting that suits drawn animation
+
+MatAnyone 2 is trained on photography, where subject and background mix
+gradually. Anime is the opposite: flat colour regions bounded by a hard line. The
+network's answer in the middle of a flat region is not detail, it is a ghost of
+whatever was behind the character, and it composites as a milky patch.
+
+`MattingSettings.flat_snap` measures how flat the *source* is (a Sobel gradient
+at reduced resolution, so it costs a couple of milliseconds) and, wherever the
+image is flat **and inside the animator's mask**, hands the pixel back to the
+mask instead of the network. Two consequences are worth spelling out:
+
+- It is restricted to the inside of the mask. Outside it the network is left
+  alone, so the hair it finds beyond the painted outline still survives — the
+  one behaviour that made the app's loose-mask workflow worth keeping.
+- Real edges are untouched, because a drawn line is detail by construction. The
+  boundary band keeps the matte's soft ramp.
+
+The engine turns this on along with the interior clamp. The app turns it on for
+`ContentProfile.ANIME` only, so live-action keeps the network's own answer.
+
+The engine also stopped shipping the halo: export composed the original RGB
+against the alpha ramp, so every partially covered pixel carried background
+colour. It now runs `edge_finish.finish_edges` (decontamination included) on the
+outline path and `decontaminate_edges` on the matted path.
+
+### 22.3 Doing less work
+
+Three changes, none of which touch quality:
+
+- **Extraction** encodes each JPEG on a thread while the next frame is being
+  decoded. `cv2.imwrite` releases the GIL, so this is free parallelism, and
+  extraction is decode-then-encode — the encode used to sit on the critical
+  path in full.
+- **Export** prefetches frames the same way (`_decoded_frames`). The write to
+  the ffmpeg pipe stays strictly in order; only the decode overlaps. Four frames
+  of RAM buys the decode off the critical path for the whole stage.
+- **The brush surface** no longer re-encodes a frame it has already rendered.
+  `/frame` results are cached by `(mode, work dir, index, masks.npz mtime)`,
+  which is self-invalidating: a correction rewrites `masks.npz`, so everything
+  rendered before it becomes unreachable and is evicted. PNG compression is
+  dropped to 1 on this path — the image only ever crosses the loopback, so
+  trading a bigger buffer for a ~3× faster encode is a straight win.
+
+On the panel side, the 1.5 s selection poll no longer re-renders when the
+selection JSON has not changed. That was re-laying out the brush tools and
+re-asserting the preview image while the user was painting on it.
+
+### 22.4 A friendlier panel
+
+Alongside zoom: step buttons on either side of the frame slider, `Undo` beside
+`Clear`, Apply/Undo/Clear disabled until something is painted, and an
+**Original** toggle that swaps the cut-out for the untouched source frame (a new
+`&original=1` on `/frame`, served as JPEG) so an edge can be judged against what
+was actually behind it. Keyboard: `A`/`R` tool, `[`/`]` brush size, `,`/`.`
+frame, `+`/`-`/`0` zoom, `Ctrl+Z` undo, `Ctrl+Enter` apply, `C` compare.
+
+Two real bugs went with it. The preview image was re-assigned on every render, so
+a scrubbed frame snapped back to the key frame within 1.5 s; the panel now tracks
+what the image is showing (`preview` / `frame` / `original`) and only `render()`
+writes it in `preview`. And a slow `/frame` response could land after the user had
+moved on, so responses are sequence-numbered and superseded ones are discarded.
+
+### 22.5 Verified
+
+- Engine: flat snapping proven to make a flat in-mask region opaque, to leave a
+  drawn edge to the matte, to be unable to add coverage outside the mask, and to
+  be a no-op without one; `_flat_weight` proven flat-vs-line; the frame cache
+  proven to serve a repeat without re-reading the source **and** to invalidate
+  when the mask set is rewritten; `render_source_frame` proven to return the
+  untouched frame; `_decoded_frames` proven to stream in order.
+- Panel: the QtWebEngine probe at 250 px drives the whole flow and reports no
+  overflow (body 250, brush rows 187 = client width), zoom clicks `2×`, wheel
+  zoom `1.4×`, a middle-drag pan moving the transform from `-26.152%` to the
+  `-36.268%` clamp **without** painting a stroke, a 48 px ring, `]` growing the
+  brush 48 → 60, `r`/`a` switching tool, `.` stepping 42 → 44, undo disabling
+  Apply again, a compare fetch of `index=44&original=1`, and a correction posted
+  at `correction_frame: 44`.
+
+### 22.6 Planned, not built
+
+Three design documents were written for the work that is bigger than a round:
+
+- `docs/AMD-WINDOWS-SUPPORT-PLAN.md` — what breaks on an AMD-only machine today
+  (the DirectML path hands `torch` a `"directml:0"` string it cannot resolve, and
+  reports a 0 MB adapter as a usable GPU), and a staged plan for a real device
+  capability layer.
+- `docs/SAM2-ANIME-FINETUNE-PLAN.md` — fine-tuning SAM 2.1 on anime, plugging
+  into the existing sidecar checkpoint path and the "Best" tier.
+- `docs/ANIME-ROTOSCOPE-TOOLBOX.md` — the candidate techniques, including the
+  observation that the engine still does not run the cel-hold, line-prior and
+  temporal-smoothing passes the desktop app already has.
+
+

@@ -2248,11 +2248,17 @@ class MainWindow(QMainWindow):
     def _matting_settings(self) -> MattingSettings:
         """Build matting settings from the active shot's profile."""
         profile = self._active_profile()
+        # Anime is flat colour inside hard lines, so wherever the source has no
+        # detail the mask is a better answer than the network - which otherwise
+        # leaves a ghost of the background in the middle of a cel. Live action
+        # keeps the network's own answer everywhere, as before.
+        anime = self._config.content_profile == ContentProfile.ANIME
         return MattingSettings(
             model=profile.matting_model,
             resolution=profile.matting_resolution,
             gamma=profile.matting_gamma,
             grow=profile.matting_grow,
+            flat_snap=anime,
         )
 
     def _on_run_matting(self) -> None:

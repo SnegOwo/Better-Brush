@@ -65,19 +65,40 @@ Both are undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
 The panel keeps a cut-out for **every frame** of the result, so you can fix the
 frame that is actually wrong instead of a single key frame:
 
-1. Scrub the **Frame** slider to that frame.
+1. Scrub the **Frame** slider (`‹` / `›` step one frame, `,` and `.` do the same).
 2. Pick **Add** (green) to paint pixels in, or **Remove** (red) to paint them
    out, and set the brush size.
 3. **Apply correction.** The clip is re-tracked from *that* frame with your
    strokes layered onto the mask, and the result layer is replaced.
 
-**Clear strokes** wipes the overlay. Corrections are repeatable — paint, apply,
-scrub elsewhere, paint again — and each pass builds on the last. The frame you
-paint on is treated as ground truth: **Add** makes the pixels you cover part of
-the subject for real (the soft matte may still soften that region's edge, but it
-can never hollow it out again), and even a patch SAM 2 does not believe belongs
-to the subject survives there. Moving the Frame slider clears the current
-strokes, because strokes belong to the frame they were painted on.
+**Zoom** before you paint on anything small. A dock at 200 px shows one source
+pixel as a tenth of a screen pixel; at 8× the same brush slider paints an eighth
+as wide a stroke on the artwork, which is what makes a hair correction possible.
+
+| Action | How |
+| --- | --- |
+| Zoom in / out | Scroll wheel over the preview, or `+` / `-`, or the `−` / `+` buttons |
+| Zoom about a point | Put the cursor there and scroll |
+| Pan | Middle-drag, or hold <kbd>Space</kbd> and drag |
+| Back to the whole frame | `Fit`, or <kbd>0</kbd> |
+| Compare with the original | **Original** (or `C`), then again to go back |
+
+Zoom survives a frame change — zoom in on an ear, scrub, and you are still on the
+ear — and resets when a new result arrives.
+
+**Undo** removes the last stroke (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) and **Clear**
+wipes the overlay; both are disabled until something is painted. Corrections are
+repeatable — paint, apply, scrub elsewhere, paint again — and each pass builds on
+the last. The frame you paint on is treated as ground truth: **Add** makes the
+pixels you cover part of the subject for real (the soft matte may still soften
+that region's edge, but it can never hollow it out again), and even a patch SAM 2
+does not believe belongs to the subject survives there. Moving the Frame slider
+clears the current strokes, because strokes belong to the frame they were painted
+on.
+
+Keyboard, while a result is on screen: `A` / `R` tool, `[` / `]` brush size,
+`,` / `.` frame, `+` / `-` / `0` zoom, `C` compare, <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+undo, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply.
 
 ### When it hands off to the full app
 
@@ -124,8 +145,17 @@ After Effects
   reads dark hair, finger webbing and the space inside a curled hand as
   background, which composites as see-through patches; filling them is what
   makes hair read as solid.
+- The alpha is **decontaminated** at the edges. A partially covered pixel is a
+  blend of subject and background, so it carries background colour at nearly full
+  strength; subtracting that is what stops a hair tip wearing a halo of sky.
+- With matting on, the matte is **snapped back to the mask wherever the source is
+  flat** (inside the mask only). Anime is flat colour inside hard lines, so the
+  network's answer in the middle of a cel is a ghost of the background rather
+  than detail. Real edges, and anything the network finds beyond the painted
+  outline, are left to the matte.
 - The masked frames are kept next to the result (packed and compressed), so the
   brush can show any frame and a correction does not have to re-read the source.
+  Rendered frames are cached, so scrubbing back to a frame is instant.
 
 ---
 
@@ -141,7 +171,9 @@ After Effects
   and partial edges instead of a hard cut. It is a second model pass and adds
   time to every run; turn it off for a fast, hard-edged outline. If the matting
   weights aren't installed the switch is disabled and the run falls back to the
-  outline automatically.
+  outline automatically. The matte is tuned for drawn animation: it may soften
+  the outline's edge, but it cannot hollow it out, and in a flat colour region
+  it follows the outline rather than leaving a ghost of the background.
 
 The line under **Quality** always names the checkpoint the current choice will
 load (`Uses SAM 2.1 Base+`), and the finished card names the one that actually
@@ -187,6 +219,10 @@ that file has the full trace.
 | A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
 | A job seems to hang at 0% | Update the panel (`install.ps1`) — an unread output pipe used to block the engine mid-job. The log now records every step, so a genuine stall names the step it stalled in. |
 | A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. Automatic matting adds another model pass — turn it off for speed. |
+| Scrolling the preview does nothing | The wheel only zooms once a result is on screen (there has to be something to zoom into). Use the `−` / `+` buttons if the wheel is captured by something else. |
+| Panning moves the frame instead of the mask | You are painting. At fit there is nowhere to pan to: zoom in first, then middle-drag or hold <kbd>Space</kbd> and drag. |
+| The preview jumps back to the key frame | Update the panel (`install.ps1`). An older build re-set the preview image on every status poll, so a scrubbed frame was overwritten a second later. |
+| The matte looks milky inside the character | Update both (`install.ps1`). The matte is now snapped back to the mask in flat colour regions, which is where the network used to leave a ghost of the background. |
 | Matting switch is greyed out | The MatAnyone 2 weights aren't in `checkpoints\matanyone2\`. Run the app's model setup; until then runs fall back to the outline. |
 | "Apply correction" does nothing | Paint at least one stroke first; a correction with no strokes is ignored. Also update the panel (`install.ps1`) if it's an older build. |
 | The **Add** brush had no visible effect | Update both (`install.ps1`). The soft matte used to be allowed to hollow out a region the mask covered, so painting hair *in* came back transparent. Paint the stroke again after updating. |

@@ -42,32 +42,43 @@
 
         <figure id="previewWrap" class="preview hidden">
           <div id="brushStage" class="checker brush-stage">
-            <img id="previewImg" alt="Preview of the cut-out" />
-            <canvas id="brushCanvas" class="brush-canvas hidden"></canvas>
+            <div id="brushLayer" class="brush-layer">
+              <img id="previewImg" alt="Preview of the cut-out" />
+              <canvas id="brushCanvas" class="brush-canvas hidden"></canvas>
+            </div>
+            <div id="brushRing" class="brush-ring hidden"></div>
           </div>
           <figcaption id="previewCaption"></figcaption>
 
           <div id="brushTools" class="brush-tools hidden">
             <div class="brush-row">
               <span class="label">Frame</span>
-              <input id="brushFrame" type="range" min="0" max="0" step="1" value="0" title="Scrub to the frame you want to fix" />
+              <button id="brushPrev" type="button" class="step" title="Previous frame (,)">‹</button>
+              <input id="brushFrame" type="range" min="0" max="0" step="1" value="0" title="Scrub to the frame that's wrong" />
+              <button id="brushNext" type="button" class="step" title="Next frame (.)">›</button>
               <span id="brushFrameLabel" class="num">—</span>
             </div>
             <div class="brush-row">
               <div id="brushToolSeg" class="seg">
-                <button type="button" data-value="add" class="on" title="Paint pixels in">Add</button>
-                <button type="button" data-value="remove" title="Paint pixels out">Remove</button>
+                <button type="button" data-value="add" class="on" title="Paint pixels back in (A)">Add</button>
+                <button type="button" data-value="remove" title="Paint pixels out (R)">Remove</button>
               </div>
+              <input id="brushSize" type="range" min="10" max="160" step="2" value="48" title="Brush size ([ and ])" />
             </div>
             <div class="brush-row">
-              <span class="label">Brush</span>
-              <input id="brushSize" type="range" min="10" max="160" step="2" value="48" />
+              <span class="label">View</span>
+              <button id="zoomOut" type="button" class="step" title="Zoom out (-)">−</button>
+              <span id="zoomLabel" class="num zoom">Fit</span>
+              <button id="zoomIn" type="button" class="step" title="Zoom in (+)">+</button>
+              <button id="zoomFit" type="button" class="ghost tiny" title="Fit the whole frame (0)">Fit</button>
+              <button id="compareBtn" type="button" class="ghost tiny" title="Show the original frame, without the cut-out">Original</button>
             </div>
             <div class="brush-row brush-actions">
-              <button id="brushClear" type="button" class="ghost">Clear strokes</button>
+              <button id="brushUndo" type="button" class="ghost" title="Remove the last stroke (Ctrl+Z)">Undo</button>
+              <button id="brushClear" type="button" class="ghost">Clear</button>
               <button id="brushApply" type="button" class="ghost">Apply correction</button>
             </div>
-            <p class="note">Scrub to the frame that's wrong, paint on it — green adds, red removes — then Apply. The clip is re-tracked from that frame.</p>
+            <p class="note">Paint the frame that is wrong — green adds, red removes — then Apply. Scroll to zoom, middle-drag or space-drag to pan.</p>
           </div>
         </figure>
 

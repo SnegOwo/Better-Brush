@@ -23,6 +23,9 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections import deque
+from collections.abc import Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,6 +58,22 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".
 _SAMPLE_FRAMES = 3
 _EDGE_FEATHER = 1.0
 _PROGRESS_EVERY = 5
+
+#: How many JPEGs the export loop keeps decoding ahead of the ffmpeg pipe.
+#: Decoding a frame and compositing its RGBA are CPU work that releases the GIL
+#: (both are OpenCV calls), while the pipe write is the part that has to happen
+#: in order. Overlapping them costs a few frames of RAM and takes the decode off
+#: the critical path, which is most of the export stage on a long shot.
+_EXPORT_PREFETCH = 4
+
+#: JPEG encodes run in the extraction loop's shadow, for the same reason.
+_EXTRACT_WORKERS = 4
+
+#: Brush frames the panel has already asked for, newest first. The brush surface
+#: re-renders whenever the frame slider moves, so a scrub back and forth would
+#: otherwise pay for a full mask unpack and PNG encode every time.
+_FRAME_CACHE_LIMIT = 8
+_FRAME_CACHE: dict[tuple[str, str, int, float], bytes] = {}
 
 #: Written next to the result so a later brush correction can re-track from the
 #: exact key frame the first pass picked.
@@ -207,16 +226,25 @@ def _extract_range(
         end = total - 1 if request.frame_out < 0 else min(request.frame_out, total - 1)
         start = max(0, min(request.frame_in, end))
         span = end - start + 1
-        for i, idx in enumerate(range(start, end + 1)):
-            _check_cancel(cancel_event)
-            frame = reader.read_frame(idx)
-            if frame is None:
-                logger.warning("decoding stopped early at frame %d", idx)
-                span = i
-                break
-            _write_jpg(dest / f"{i:05d}.jpg", frame)
-            if i % _PROGRESS_EVERY == 0 or i == span - 1:
-                _emit(on_progress, "extract", i + 1, span, "")
+        # The encode of frame i is independent of the decode of frame i+1 and
+        # OpenCV releases the GIL while writing, so the encode rides along in the
+        # next decode's shadow instead of doubling the stage.
+        inflight: deque[Future[None]] = deque()
+        with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as pool:
+            for i, idx in enumerate(range(start, end + 1)):
+                _check_cancel(cancel_event)
+                frame = reader.read_frame(idx)
+                if frame is None:
+                    logger.warning("decoding stopped early at frame %d", idx)
+                    span = i
+                    break
+                inflight.append(pool.submit(_write_jpg, dest / f"{i:05d}.jpg", frame))
+                if len(inflight) >= _EXTRACT_WORKERS:
+                    inflight.popleft().result()
+                if i % _PROGRESS_EVERY == 0 or i == span - 1:
+                    _emit(on_progress, "extract", i + 1, span, "")
+            for future in inflight:
+                future.result()
         if span <= 0:
             raise PipelineError(f"no decodable frames in {source}", ERR_UNSUPPORTED)
         return _SourceInfo(
@@ -233,6 +261,34 @@ def _extract_range(
 def _check_cancel(cancel_event: threading.Event | None) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise JobCancelled()
+
+
+def _decoded_frames(
+    frames_dir: Path,
+    count: int,
+    cancel_event: threading.Event | None,
+) -> Iterator[tuple[int, np.ndarray]]:
+    """Yield ``(index, rgb)`` in order, decoding ahead on a thread pool.
+
+    The consumer (an ffmpeg pipe write, or a PNG write) stays strictly in order;
+    only the JPEG decode is overlapped. ``VideoReader`` hands back fresh arrays,
+    so nothing is shared with the decoder.
+    """
+    workers = max(1, min(_EXPORT_PREFETCH, count))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        pending: deque[tuple[int, Future[np.ndarray]]] = deque(
+            (i, pool.submit(_read_rgb, frames_dir / f"{i:05d}.jpg"))
+            for i in range(min(workers, count))
+        )
+        for i in range(count):
+            _check_cancel(cancel_event)
+            index, future = pending.popleft()
+            ahead = i + workers
+            if ahead < count:
+                pending.append(
+                    (ahead, pool.submit(_read_rgb, frames_dir / f"{ahead:05d}.jpg"))
+                )
+            yield index, future.result()
 
 
 # --------------------------------------------------------------------- #
@@ -504,9 +560,44 @@ def _frame_at(work: Path, index: int) -> np.ndarray:
     return _read_source_rgb(source, int(meta.get("frame_in", 0)) + index)
 
 
+def _frame_cache_key(work: Path, index: int, mode: str) -> tuple[str, str, int, float]:
+    """Identity of a rendered frame: result, frame, and the mask file's stamp.
+
+    The stamp is what makes a stale entry impossible: a correction rewrites
+    ``masks.npz``, so every frame rendered before it is keyed differently and
+    quietly becomes unreachable.
+    """
+    try:
+        stamp = (work / _MASKS_FILE).stat().st_mtime
+    except OSError:
+        stamp = 0.0
+    return (mode, str(work), int(index), stamp)
+
+
+def _frame_cache_get(key: tuple[str, str, int, float]) -> bytes | None:
+    body = _FRAME_CACHE.pop(key, None)
+    if body is not None:
+        _FRAME_CACHE[key] = body  # re-insert: dict order is the LRU order
+    return body
+
+
+def _frame_cache_put(key: tuple[str, str, int, float], body: bytes) -> None:
+    work = key[1]
+    for stale in [k for k in _FRAME_CACHE if k[1] == work and k != key]:
+        del _FRAME_CACHE[stale]
+    _FRAME_CACHE[key] = body
+    while len(_FRAME_CACHE) > _FRAME_CACHE_LIMIT:
+        _FRAME_CACHE.pop(next(iter(_FRAME_CACHE)))
+
+
 def render_frame(work_dir: str, index: int) -> bytes:
     """PNG (RGBA) of the cut-out at *index*, for the panel's brush surface."""
     work = Path(work_dir)
+    key = _frame_cache_key(work, index, "rgba")
+    cached = _frame_cache_get(key)
+    if cached is not None:
+        return cached
+
     mask = _mask_at(work, index)
     if mask is None:
         raise PipelineError("That frame is outside this result.", ERR_BAD_REQUEST)
@@ -520,10 +611,45 @@ def render_frame(work_dir: str, index: int) -> bytes:
     from src.processing.edge_finish import soft_coverage
 
     rgba = _rgba(frame, mask, soft_coverage(mask, feather=_EDGE_FEATHER))
-    ok, buf = cv2.imencode(".png", cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA))
+    # Compression 1 rather than the default 6: this image only ever crosses the
+    # loopback to the panel, so trading a bigger buffer for a three-times-faster
+    # encode is a straight win on scrub latency.
+    ok, buf = cv2.imencode(
+        ".png",
+        cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA),
+        [int(cv2.IMWRITE_PNG_COMPRESSION), 1],
+    )
     if not ok:
         raise PipelineError("could not encode the preview frame.", ERR_INTERNAL)
-    return buf.tobytes()
+    body = buf.tobytes()
+    _frame_cache_put(key, body)
+    return body
+
+
+def render_source_frame(work_dir: str, index: int) -> tuple[bytes, str]:
+    """JPEG of the *untouched* source frame at *index*, plus its media type.
+
+    The brush surface paints on the cut-out, which makes it hard to judge an
+    edge: the user cannot see what the background looked like. This is the other
+    half of the compare toggle in the panel.
+    """
+    work = Path(work_dir)
+    key = _frame_cache_key(work, index, "source")
+    cached = _frame_cache_get(key)
+    if cached is not None:
+        return cached, "image/jpeg"
+
+    frame = _frame_at(work, index)
+    ok, buf = cv2.imencode(
+        ".jpg",
+        cv2.cvtColor(frame, cv2.COLOR_RGB2BGR),
+        [int(cv2.IMWRITE_JPEG_QUALITY), 92],
+    )
+    if not ok:
+        raise PipelineError("could not encode the source frame.", ERR_INTERNAL)
+    body = buf.tobytes()
+    _frame_cache_put(key, body)
+    return body, "image/jpeg"
 
 
 def _resume_seed(
@@ -674,10 +800,10 @@ def _matte(
             _frame_getter,
             {key_idx: masks[key_idx]},
             # The panel's mask is the contract: the matte may soften its edge,
-            # but it must never hollow out its interior. Without that the one
-            # brush direction a matte can undo is "add" — the painted region
-            # came back transparent because the network read it as background.
-            MattingSettings(clamp_solid_interior=True),
+            # but it must never hollow out its interior, and in a flat colour
+            # region it must not leave a ghost of the background either. Both
+            # of those are the anime-specific half of "better matting".
+            MattingSettings(clamp_solid_interior=True, flat_snap=True),
             on_alpha=_on_alpha,
             mask_getter=lambda i: masks.get(i),
         )
@@ -708,8 +834,17 @@ def _rgba(
     frame_rgb: np.ndarray, mask: np.ndarray, alpha: np.ndarray | None = None
 ) -> np.ndarray:
     """Compose RGBA. *alpha* (a learned matte) wins over the segment outline."""
+    from src.processing.edge_finish import decontaminate_edges, finish_edges
+
     if alpha is None:
-        alpha = _alpha_for(frame_rgb, mask)
+        # No matte: derive coverage from the outline and clean the fringe the
+        # ramp exposes, which is the whole edge treatment in one call.
+        frame_rgb, alpha = finish_edges(frame_rgb, mask, feather=_EDGE_FEATHER)
+    else:
+        # The matte's own ramp also has partially covered pixels, and those
+        # carry background colour at nearly full strength. Subtract it so a
+        # hair tip keeps the hair's colour instead of a blend of hair and sky.
+        frame_rgb = decontaminate_edges(frame_rgb, mask, alpha)
     # SAM 2 can hand back a mask below source resolution; the alpha must line up
     # with the frame whatever it is measured against.
     if alpha.shape[:2] != frame_rgb.shape[:2]:
@@ -851,9 +986,7 @@ def _streaming_mov(
     failure: BaseException | None = None
     try:
         assert proc.stdin is not None
-        for i in range(count):
-            _check_cancel(cancel_event)
-            frame = _read_rgb(frames_dir / f"{i:05d}.jpg")
+        for i, frame in _decoded_frames(frames_dir, count, cancel_event):
             if frame.shape[1] != width or frame.shape[0] != height:
                 raise PipelineError(
                     f"frame {i} is {frame.shape[1]}x{frame.shape[0]} but the movie "
@@ -911,9 +1044,7 @@ def _png_sequence(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     last_mask: np.ndarray | None = None
-    for i in range(count):
-        _check_cancel(cancel_event)
-        frame = _read_rgb(frames_dir / f"{i:05d}.jpg")
+    for i, frame in _decoded_frames(frames_dir, count, cancel_event):
         mask = masks.get(i, last_mask)
         if mask is None:
             mask = np.zeros(frame.shape[:2], dtype=bool)

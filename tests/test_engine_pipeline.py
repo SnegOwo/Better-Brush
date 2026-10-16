@@ -7,6 +7,7 @@ streaming export and the ffmpeg-free fallback — everything except the GPU.
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import threading
 from pathlib import Path
@@ -558,6 +559,72 @@ def test_render_frame_returns_a_png_of_that_frame(monkeypatch, synth_video, tmp_
 
     with pytest.raises(pipeline.PipelineError):
         pipeline.render_frame(result.work_dir, result.frame_count + 5)
+
+
+def test_render_frame_is_cached_until_the_masks_change(
+    monkeypatch, synth_video, tmp_path
+):
+    """The brush scrubs back and forth, so a repeat must not re-encode."""
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    result = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+    work = Path(result.work_dir)
+
+    first = pipeline.render_frame(result.work_dir, 1)
+    reads = []
+    real_frame_at = pipeline._frame_at
+
+    def counting_frame_at(work_dir, index):
+        reads.append(index)
+        return real_frame_at(work_dir, index)
+
+    monkeypatch.setattr(pipeline, "_frame_at", counting_frame_at)
+    assert pipeline.render_frame(result.work_dir, 1) == first
+    assert reads == [], "a cached frame must not touch the source again"
+
+    masks = work / pipeline._MASKS_FILE
+    os.utime(masks, (masks.stat().st_atime, masks.stat().st_mtime + 5))
+    pipeline.render_frame(result.work_dir, 1)
+    assert reads == [1], "a rewritten mask set invalidates the cache"
+
+
+def test_render_source_frame_returns_the_untouched_frame(
+    monkeypatch, synth_video, tmp_path
+):
+    """The compare view needs the original, not the cut-out."""
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    result = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+
+    body, media_type = pipeline.render_source_frame(result.work_dir, 1)
+
+    assert media_type == "image/jpeg"
+    assert body[:2] == b"\xff\xd8"
+    decoded = cv2.imdecode(np.frombuffer(body, np.uint8), cv2.IMREAD_UNCHANGED)
+    assert decoded.shape[:2] == (result.height, result.width)
+
+
+def test_decoded_frames_stream_in_order_without_keeping_them(
+    tmp_path, monkeypatch
+):
+    """The export prefetches, but it must still hand frames over in order."""
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    for i in range(6):
+        pipeline._write_jpg(
+            frames / f"{i:05d}.jpg", np.full((8, 8, 3), i * 10, np.uint8)
+        )
+
+    streamed = list(pipeline._decoded_frames(frames, 6, None))
+
+    assert [i for i, _ in streamed] == [0, 1, 2, 3, 4, 5]
+    for i, frame in streamed:
+        assert frame.shape == (8, 8, 3)
+        assert abs(int(frame.mean()) - i * 10) <= 2
 
 
 def test_apply_correction_adds_then_removes():

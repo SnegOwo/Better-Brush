@@ -315,7 +315,8 @@ class EngineHandler(BaseHTTPRequestHandler):
 
         This is what the panel's brush paints on: it returns the cut-out at any
         frame of a finished result so the user can correct the frame they are
-        looking at, not just the key frame.
+        looking at, not just the key frame. ``&original=1`` returns the source
+        frame instead, untouched, for the compare toggle.
         """
         from src.engine import pipeline
 
@@ -334,14 +335,18 @@ class EngineHandler(BaseHTTPRequestHandler):
                 {"error": {"kind": "bad_request", "message": "'index' must be an integer"}},
             )
             return
+        original = query.get("original") in ("1", "true", "yes")
         try:
-            body = pipeline.render_frame(work_dir, index)
+            if original:
+                body, media_type = pipeline.render_source_frame(work_dir, index)
+            else:
+                body, media_type = pipeline.render_frame(work_dir, index), "image/png"
         except Exception as exc:  # noqa: BLE001 - reported to the panel as JSON
             kind = getattr(exc, "kind", "internal")
             status = 400 if kind == "bad_request" else 404
             self._send_json(status, {"error": {"kind": kind, "message": str(exc)}})
             return
-        self._send_bytes(200, body, "image/png")
+        self._send_bytes(200, body, media_type)
 
     def _health(self, full: bool) -> dict[str, Any]:
         payload: dict[str, Any] = {

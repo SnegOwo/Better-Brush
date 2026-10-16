@@ -29,8 +29,10 @@ from src.processing.matting import (
     MattingSettings,
     _clamp_alpha_to_mask,
     _fit_resolution,
+    _flat_weight,
     _grow_alpha,
     _install_topk_guard,
+    _snap_flat_regions,
 )
 from src.processing.removal import RemovalSettings
 from src.processing.removal import _fit_resolution as _fit_resolution_16
@@ -178,6 +180,75 @@ def test_clamp_solid_interior_is_opt_in() -> None:
     """The app's loose-mask workflow is untouched unless it asks for it."""
     assert MattingSettings().clamp_solid_interior is False
     assert MattingSettings(clamp_solid_interior=True).clamp_solid_interior is True
+
+
+# ── Flat-region snapping for anime ───────────────────────────────────────
+def _flat_frame(size: int = 128) -> np.ndarray:
+    """A flat sky with a hard-edged subject block in the middle."""
+    frame = np.zeros((size, size, 3), np.uint8)
+    frame[:, :] = (90, 140, 210)  # flat sky
+    frame[40:88, 40:88] = (200, 60, 60)  # flat cel, hard edge
+    return frame
+
+
+def test_flat_weight_is_high_on_flats_and_zero_on_a_line() -> None:
+    frame = _flat_frame()
+    weight = _flat_weight(frame)
+
+    assert weight[10, 10] > 0.9, "the sky must read as flat"
+    assert weight[64, 64] > 0.9, "the middle of the cel must read as flat"
+    assert weight[64, 40] < 0.2, "the drawn edge must read as detail"
+
+
+def test_snap_flat_regions_trusts_the_mask_inside_flat_areas() -> None:
+    """A 0.5 ghost in the middle of a cel becomes opaque again."""
+    frame = _flat_frame(128)
+    mask = np.zeros((128, 128), bool)
+    mask[38:90, 38:90] = True  # the animator's mask covers the cel
+    alpha = np.full((128, 128), 0.5, np.float32)
+
+    snapped = _snap_flat_regions(alpha, frame, mask)
+
+    assert snapped[64, 64] > 0.95, "a flat in-mask region must be opaque"
+    assert snapped[55, 75] > 0.95, "and so must the rest of the cel"
+    assert snapped[10, 10] == 0.5, "outside the mask the network keeps its answer"
+
+
+def test_snap_flat_regions_leaves_a_real_edge_to_the_matte() -> None:
+    """Detail is the matte's job, and hair lives on detail."""
+    frame = _flat_frame(128)
+    mask = np.zeros((128, 128), bool)
+    mask[38:90, 38:90] = True
+    alpha = np.full((128, 128), 0.5, np.float32)
+
+    snapped = _snap_flat_regions(alpha, frame, mask)
+
+    assert snapped[64, 40] == 0.5, "the drawn line stays the network's decision"
+
+
+def test_snap_flat_regions_cannot_add_coverage_outside_the_mask() -> None:
+    """The mask is the contract: the snap may not paint background in."""
+    frame = _flat_frame(128)
+    mask = np.zeros((128, 128), bool)
+    mask[38:90, 38:90] = True
+    alpha = np.zeros((128, 128), np.float32)
+
+    snapped = _snap_flat_regions(alpha, frame, mask)
+
+    assert snapped[10, 10] == 0.0
+    assert snapped[64, 64] > 0.95
+
+
+def test_snap_flat_regions_is_a_no_op_without_a_mask() -> None:
+    frame = _flat_frame(64)
+    alpha = np.full((64, 64), 0.25, np.float32)
+
+    assert np.array_equal(_snap_flat_regions(alpha, frame, None), alpha)
+
+
+def test_flat_snap_is_opt_in() -> None:
+    assert MattingSettings().flat_snap is False
+    assert MattingSettings(flat_snap=True).flat_snap is True
 
 
 # ── SAM 2 mask ranking for the silhouette refinement ─────────────────────
