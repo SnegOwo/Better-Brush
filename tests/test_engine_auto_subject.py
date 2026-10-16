@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 
 from src.engine import auto_subject as A
@@ -214,3 +216,86 @@ def test_find_subject_handles_tiny_frame():
     selection = A.find_subject(manager, np.zeros((8, 8, 3), dtype=np.uint8))
     assert not selection.found
     assert not selection.multiple
+
+
+# ── Silhouette refinement ────────────────────────────────────────────────
+# A point prompt only segments the part it lands on, which is why the hair of
+# a found character used to come back missing. The refinement re-asks with a
+# box and may only ever *grow* the subject.
+class _RefineManager:
+    """One canned candidate from ``predict_frame_from_mask``."""
+
+    def __init__(
+        self,
+        candidate: np.ndarray | None = None,
+        score: float = 0.9,
+        error: Exception | None = None,
+    ) -> None:
+        self.candidate = candidate
+        self.score = score
+        self.error = error
+        self.kwargs: dict | None = None
+
+    def predict_frame_from_mask(self, frame, mask, **kwargs):
+        self.kwargs = kwargs
+        if self.error is not None:
+            raise self.error
+        if self.candidate is None:
+            return []
+        return [SimpleNamespace(mask=self.candidate, score=self.score)]
+
+
+def test_refine_mask_grows_a_body_into_the_whole_character():
+    frame = np.zeros((120, 120, 3), dtype=np.uint8)
+    body = _blob(120, 120, 60, 60, 20)
+    manager = _RefineManager(_blob(120, 120, 60, 60, 30))
+    grown = A.refine_mask(manager, frame, body)
+    assert grown is not None
+    assert grown.sum() > body.sum()
+    assert manager.kwargs is not None
+    assert manager.kwargs["grow"] is True
+    assert manager.kwargs["pad_ratio"] == A._REFINE_PAD_RATIO
+
+
+def test_refine_mask_refuses_a_candidate_that_wanders_off():
+    frame = np.zeros((120, 120, 3), dtype=np.uint8)
+    body = _blob(120, 120, 20, 20, 12)
+    manager = _RefineManager(_blob(120, 120, 90, 90, 20))
+    assert A.refine_mask(manager, frame, body) is None
+
+
+def test_refine_mask_refuses_a_candidate_that_lost_part_of_the_subject():
+    frame = np.zeros((120, 120, 3), dtype=np.uint8)
+    body = _blob(120, 120, 60, 60, 20)
+    manager = _RefineManager(_blob(120, 120, 60, 60, 15))
+    assert A.refine_mask(manager, frame, body) is None
+
+
+def test_refine_mask_refuses_an_implausible_candidate():
+    frame = np.zeros((120, 120, 3), dtype=np.uint8)
+    body = _blob(120, 120, 60, 60, 20)
+    manager = _RefineManager(np.ones((120, 120), dtype=bool))  # the whole set
+    assert A.refine_mask(manager, frame, body) is None
+
+
+def test_refine_mask_refuses_an_unchanged_candidate():
+    frame = np.zeros((120, 120, 3), dtype=np.uint8)
+    body = _blob(120, 120, 60, 60, 20)
+    assert A.refine_mask(_RefineManager(body.copy()), frame, body) is None
+
+
+def test_refine_mask_is_optional_and_never_raises():
+    frame = np.zeros((120, 120, 3), dtype=np.uint8)
+    body = _blob(120, 120, 60, 60, 20)
+
+    class _Bare:
+        """A manager that predates the helper entirely."""
+
+    assert A.refine_mask(_Bare(), frame, body) is None
+    assert (
+        A.refine_mask(_RefineManager(error=TypeError("old signature")), frame, body)
+        is None
+    )
+    assert A.refine_mask(_RefineManager(error=RuntimeError("boom")), frame, body) is None
+    assert A.refine_mask(_RefineManager(), frame, body) is None
+    assert A.refine_mask(_RefineManager(), frame, np.zeros((120, 120), bool)) is None

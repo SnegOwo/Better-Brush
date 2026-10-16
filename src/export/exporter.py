@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from src.core import licensing
+from src.utils.proc import no_window
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +226,11 @@ class Exporter:
             ]
             logger.info("Running FFmpeg: %s", " ".join(cmd))
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                **no_window(),
             )
             try:
                 stdout, stderr = proc.communicate(timeout=3600)
@@ -282,7 +287,11 @@ class Exporter:
                 str(tmp),
             ]
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                **no_window(),
             )
             try:
                 stdout, stderr = proc.communicate(timeout=3600)
@@ -414,6 +423,7 @@ class Exporter:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                **no_window(),
             )
             return "prores_ks" in result.stdout or "prores" in result.stdout
         except Exception:  # noqa: BLE001

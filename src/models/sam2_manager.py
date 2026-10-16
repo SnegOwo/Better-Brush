@@ -83,6 +83,11 @@ def is_efficienttam(size: ModelSize) -> bool:
 # the model is small enough that the compile win is marginal.
 _ETAM_DISABLE_COMPILE = ["++model.compile_image_encoder=False"]
 
+#: Share of a drawn mask a candidate must cover before ``grow=True`` will keep
+#: it. Below this the candidate has wandered onto a different object, and the
+#: caller is better off with the mask it already had.
+_GROW_MIN_COVERAGE = 0.80
+
 
 # Hydra config names *inside the installed sam2 package* (sam2/configs/).
 # build_sam2() resolves them via hydra compose() with the search path that
@@ -439,6 +444,8 @@ class SAM2Manager:
         mask: np.ndarray,
         n_points: int = 4,
         extra_points: list[PointPrompt] | None = None,
+        pad_ratio: float = 0.04,
+        grow: bool = False,
     ) -> list[MaskResult]:
         """Refine a hand-drawn (brush) mask on a single frame with SAM 2.
 
@@ -456,6 +463,13 @@ class SAM2Manager:
                 added to the prompt (with their include/exclude labels) and
                 the box is widened to cover them, so a stale mask can never
                 silently shrink the subject down to what it used to be.
+            pad_ratio: Box padding as a share of the long side. The default
+                hugs the mask; a larger pad is how a caller asks for room to
+                *find* a silhouette the mask only partly covers.
+            grow: Rank candidates by "largest mask that still contains what I
+                drew" instead of by IoU. IoU always prefers the candidate that
+                matches the input, which is the wrong answer when the input is
+                the incomplete one.
 
         Returns:
             A list with a single :class:`MaskResult` (the best candidate).
@@ -477,7 +491,7 @@ class SAM2Manager:
             ey1 = min([ey1] + [p.y for p in extras])
             ex2 = max([ex2] + [p.x for p in extras])
             ey2 = max([ey2] + [p.y for p in extras])
-        pad = max(2, int(0.04 * max(w, h)))
+        pad = max(2, int(pad_ratio * max(w, h)))
         x1, y1 = int(max(0, ex1 - pad)), int(max(0, ey1 - pad))
         x2, y2 = int(min(w - 1, ex2 + pad)), int(min(h - 1, ey2 + pad))
         box = np.array([x1, y1, x2, y2], dtype=np.float32)
@@ -505,19 +519,8 @@ class SAM2Manager:
             )
 
         # Prefer the candidate that best matches the user's drawn mask
-        best_idx = 0
-        best_iou = -1.0
-        for i in range(masks_arr.shape[0]):
-            cand = masks_arr[i].astype(bool)
-            intersection = np.logical_and(cand, mask).sum()
-            union = np.logical_or(cand, mask).sum()
-            if union == 0:
-                continue
-            iou = intersection / union
-            if iou > best_iou:
-                best_iou = iou
-                best_idx = i
-        if best_iou < 0.0:  # no overlap at all -> fall back to highest score
+        best_idx = self._rank_candidates(masks_arr, mask, grow)
+        if best_idx < 0:  # no overlap at all -> fall back to highest score
             best_idx = int(np.argmax(scores))
 
         return [
@@ -526,6 +529,39 @@ class SAM2Manager:
                 score=float(scores[best_idx]),
             )
         ]
+
+    @staticmethod
+    def _rank_candidates(
+        masks_arr: np.ndarray, mask: np.ndarray, grow: bool
+    ) -> int:
+        """Index of the candidate to keep, or -1 when nothing fits.
+
+        ``grow=False`` picks the candidate that overlaps ``mask`` most (the
+        drawn outline is the answer, SAM 2 just tidies it). ``grow=True`` picks
+        the *largest* candidate that still covers at least
+        ``_GROW_MIN_COVERAGE`` of ``mask``: when the mask is the incomplete
+        one — a body without its hair — the honest answer is the bigger object
+        that contains it, not the one that merely repeats the input.
+        """
+        drawn_area = float(mask.sum())
+        best_idx = -1
+        best_metric = -1.0
+        for i in range(masks_arr.shape[0]):
+            cand = masks_arr[i].astype(bool)
+            if grow:
+                overlap = float(np.logical_and(cand, mask).sum())
+                if drawn_area <= 0 or overlap / drawn_area < _GROW_MIN_COVERAGE:
+                    continue
+                metric = float(cand.sum())
+            else:
+                union = float(np.logical_or(cand, mask).sum())
+                if union <= 0:
+                    continue
+                metric = float(np.logical_and(cand, mask).sum()) / union
+            if metric > best_metric:
+                best_metric = metric
+                best_idx = i
+        return best_idx if best_metric >= 0.0 else -1
 
     @staticmethod
     def _sample_mask_points(

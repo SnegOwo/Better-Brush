@@ -1131,9 +1131,11 @@
       : state.selection
         ? state.selection.file
         : "";
+    /* pythonw, not python: the app is a window, so it needs no console — and a
+     * console child launched from AE is what took AE down with it on close. */
     return callHost(
       "bbOpenFullApp(" +
-        csString(state.config.pythonPath) + "," +
+        csString(state.config.pythonwPath || state.config.pythonPath) + "," +
         csString(state.config.projectRoot) + "," +
         csString(file) +
       ")"

@@ -56,6 +56,10 @@ class MattingSettings:
     clamp_to_mask: bool = True
     #: Radius of the dilated mask used as the clamp boundary.
     mask_clamp_pad: int = 6
+    #: Keep the *interior* of the segmentation mask opaque whatever the network
+    #: says there. The matte refines the edge; it must not hollow out what the
+    #: animator already marked as the subject (see ``_clamp_alpha_to_mask``).
+    clamp_solid_interior: bool = False
 
     def __post_init__(self) -> None:
         model = str(self.model or "matanyone2").strip().lower()
@@ -406,7 +410,10 @@ class MattingRunner:
         # beyond that is background, not matte.
         if settings.clamp_to_mask:
             alpha = _clamp_alpha_to_mask(
-                alpha, settings.mask_clamp_pad, seg_mask
+                alpha,
+                settings.mask_clamp_pad,
+                seg_mask,
+                solid_interior=settings.clamp_solid_interior,
             )
         return np.clip(alpha, 0.0, 1.0).astype(np.float32)
 
@@ -420,7 +427,10 @@ def _fit_resolution(height: int, width: int, resolution: int) -> tuple[int, int]
 
 
 def _clamp_alpha_to_mask(
-    alpha: np.ndarray, pad: int, seg_mask: np.ndarray | None = None
+    alpha: np.ndarray,
+    pad: int,
+    seg_mask: np.ndarray | None = None,
+    solid_interior: bool = False,
 ) -> np.ndarray:
     """Keep *alpha* inside the segmentation mask, plus a small margin.
 
@@ -436,13 +446,21 @@ def _clamp_alpha_to_mask(
         seg_mask: The binary segmentation mask for this frame, when the
             caller has one. Without it the matte's own 0.5 threshold is used,
             which cannot distinguish detail from background.
+        solid_interior: Keep everything a little inside the mask opaque. With
+            this off the clamp is one-sided: it can only *remove* coverage, so
+            a matte that under-reads a region — hair the network is unsure of,
+            a patch the animator has just painted in — comes back transparent
+            and the work looks like it did nothing. With it on, the mask is
+            authoritative in its interior and the network owns only the edge.
 
     Returns:
         The clamped float matte.
     """
+    exact: np.ndarray | None = None
     if seg_mask is not None and seg_mask.any():
         # The animator's own mask: an exact boundary, not the network's guess.
-        keep = seg_mask.astype(bool)
+        exact = seg_mask.astype(bool)
+        keep = exact
     else:
         soft = cv2.GaussianBlur(alpha, (0, 0), 1.0)
         keep = soft > 0.5
@@ -455,7 +473,32 @@ def _clamp_alpha_to_mask(
         keep = cv2.dilate(keep.astype(np.uint8), kernel).astype(bool)
     # Feather the clamp edge so the matte does not get a hard cut.
     weight = cv2.GaussianBlur(keep.astype(np.float32), (0, 0), 1.5)
-    return np.clip(alpha * weight, 0.0, 1.0)
+    clamped = np.clip(alpha * weight, 0.0, 1.0)
+    if solid_interior and exact is not None:
+        clamped = np.maximum(clamped, _solid_core(exact))
+    return np.clip(clamped, 0.0, 1.0)
+
+
+#: Share of the short side eroded off a mask to find its "definitely the
+#: subject" interior. Thin structures (hair strands, fingertips) fall outside
+#: the core and are left to the network, which is exactly where a soft matte
+#: earns its keep.
+_SOLID_CORE_RATIO = 0.008
+
+
+def _solid_core(mask: np.ndarray) -> np.ndarray:
+    """A feathered float weight: 1 deep inside *mask*, 0 outside it."""
+    height, width = mask.shape[:2]
+    radius = max(2, round(min(height, width) * _SOLID_CORE_RATIO))
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (radius * 2 + 1, radius * 2 + 1)
+    )
+    core = cv2.erode(mask.astype(np.uint8), kernel).astype(bool)
+    if not core.any():
+        return np.zeros(mask.shape[:2], dtype=np.float32)
+    return cv2.GaussianBlur(core.astype(np.float32), (0, 0), 1.0)
+
+
 def _grow_alpha(alpha: np.ndarray, grow: int) -> np.ndarray:
     """Grow (>0) or shrink (<0) a soft matte, keeping its edge gradients."""
     if grow == 0:

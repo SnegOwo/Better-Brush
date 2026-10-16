@@ -58,6 +58,7 @@ from datetime import UTC
 from src.core import constants, licensing
 from src.core.project import ProjectManager
 from src.export.exporter import _resolve_ffmpeg
+from src.utils.proc import no_window
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,11 @@ class RecodeWorker(threading.Thread):
         cmd.append(str(self._dst))
         try:
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                **no_window(),
             )
             _stdout, stderr = proc.communicate(timeout=7200)
         except Exception as exc:  # noqa: BLE001

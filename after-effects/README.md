@@ -73,8 +73,10 @@ frame that is actually wrong instead of a single key frame:
 
 **Clear strokes** wipes the overlay. Corrections are repeatable — paint, apply,
 scrub elsewhere, paint again — and each pass builds on the last. The frame you
-paint on is treated as ground truth, so even a patch SAM 2 does not believe
-belongs to the subject survives there. Moving the Frame slider clears the current
+paint on is treated as ground truth: **Add** makes the pixels you cover part of
+the subject for real (the soft matte may still soften that region's edge, but it
+can never hollow it out again), and even a patch SAM 2 does not believe belongs
+to the subject survives there. Moving the Frame slider clears the current
 strokes, because strokes belong to the frame they were painted on.
 
 ### When it hands off to the full app
@@ -86,7 +88,8 @@ strokes, because strokes belong to the frame they were painted on.
 | Layer is a pre-comp, time-remapped, or has no file | The panel says why and points you at the full app |
 
 **Open in app** always opens Better Brush **on the clip you selected**, ready to
-work on, rather than on the welcome screen.
+work on, rather than on the welcome screen. It is launched detached and without
+a console, so closing the app afterwards cannot disturb After Effects.
 
 That is deliberate: the button is for the common case, and the full app is one
 click away for everything else.
@@ -111,6 +114,12 @@ After Effects
   It also attaches to a job that is already running, so reopening the panel
   never hides progress.
 - Cancelling is supported (`Cancel` while working).
+- Before tracking, the found character is **re-prompted once with a box around
+  it**. A point prompt only segments the part it happens to land on, and hair is
+  what it most often leaves behind; asking for the largest object inside a
+  padded box is what recovers the rest of the silhouette. The box may only ever
+  *grow* the subject — a candidate that wandered off or came back smaller is
+  discarded and the original mask is kept.
 - After tracking, **enclosed gaps are closed** before anything else runs. SAM 2
   reads dark hair, finger webbing and the space inside a curled hand as
   background, which composites as see-through patches; filling them is what
@@ -180,6 +189,9 @@ that file has the full trace.
 | A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. Automatic matting adds another model pass — turn it off for speed. |
 | Matting switch is greyed out | The MatAnyone 2 weights aren't in `checkpoints\matanyone2\`. Run the app's model setup; until then runs fall back to the outline. |
 | "Apply correction" does nothing | Paint at least one stroke first; a correction with no strokes is ignored. Also update the panel (`install.ps1`) if it's an older build. |
+| The **Add** brush had no visible effect | Update both (`install.ps1`). The soft matte used to be allowed to hollow out a region the mask covered, so painting hair *in* came back transparent. Paint the stroke again after updating. |
+| A `cmd` window flashes as a run finishes | Update both (`install.ps1`). The export's ffmpeg child used to open a console of its own on the way out. |
+| After Effects crashes after closing the full app | Update both (`install.ps1`). The app is now launched console-free (`pythonw`) and detached, and its `.bbproj` registration only tells the shell when the association actually changed instead of broadcasting to every window on the desktop. |
 | Holes in hair or between fingers | The panel closes enclosed gaps automatically; update the panel (`install.ps1`) if you still see them. If a gap is genuinely open to the background, paint it in with the brush. |
 | The brush shows the mask, not the soft matte | Expected: the brush surface is the tracked mask, which is what you are editing. The layer itself still uses the matted alpha. |
 | Nothing happens when a fine-tuned model is picked | The sidecar in `checkpoints\custom\` must name a config the engine ships (`sam2.1_hiera_b+.yaml` and friends). |

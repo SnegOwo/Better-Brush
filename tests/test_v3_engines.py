@@ -23,9 +23,11 @@ from src.core.project import matte_from_b64, matte_to_b64
 from src.export.exporter import Exporter
 from src.hardware.profiler import ModelSize, SAM2Profiler
 from src.models import checkpoint_manager as ckpt_mod
+from src.models.sam2_manager import SAM2Manager
 from src.processing.frame_buffer import CleanFrameStore
 from src.processing.matting import (
     MattingSettings,
+    _clamp_alpha_to_mask,
     _fit_resolution,
     _grow_alpha,
     _install_topk_guard,
@@ -138,6 +140,71 @@ def test_grow_alpha_grows_and_shrinks_softly() -> None:
     assert shrunk.sum() < alpha.sum()
     assert grown.max() <= 1.0 and grown.min() >= 0.0
     assert np.array_equal(_grow_alpha(alpha, 0), alpha)
+
+
+def test_clamp_alpha_is_one_sided_by_default() -> None:
+    """The network can only ever *lose* coverage here: that is what made a
+    brush "add" look like it did nothing."""
+    alpha = np.zeros((200, 200), np.float32)  # network says "background"
+    mask = np.zeros((200, 200), bool)
+    mask[40:160, 40:160] = True  # ...but the animator selected this
+
+    clamped = _clamp_alpha_to_mask(alpha, 6, mask)
+    assert clamped.max() == 0.0
+
+
+def test_clamp_alpha_solid_interior_keeps_the_subject_opaque() -> None:
+    alpha = np.zeros((200, 200), np.float32)
+    mask = np.zeros((200, 200), bool)
+    mask[40:160, 40:160] = True
+
+    solid = _clamp_alpha_to_mask(alpha, 6, mask, solid_interior=True)
+    assert solid[100, 100] > 0.9  # interior is the animator's, not the network's
+    assert solid[0, 0] == 0.0  # outside the mask is still background
+    assert solid[41, 100] < 0.5  # the boundary band is still the matte's job
+
+
+def test_clamp_alpha_solid_interior_needs_a_segmentation_mask() -> None:
+    """Without ``seg_mask`` there is nothing authoritative to trust."""
+    alpha = np.zeros((64, 64), np.float32)
+    alpha[20:44, 20:44] = 1.0
+
+    out = _clamp_alpha_to_mask(alpha, 6, None, solid_interior=True)
+    assert out[32, 32] == 1.0
+    assert out[5, 5] == 0.0
+
+
+def test_clamp_solid_interior_is_opt_in() -> None:
+    """The app's loose-mask workflow is untouched unless it asks for it."""
+    assert MattingSettings().clamp_solid_interior is False
+    assert MattingSettings(clamp_solid_interior=True).clamp_solid_interior is True
+
+
+# ── SAM 2 mask ranking for the silhouette refinement ─────────────────────
+def test_rank_candidates_grow_prefers_the_larger_containing_mask() -> None:
+    drawn = np.zeros((50, 50), dtype=bool)
+    drawn[20:30, 20:30] = True  # a body without its hair
+    same = drawn.copy()
+    bigger = np.zeros((50, 50), dtype=bool)
+    bigger[10:40, 10:40] = True  # the whole character
+    unrelated = np.zeros((50, 50), dtype=bool)
+    unrelated[0:5, 0:5] = True
+    masks = np.stack([same, bigger, unrelated])
+
+    assert SAM2Manager._rank_candidates(masks, drawn, grow=True) == 1
+    # Without grow the drawn outline is the answer, so the identical one wins.
+    assert SAM2Manager._rank_candidates(masks, drawn, grow=False) == 0
+
+
+def test_rank_candidates_grow_refuses_a_mask_that_does_not_cover_the_drawn_one() -> None:
+    drawn = np.zeros((50, 50), dtype=bool)
+    drawn[20:30, 20:30] = True
+    unrelated = np.zeros((50, 50), dtype=bool)
+    unrelated[0:5, 0:5] = True
+
+    assert SAM2Manager._rank_candidates(np.stack([unrelated]), drawn, grow=True) == -1
+    # The IoU path keeps its old "nothing overlaps" behaviour: first candidate.
+    assert SAM2Manager._rank_candidates(np.stack([unrelated]), drawn, grow=False) == 0
 
 
 def test_topk_guard_clamps_to_available_entries() -> None:

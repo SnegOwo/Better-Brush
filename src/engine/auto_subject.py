@@ -39,6 +39,17 @@ _PART_OF_SUBJECT = 0.85
 #: character, however plausible its area looks.
 _BACKGROUND_EDGE = 0.60
 
+#: Padding used when re-prompting SAM 2 with a box around a found subject, as a
+#: share of the frame's long side. Wider than the brush default on purpose: the
+#: box has to leave room for the silhouette the first pass missed (hair).
+_REFINE_PAD_RATIO = 0.06
+#: The refined mask must still cover this share of the mask we already have,
+#: otherwise SAM 2 followed the box onto a different object.
+_REFINE_COVERAGE = 0.80
+#: ...and must not become smaller than this share of it either. Refinement is
+#: allowed to grow the subject, never to throw away part of it.
+_REFINE_MIN_KEEP = 0.90
+
 # Weighting of the six character-likeness signals. They sum to 1.0 so the
 # result reads as a confidence in [0, 1].
 _W_SAM = 0.30
@@ -410,3 +421,84 @@ def find_subject(
         len(anchored),
     )
     return selection
+
+
+# --------------------------------------------------------------------- #
+# Silhouette refinement
+# --------------------------------------------------------------------- #
+def refine_mask(
+    manager,
+    frame_rgb: np.ndarray,
+    mask: np.ndarray,
+    *,
+    face_center: tuple[float, float] | None = None,
+) -> np.ndarray | None:
+    """Grow a found mask to the character's real silhouette, or give up.
+
+    A point prompt segments the part it happens to land on, and a box prompt
+    clipped to that part cannot do better. The character's hair is the usual
+    casualty: it is a big, obvious region that nothing ever asked SAM 2 for, so
+    it comes back missing and the animator has to paint it in by hand.
+
+    Asking again with the box padded out around what we found, and keeping the
+    *largest* object inside that box which still covers the mask, is what
+    recovers the rest of the character.
+
+    This is best-effort by design: any doubt — a manager without the helper, a
+    failed call, an implausible result, a mask that shrank — returns ``None``
+    and the caller keeps the mask it already had.
+    """
+    fn = getattr(manager, "predict_frame_from_mask", None)
+    if not callable(fn):
+        return None
+    mask = np.asarray(mask).astype(bool)
+    if not mask.any():
+        return None
+
+    extra = None
+    if face_center is not None:
+        try:
+            from src.models.sam2_manager import PointPrompt
+
+            height, width = frame_rgb.shape[:2]
+            fx = int(min(max(face_center[0], 0), width - 1))
+            fy = int(min(max(face_center[1], 0), height - 1))
+            extra = [PointPrompt(x=fx, y=fy, label=1)]
+        except Exception:  # noqa: BLE001 - the anchor is optional
+            extra = None
+
+    try:
+        results = fn(
+            frame_rgb,
+            mask,
+            n_points=6,
+            extra_points=extra,
+            pad_ratio=_REFINE_PAD_RATIO,
+            grow=True,
+        )
+    except TypeError:
+        # A manager that predates the grow/pad_ratio keywords: leave the mask
+        # alone rather than blow up the whole job.
+        return None
+    except Exception as exc:  # noqa: BLE001 - refinement is best-effort
+        logger.debug("silhouette refinement skipped: %s", exc)
+        return None
+    if not results:
+        return None
+
+    candidate = np.asarray(results[0].mask).astype(bool)
+    whole = make_candidate(candidate, float(results[0].score), face_center)
+    if whole is None or not _plausible_whole(whole):
+        return None
+    if contained_fraction(mask, candidate) < _REFINE_COVERAGE:
+        return None
+    if float(candidate.sum()) < float(mask.sum()) * _REFINE_MIN_KEEP:
+        return None
+    if np.array_equal(candidate, mask):
+        return None
+    logger.info(
+        "auto-subject: refined silhouette %.3f -> %.3f of the frame",
+        float(mask.sum()) / float(mask.size),
+        float(candidate.sum()) / float(candidate.size),
+    )
+    return candidate

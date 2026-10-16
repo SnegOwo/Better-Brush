@@ -43,6 +43,7 @@ from src.engine.schemas import (
     JobResult,
     SubjectInfo,
 )
+from src.utils.proc import no_window
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +254,12 @@ def _analyze(
     on_progress,
     cancel_event: threading.Event | None,
 ) -> tuple[auto_subject.SubjectSelection, int]:
-    """Probe a few frames and pick the strongest single-character hit."""
+    """Probe a few frames and pick the strongest single-character hit.
+
+    The winner is then re-prompted once with a box around it: a point prompt
+    only segments the part it happened to land on, and the character's hair is
+    what it most often leaves behind.
+    """
     indices = _sample_indices(count)
     best: auto_subject.SubjectSelection | None = None
     best_idx = indices[len(indices) // 2]
@@ -274,6 +280,13 @@ def _analyze(
         if selection.multiple:
             saw_multiple = True
         if selection.found and (best is None or selection.confidence > best.confidence):
+            refined = auto_subject.refine_mask(
+                manager, frame, selection.mask, face_center=face
+            )
+            if refined is not None:
+                selection.mask = refined
+                selection.box = auto_subject.bbox_of(refined)
+                selection.reasons.append("grown to the full silhouette")
             best = selection
             best_idx = idx
 
@@ -660,7 +673,11 @@ def _matte(
             list(range(count)),
             _frame_getter,
             {key_idx: masks[key_idx]},
-            MattingSettings(),
+            # The panel's mask is the contract: the matte may soften its edge,
+            # but it must never hollow out its interior. Without that the one
+            # brush direction a matte can undo is "add" — the painted region
+            # came back transparent because the network read it as background.
+            MattingSettings(clamp_solid_interior=True),
             on_alpha=_on_alpha,
             mask_getter=lambda i: masks.get(i),
         )
@@ -828,6 +845,7 @@ def _streaming_mov(
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
+        **no_window(),
     )
     last_mask: np.ndarray | None = None
     failure: BaseException | None = None

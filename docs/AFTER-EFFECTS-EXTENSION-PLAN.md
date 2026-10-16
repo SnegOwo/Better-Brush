@@ -797,3 +797,78 @@ the frame it was painted on, hole filling that closes an enclosed gap and leaves
 the outside alone, and `render_frame` returning a true-colour PNG of the right
 size. Panel: the same QtWebEngine probe at 250 px and 300 px, extended to cover
 the frame scrubber and the `/frame` fetch.
+
+## 21 · Round 6 — the add brush, the flashing console, and the crash on close
+
+Three reports from the first real session with Round 5: the delete brush works
+but the add brush does not; a `cmd` window appears just before the rotoscope
+finishes; and opening the full app, then closing it, takes After Effects down.
+
+### 21.1 Why "add" looked like it did nothing
+
+The clamp that keeps the learned matte inside the segmentation mask was
+**one-sided**: `alpha = alpha × mask`. It can only ever *remove* coverage.
+
+That is exactly right for the delete brush — the mask says background, so the
+matte is forced to zero and the region disappears whatever the network thinks.
+It is exactly wrong for the add brush. Painting hair in puts it *inside* the
+mask, and the region is then handed back to MatAnyone 2, which reads it as
+background and returns roughly zero there. `0 × 1 = 0`: the painted hair
+composited as fully transparent and the correction looked like a no-op.
+
+`_clamp_alpha_to_mask` now takes `solid_interior`. The mask owns its interior —
+everything more than a short erosion inside it is opaque — and the network owns
+only the boundary band, which is the part a soft matte is actually for. Thin
+structures (hair strands, fingertips) fall outside the eroded core, so nothing
+that needs real softness loses it.
+
+The engine turns this on (`MattingSettings(clamp_solid_interior=True)`); the app
+keeps the old one-sided behaviour, so its loose-mask workflow is untouched.
+
+### 21.2 Automatic quality: ask for the hair
+
+A point prompt segments the part it happens to land on, and the character's hair
+is the usual casualty — it is a large, obvious region that nothing ever asked
+SAM 2 for. `predict_frame_from_mask` grew `pad_ratio` and `grow`, and
+`auto_subject.refine_mask` uses them on the winning frame: pad the box out
+around what was found and keep the **largest** object inside it that still
+covers the mask (IoU ranking would just hand back the incomplete input again).
+
+Refinement may only grow the subject. The candidate is rejected if it is
+implausible as a whole character, if it has wandered off the mask, or if it came
+back smaller. Every failure mode returns `None` and the mask we already had is
+kept, so this can never make a job worse than it was.
+
+### 21.3 The console window mid-rotoscope
+
+The engine runs under `pythonw.exe`, so it has no console to hand down — and on
+Windows a console-subsystem child then allocates one of its own. The child in
+question is ffmpeg, spawned for the export that runs right as the rotoscope
+finishes. `src/utils/proc.py` exposes `no_window()` (`CREATE_NO_WINDOW`) and
+every `Popen`/`run` in the engine, the exporter and the library recode path now
+spreads it in.
+
+### 21.4 The crash after closing the app
+
+`bbOpenFullApp` launched `python.exe` — a console binary — from inside After
+Effects' own process tree. It now launches `pythonw.exe`, detached, exactly like
+the engine: no console at all, so there is nothing to close underneath AE.
+
+The second half is `register_file_assoc`. It re-registered on every launch and
+called `SHChangeNotify(SHCNE_ASSOCCHANGED)` each time, and that is a broadcast
+to **every top-level window on the desktop** — After Effects included. Opening
+Better Brush beside AE therefore poked AE's shell integration on every launch.
+Registration now compares the values first and only writes (and only notifies)
+when the association actually changed, which after the first run it never does.
+
+### 21.5 Verified
+
+- Engine: `_clamp_alpha_to_mask` is proven one-sided by default and
+  interior-solid when asked, with the boundary band still the matte's;
+  `_rank_candidates` proven to grow to the containing mask when asked and to keep
+  its old IoU answer when not; `refine_mask` proven to grow, and to refuse a
+  candidate that wandered off, shrank, covers the whole frame, or came back
+  unchanged, plus every "no helper / old signature / raise" fallback.
+- Panel: the QtWebEngine probe at 250 px still has no overflow, still paints and
+  corrects frame 42, and now reports `bbOpenFullApp("…/pythonw.exe", …)`.
+

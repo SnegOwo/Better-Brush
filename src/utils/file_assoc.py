@@ -3,8 +3,9 @@
 Registers everything under ``HKCU\\Software\\Classes`` so Windows Explorer
 shows the product icon on ``.bbproj`` project files and a double-click opens
 them in Better Brush. Per-user keys apply immediately and never need a UAC
-prompt; each launch re-registers so the icon path stays valid if the app is
-moved to a new folder.
+prompt; each launch re-checks so the icon path stays valid if the app is moved
+to a new folder — but only a launch that actually *changed* something tells the
+shell about it (see :func:`register`).
 """
 
 from __future__ import annotations
@@ -45,10 +46,25 @@ def register() -> bool:
         return False
     try:
         root = winreg.HKEY_CURRENT_USER
+        changed = False
+
+        def _get(subkey: str, name: str) -> str | None:
+            try:
+                with winreg.OpenKey(root, subkey, 0, winreg.KEY_READ) as key:
+                    return winreg.QueryValueEx(key, name)[0]
+            except OSError:
+                return None
 
         def _set(subkey: str, name: str, value: str) -> None:
+            nonlocal changed
+            if _get(subkey, name) == value:
+                # Already exactly right (the usual case: the app is relaunched
+                # from the same folder). Writing it again would be a no-op on
+                # the registry, but the notification below is not.
+                return
             with winreg.CreateKeyEx(root, subkey, 0, winreg.KEY_SET_VALUE) as key:
                 winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+            changed = True
 
         # Extension -> ProgID + open-with entry.
         _set(_HKCU_CLASSES + "\\" + _EXT, "", _PROGID)
@@ -64,8 +80,12 @@ def register() -> bool:
                 "",
                 f'"{exe}" "%1"',
             )
-        _notify_assoc_changed()
-        logger.debug("registered .bbproj association (icon: %s)", icon)
+        if changed:
+            # SHChangeNotify broadcasts to every top-level window on the
+            # desktop, After Effects included. Only do it when the association
+            # actually moved, so opening Better Brush beside AE is silent.
+            _notify_assoc_changed()
+            logger.debug("registered .bbproj association (icon: %s)", icon)
         return True
     except Exception:
         logger.debug("file association registration failed", exc_info=True)

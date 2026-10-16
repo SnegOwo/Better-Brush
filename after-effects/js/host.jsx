@@ -267,18 +267,21 @@ function bbLaunchEngine(pythonw, root, port) {
     }
 }
 
-function bbOpenFullApp(pythonPath, root, file) {
+function bbOpenFullApp(python, root, file) {
     try {
-        pythonPath = String(pythonPath || "");
+        python = String(python || "");
         root = String(root || "");
         file = String(file || "");
-        if (!pythonPath || !root) {
+        if (!python || !root) {
             return bbJson({
                 ok: false,
                 reason: "config.json is missing next to the panel - run after-effects/install.ps1 first."
             });
         }
-        var inner = 'cd /d "' + root + '" && start "" "' + pythonPath + '" -m src.main';
+        // Launched exactly like the engine: a detached pythonw.exe with no
+        // console. A console child started from inside AE shares AE's process
+        // group, and closing it can take After Effects down with it.
+        var inner = 'cd /d "' + root + '" && start "" /b "' + python + '" -m src.main';
         if (file) {
             // Hand the clip straight to the app so it opens on the footage the
             // panel was working on, instead of the welcome launcher.
