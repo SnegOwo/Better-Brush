@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Better Brush</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="brand"><i class="mark"></i>Better&nbsp;Brush</span>
+      <span id="statusPill" class="pill" title="Local engine status">
+        <i id="statusDot" class="dot"></i><span id="statusText">connecting</span>
+      </span>
+    </header>
+
+    <main class="body">
+      <section id="hero" class="hero">
+        <div id="heroIcon" class="hero-icon"></div>
+        <h1 id="heroTitle" class="hero-title">Checking the selection…</h1>
+        <p id="heroText" class="hero-text"></p>
+
+        <div id="layerChip" class="chip hidden">
+          <span id="layerName" class="chip-name">—</span>
+          <span id="layerMeta" class="chip-meta">—</span>
+        </div>
+
+        <div id="progressWrap" class="progress hidden">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div class="meta-line">
+          <p id="progressMeta" class="progress-meta"></p>
+          <span id="elapsed" class="elapsed hidden">0:00</span>
+        </div>
+
+        <ol id="stages" class="stages hidden">
+          <li data-stage="load"><i></i><span>Loading the model</span></li>
+          <li data-stage="extract"><i></i><span>Reading the source</span></li>
+          <li data-stage="analyze"><i></i><span>Finding the character</span></li>
+          <li data-stage="propagate"><i></i><span>Tracking through the clip</span></li>
+          <li data-stage="matte"><i></i><span>Refining the edges</span></li>
+          <li data-stage="export"><i></i><span>Writing the alpha movie</span></li>
+        </ol>
+
+        <figure id="previewWrap" class="preview hidden">
+          <div id="brushStage" class="checker brush-stage">
+            <div id="brushLayer" class="brush-layer">
+              <img id="previewImg" alt="Preview of the cut-out" />
+              <canvas id="brushCanvas" class="brush-canvas hidden"></canvas>
+            </div>
+            <div id="brushRing" class="brush-ring hidden"></div>
+          </div>
+          <figcaption id="previewCaption"></figcaption>
+
+          <div id="brushTools" class="brush-tools hidden">
+            <div class="brush-row">
+              <span class="label">Frame</span>
+              <button id="brushPrev" type="button" class="step" title="Previous frame (,)">‹</button>
+              <input id="brushFrame" type="range" min="0" max="0" step="1" value="0" title="Scrub to the frame that's wrong" />
+              <button id="brushNext" type="button" class="step" title="Next frame (.)">›</button>
+              <span id="brushFrameLabel" class="num">—</span>
+            </div>
+            <div class="brush-row">
+              <div id="brushToolSeg" class="seg">
+                <button type="button" data-value="add" class="on" title="Paint pixels back in (A)">Add</button>
+                <button type="button" data-value="remove" title="Paint pixels out (R)">Remove</button>
+              </div>
+              <input id="brushSize" type="range" min="10" max="160" step="2" value="48" title="Brush size ([ and ])" />
+            </div>
+            <div class="brush-row">
+              <span class="label">View</span>
+              <button id="zoomOut" type="button" class="step" title="Zoom out (-)">−</button>
+              <span id="zoomLabel" class="num zoom">Fit</span>
+              <button id="zoomIn" type="button" class="step" title="Zoom in (+)">+</button>
+              <button id="zoomFit" type="button" class="ghost tiny" title="Fit the whole frame (0)">Fit</button>
+              <button id="compareBtn" type="button" class="ghost tiny" title="Show the original frame, without the cut-out (C)">Original</button>
+            </div>
+            <div class="brush-row brush-actions">
+              <button id="brushUndo" type="button" class="ghost" title="Remove the last stroke (Ctrl+Z)">Undo</button>
+              <button id="brushClear" type="button" class="ghost">Clear</button>
+              <button id="brushApply" type="button" class="ghost">Apply</button>
+            </div>
+            <p class="note">Paint the frame that is wrong — the brush follows the Add/Remove colour — then Apply. Scroll to pan, Ctrl+scroll to zoom, space-drag also pans.</p>
+          </div>
+        </figure>
+
+        <button id="heroAction" type="button" class="ghost hidden"></button>
+      </section>
+
+      <p id="notice" class="notice hidden"></p>
+      <p id="noticeDetail" class="notice-detail hidden"></p>
+    </main>
+
+    <footer class="dock">
+      <div class="opt-row">
+        <span class="label">Quality</span>
+        <div id="qualitySeg" class="seg">
+          <button type="button" data-value="tiny" title="SAM 2.1 Tiny — fastest, roughest edges">Tiny</button>
+          <button type="button" data-value="fast" title="SAM 2.1 Small">Fast</button>
+          <button type="button" data-value="balanced" class="on" title="SAM 2.1 Base+">Balanced</button>
+          <button type="button" data-value="best" title="Best installed checkpoint">Best</button>
+        </div>
+        <span id="modelNote" class="note inline">—</span>
+      </div>
+
+      <div class="opt-row">
+        <div id="modeSeg" class="seg">
+          <button type="button" data-value="replace" class="on" title="Repoint the clip at the cut-out, keeping its trims and effects">Replace</button>
+          <button type="button" data-value="add" title="Add the cut-out as a clip on the video track above">Above</button>
+        </div>
+        <label class="toggle" title="Refine the cut-out into a soft alpha — hair and partial edges. Slower.">
+          <input id="mattingToggle" type="checkbox" checked />
+          <span>Matting</span>
+        </label>
+        <span id="mattingNote" class="note inline"></span>
+      </div>
+
+      <button id="runBtn" type="button" class="primary">Remove Background</button>
+      <div class="dock-row">
+        <button id="cancelBtn" type="button" class="ghost hidden">Cancel</button>
+        <button id="openAppBtn" type="button" class="ghost">Open full app</button>
+      </div>
+    </footer>
+
+    <script src="js/panel.js"></script>
+  </body>
+</html>

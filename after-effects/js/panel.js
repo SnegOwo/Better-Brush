@@ -45,6 +45,13 @@
     remove: "rgba(248, 113, 113, 0.45)"
   };
 
+  /* The cursor ring takes the tool's colour, so the mode is obvious from the
+   * brush itself without reading the Add/Remove segment. */
+  var BRUSH_INK = {
+    add: "#4ade80",
+    remove: "#f87171"
+  };
+
   /* Short model names (from /health capabilities) and the ModelSize values the
    * engine reports with a finished job both resolve through this table. */
   var MODEL_LABEL = {
@@ -449,7 +456,7 @@
       plan.tone = "tone-run";
       plan.icon = "spinner";
       plan.title = "Removing the background";
-      plan.text = "Tracking the character through the clip. Long shots take a while.";
+      plan.text = "Tracking the character. Long shots take a while.";
       plan.action = null;
       plan.chip = !!(sel && sel.ok);
       plan.stages = true;
@@ -555,11 +562,17 @@
     updateMattingNote();
   }
 
+  function shortModelLabel(name) {
+    return String(modelLabel(name)).replace(/^SAM 2\.1 /, "");
+  }
+
   function updateModelNote() {
     var caps = state.capabilities;
     var map = caps && caps.quality_models;
     var name = map ? map[state.quality] : null;
-    ui.modelNote.textContent = name ? "Uses " + modelLabel(name) : "—";
+    /* Terse on purpose: the note sits inside the Quality row, and the button's
+     * tooltip plus the done card carry the full model name. */
+    ui.modelNote.textContent = name ? shortModelLabel(name) : "—";
   }
 
   function mattingAvailable() {
@@ -571,13 +584,11 @@
   function updateMattingNote() {
     var available = mattingAvailable();
     ui.mattingToggle.disabled = !available || state.running;
+    /* Only speaks when it has something the user cannot see: the on/off state is
+     * the checkbox, and the rest lives in the tooltip. */
+    ui.mattingNote.textContent = available ? "" : "Not installed";
     if (!available) {
       ui.mattingToggle.checked = false;
-      ui.mattingNote.textContent = "Matting model not installed.";
-    } else if (state.matting) {
-      ui.mattingNote.textContent = "Softens hair and edges — slower.";
-    } else {
-      ui.mattingNote.textContent = "Edges follow the tracked outline.";
     }
     ui.mattingToggle.parentNode.className =
       "toggle" + (available ? "" : " disabled");
@@ -692,15 +703,41 @@
     };
   }
 
-  function wheelZoom(event) {
+  /* Wheel deltas arrive in pixels, lines or pages depending on the device; make
+   * them all read as pixels so a trackpad and a mouse feel the same. */
+  function wheelDelta(event, axis, rect) {
+    var mode = event.deltaMode;
+    var factor = mode === 1 ? 16 : mode === 2 ? (axis === "y" ? rect.height : rect.width) : 1;
+    return (axis === "y" ? event.deltaY || 0 : event.deltaX || 0) * factor;
+  }
+
+  /* The wheel scrolls the image, the way every editor does; Ctrl (or ⌘) with
+   * the wheel zooms about the pointer instead, and the +/− buttons step through
+   * the fixed zoom levels. */
+  function wheelScroll(event) {
     if (!state.resumeDir || state.running || state.brush.compare) {
       return;
     }
     event.preventDefault();
-    if (!event.deltaY) {
+    if (event.ctrlKey || event.metaKey) {
+      if (event.deltaY) {
+        zoomTo(state.view.zoom * Math.pow(1.0016, -event.deltaY), normalisedPoint(event));
+      }
       return;
     }
-    zoomTo(state.view.zoom * Math.pow(1.0016, -event.deltaY), normalisedPoint(event));
+    if (state.view.zoom <= 1.0001) {
+      /* Fitted: there is nothing beyond the frame to scroll to. */
+      return;
+    }
+    var rect = ui.brushStage.getBoundingClientRect();
+    var span = viewSpan();
+    /* Shift swaps the axis, for a wheel that only reports up/down. */
+    state.view.x0 +=
+      ((event.shiftKey ? wheelDelta(event, "y", rect) : wheelDelta(event, "x", rect)) /
+        (rect.width || 1)) * span;
+    state.view.y0 +=
+      ((event.shiftKey ? 0 : wheelDelta(event, "y", rect)) / (rect.height || 1)) * span;
+    applyView();
   }
 
   function canPan() {
@@ -759,6 +796,7 @@
     var size = Math.max(6, state.brush.size);
     ui.brushRing.style.width = size + "px";
     ui.brushRing.style.height = size + "px";
+    ui.brushRing.style.borderColor = BRUSH_INK[state.brush.tool] || "#fff";
     ui.brushRing.style.left = (event.clientX - rect.left) + "px";
     ui.brushRing.style.top = (event.clientY - rect.top) + "px";
     show(ui.brushRing, true);
@@ -891,6 +929,7 @@
   function setTool(tool) {
     state.brush.tool = tool === "remove" ? "remove" : "add";
     setSegment(ui.brushToolSeg, state.brush.tool);
+    ui.brushRing.style.borderColor = BRUSH_INK[state.brush.tool];
   }
 
   function setBrushSize(size) {
@@ -1751,9 +1790,9 @@
         brushUp();
       }
     });
-    /* The wheel zooms; middle-drag and space-drag pan. Both are captured on the
-     * canvas, which is the only element that should ever see them. */
-    ui.brushCanvas.addEventListener("wheel", wheelZoom, { passive: false });
+    /* The wheel scrolls, Ctrl+wheel zooms; middle-drag and space-drag pan. All
+     * three are captured on the canvas, the only element that should see them. */
+    ui.brushCanvas.addEventListener("wheel", wheelScroll, { passive: false });
     ui.brushCanvas.addEventListener("contextmenu", function (event) {
       event.preventDefault();
     });

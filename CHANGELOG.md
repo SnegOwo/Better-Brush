@@ -54,6 +54,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 - **Per-shot and per-object processing profiles** for model, edge smoothness, temporal smoothing, and detail preservation; profiles persist in `.bbproj` files.
 - **Versioned Project History** with automatic/manual checkpoints, retention, checksums, visual comparison, and one-click restore.
 - Atomic project writes and recoverable project payloads to reduce corruption risk during long edits.
+- **Better Brush for Premiere Pro.** A second CEP panel, in `premiere-pro/`, ports
+  the After Effects extension to Premiere Pro 2022+ (host id `PPRO`): the same
+  panel, the same local engine, the same one-button flow. Premiere's ExtendScript
+  is a different object model, so the port is a new `js/host.jsx` — the selection
+  comes from `Sequence.getSelection()`, and the cut-out goes back through
+  `ProjectItem.changeMediaPath`, which repoints the clip's media while leaving its
+  trims, speed and effects alone. **Result → Above** instead places the cut-out on
+  the free video track above and switches the original clip off. It installs to its
+  own extensions folder (`BetterBrushPPro`) and drives the same engine on port
+  8765, so both panels can be installed side by side.
 
 ### Fixed
 - **The spill cleaner panel no longer looks dead on a fresh project.** The Pick,
@@ -146,6 +156,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 - Grouped QC, performance, shot-profile, and recovery actions under the new Inspect menu with keyboard shortcuts.
 - The tutorial is now interactive with step progress and “Try it now” actions; the completion checkbox was removed.
 - Minor UI/UX polish: clearer section hover/collapse affordances, onboarding hints, and tooltips for primary editing/export actions.
+- **The panel's preview scrolls.** In both the After Effects and Premiere Pro
+  panels the wheel now scrolls the brush surface and `Ctrl`+wheel zooms about the
+  pointer (`+`/`-` and `Fit` still step the fixed zoom levels). This is what every
+  editor does and what a trackpad expects, and it replaces a wheel that only
+  zoomed.
+- **The brush says which tool it is.** The cursor ring is green in **Add** and red
+  in **Remove**, and the selected tool button is tinted to match, instead of a
+  difference-blended white ring that looked identical either way.
+- **A quieter panel (After Effects + Premiere Pro).** The settings footer is two
+  rows instead of five: the Quality note shrank to the checkpoint's short name, the
+  "Result" heading and the matting toggle's second line are gone (the button
+  tooltips carry that detail), the elapsed clock shares the progress line, and
+  spacing throughout is tighter. Behaviour is unchanged.
+- **Plugin results now land in `%LOCALAPPDATA%\BetterBrush\Plugins\`.** The work
+  folder was named for After Effects when it actually belongs to the engine, and is
+  shared by every host panel.
 
 ### Notes
 - For GPU inference, PyTorch must be the CUDA build. `pip install torch` on

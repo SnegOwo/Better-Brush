@@ -122,13 +122,14 @@ class _SourceInfo:
 def default_output_root() -> Path:
     """Where a job writes its result when the host supplies no directory.
 
-    Deliberately *not* the OS temp folder: the After Effects project links to
-    the alpha movie, and Windows can clear ``%TEMP%`` out from under it. A
-    per-user application-data folder survives that.
+    Deliberately *not* the OS temp folder: the host's project links to the
+    alpha movie, and Windows can clear ``%TEMP%`` out from under it. A per-user
+    application-data folder survives that. Shared by every host panel — the
+    After Effects and Premiere Pro panels run the same engine.
     """
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CACHE_HOME")
     root = Path(base) if base else Path.home() / ".cache"
-    return root / "BetterBrush" / "AfterEffects"
+    return root / "BetterBrush" / "Plugins"
 
 
 # --------------------------------------------------------------------- #

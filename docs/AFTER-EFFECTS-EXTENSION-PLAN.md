@@ -1001,4 +1001,114 @@ Three design documents were written for the work that is bigger than a round:
   observation that the engine still does not run the cel-hold, line-prior and
   temporal-smoothing passes the desktop app already has.
 
+## 23 · Round 8 — scroll, colour, quieten, and port to Premiere Pro
+
+The user's list, in order: make scrolling on the image possible and colour the
+brush by mode; make the panel clearer and more minimalistic; and make a new
+folder that ports the extension to Adobe Premiere Pro.
+
+### 23.1 The wheel scrolls
+
+Round 7's wheel zoomed. It was the wrong default: a trackpad's two-finger gesture
+is a scroll, and a mouse wheel is a scroll in every editor the user has ever
+used. The wheel now **scrolls** the brush surface and `Ctrl`+wheel (or `⌘`)
+**zooms about the pointer**; `+` / `-` / `Fit` / `0` are unchanged as the stepped
+zoom.
+
+Scrolling is expressed in the same normalised-window terms as panning, so it
+needs no new state: the wheel delta is converted to a fraction of the stage's
+real width/height and added to `(x0, y0)`, which `applyView` then clamps to the
+frame. Delta units differ per device (pixels, lines, pages), so they are
+normalised to pixels first, and <kbd>Shift</kbd> swaps the axis for a wheel that
+only reports up/down. At fit there is nowhere to scroll to, so the wheel is inert
+until you zoom — which is also why scrolling cannot be mistaken for a brush
+stroke.
+
+### 23.2 The brush is coloured by mode
+
+The ring used `mix-blend-mode: difference` over a white border, which is readable
+on any artwork but says nothing about the tool. It now takes the tool's colour —
+the same green/red the strokes already use — with a dark inner and outer hairline
+so it still reads over light and dark frames. The selected Add/Remove button is
+tinted to match, scoped to the brush segment so the other segments stay neutral.
+`BRUSH_INK` is the single source for both.
+
+### 23.3 Saying the same thing in fewer rows
+
+The footer was five stacked groups and six lines of copy for three settings. It is
+now two rows plus the button:
+
+- **Quality** on one row, with the resolved checkpoint as a right-aligned short
+  name (`Base+`) rather than a "Uses SAM 2.1 Base+" line beneath it. The guarantee
+  that the panel never quietly loads something other than what it says survives,
+  one word shorter; the full name is in the button's tooltip and in the finished
+  card.
+- **Result** and **Matting** share the second row; the "Result" heading and the
+  toggle's second line are gone, and the matting note now appears only when there
+  is something the user cannot see (the model isn't installed).
+- The elapsed clock moved onto the progress line, the stage checklist and
+  spacing tightened, and the hero card is smaller.
+
+The panel's behaviour is untouched — this is spacing, copy and two tooltips.
+
+### 23.4 Premiere Pro
+
+`premiere-pro/` is a second CEP extension. The panel files are copies, because a
+CEP extension must be self-contained inside its own folder and cannot share code
+with another one; the whole of the port is `js/host.jsx`, plus the host id
+(`PPRO`) in the manifest and the installer's extensions folder
+(`BetterBrushPPro`).
+
+Three things about Premiere drive the design:
+
+- **Nothing has an id.** After Effects hands out `comp.id` and `layer.id`, and
+  both survive `replaceSource`. Premiere's scripting exposes no equivalent, so the
+  host remembers the resolved target in a module global (`bbTarget`) while the job
+  runs and re-finds the clip afterwards **by the track it is on and the time it
+  starts** — the two things a media replacement cannot move. The name is only a
+  tiebreaker, because `changeMediaPath` can rename the project item a clip is
+  built from.
+- **There is no `replaceSource`.** The equivalent is
+  `ProjectItem.changeMediaPath`, which repoints a project item at new media: every
+  clip cut from it keeps its trims, speed and effects, and only the pixels change.
+  That is the same promise the After Effects panel makes. The consequence — it
+  applies project-wide, not just to the selected clip — is stated in the panel's
+  README rather than hidden.
+- **A clip has no dimensions.** There is no `width`, `height` or `frameRate` on a
+  Premiere track item at all. The engine never needed them — it reads the real
+  values from the media file with its own reader — so the panel sends the
+  *sequence's* frame size and rate as a hint and the README says plainly that the
+  chip is the thing that can be wrong, not the run.
+
+**Above** is the one mode that could not be ported faithfully: Premiere's
+scripting cannot create a video track. It places the cut-out on the video track
+directly above the clip and switches the original off — but only after checking
+that nothing of the original already occupies that span, and only if a track
+exists above at all. Otherwise it changes nothing and says why. Silent
+overwriting or rippling would have been worse than a refusal.
+
+Everything else is deliberately unchanged: the same engine, the same one-button
+flow, the same brush with zoom, scroll and frame-accurate corrections, the same
+hand-off to the full app, and the same `pythonw`-detached launches (a console
+child of the host is what took After Effects down in round 6, and Premiere shares
+the process group just the same).
+
+Because both panels drive one engine on port 8765, the engine's work folder was
+renamed from `BetterBrush\AfterEffects` to `BetterBrush\Plugins` — it is the
+engine's folder, not After Effects'.
+
+### 23.5 Verified, and what is not
+
+- The panel changes are covered by the QtWebEngine probe: at 250 px nothing
+  overflows the dock, the wheel scrolls the view without painting a stroke,
+  `Ctrl`+wheel zooms, the `+`/`-`/`Fit` buttons still step the fixed levels, and
+  the ring reports the tool's colour.
+- `panel.js` and `host.jsx` are parsed by the same JavaScript parser the rest of
+  the panel code goes through.
+- **The Premiere host is written against the documented ExtendScript API and has
+  not been run**: Premiere Pro is not installed on the development machine, so
+  every call in `js/host.jsx` is defended (feature-checked, wrapped, and given a
+  fallback or a clear message) rather than trusted. The first real test in
+  Premiere Pro is what will confirm it.
+
 

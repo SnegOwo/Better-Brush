@@ -54,9 +54,9 @@ refining the edges (when matting is on) → writing the alpha movie** — and
 finishes on a preview of the key frame on a checkerboard so you can see the
 cut-out before touching the timeline.
 
-- **Result → Replace layer** (default) swaps the layer's source, keeping trims
+- **Result → Replace** (default) swaps the layer's source, keeping trims
   and effects.
-- **Result → Add as new layer** places the cut-out above the original.
+- **Result → Above** places the cut-out on a new layer above the original.
 
 Both are undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
 
@@ -67,7 +67,8 @@ frame that is actually wrong instead of a single key frame:
 
 1. Scrub the **Frame** slider (`‹` / `›` step one frame, `,` and `.` do the same).
 2. Pick **Add** (green) to paint pixels in, or **Remove** (red) to paint them
-   out, and set the brush size.
+   out, and set the brush size. The cursor ring wears the same colour, so the
+   mode is obvious from the brush itself.
 3. **Apply correction.** The clip is re-tracked from *that* frame with your
    strokes layered onto the mask, and the result layer is replaced.
 
@@ -77,9 +78,9 @@ as wide a stroke on the artwork, which is what makes a hair correction possible.
 
 | Action | How |
 | --- | --- |
-| Zoom in / out | Scroll wheel over the preview, or `+` / `-`, or the `−` / `+` buttons |
-| Zoom about a point | Put the cursor there and scroll |
-| Pan | Middle-drag, or hold <kbd>Space</kbd> and drag |
+| Scroll / pan | Scroll wheel over the preview, or middle-drag, or hold <kbd>Space</kbd> and drag |
+| Zoom in / out | <kbd>Ctrl</kbd>+scroll, or `+` / `-`, or the `−` / `+` buttons |
+| Zoom about a point | Put the cursor there and <kbd>Ctrl</kbd>+scroll |
 | Back to the whole frame | `Fit`, or <kbd>0</kbd> |
 | Compare with the original | **Original** (or `C`), then again to go back |
 
@@ -165,9 +166,9 @@ After Effects
   expect thin gaps and speckle around edges; good for blocking in timing before
   a careful pass), `Fast` (SAM 2.1 Small), `Balanced` (SAM 2.1 Base+), `Best`
   (your fine-tuned checkpoint if one is installed, Base+ otherwise).
-- **Result** — Replace layer / Add as new layer.
-- **Automatic matting** — on by default. After the outline is tracked, the
-  MatAnyone 2 network refines it into a soft alpha that keeps hair, motion blur
+- **Result** — Replace / Above.
+- **Matting** — on by default. After the outline is tracked, the MatAnyone 2
+  network refines it into a soft alpha that keeps hair, motion blur
   and partial edges instead of a hard cut. It is a second model pass and adds
   time to every run; turn it off for a fast, hard-edged outline. If the matting
   weights aren't installed the switch is disabled and the run falls back to the
@@ -175,9 +176,11 @@ After Effects
   the outline's edge, but it cannot hollow it out, and in a flat colour region
   it follows the outline rather than leaving a ghost of the background.
 
-The line under **Quality** always names the checkpoint the current choice will
-load (`Uses SAM 2.1 Base+`), and the finished card names the one that actually
-ran, so the panel never quietly uses something other than what it says.
+The checkbox and the buttons are the settings; everything else a setting would
+have said lives in its tooltip, so a docked panel stays quiet. The name beside
+**Quality** is the checkpoint the current choice will load, and the finished card
+names the one that actually ran, so the panel never quietly uses something other
+than what it says.
 
 Both settings persist between sessions.
 
@@ -194,7 +197,7 @@ setting is much quicker than the first time.
 
 | What | Where |
 | --- | --- |
-| Alpha movie (`alpha.mov`) | `%LOCALAPPDATA%\BetterBrush\AfterEffects\<timestamp>_<id>\` |
+| Alpha movie (`alpha.mov`) | `%LOCALAPPDATA%\BetterBrush\Plugins\<timestamp>_<id>\` |
 | Key-frame preview | `preview.png` beside it (shown in the panel) |
 | Correction data | `seed.png`/`seed.json` plus `masks.npz` — what the brush re-tracks from |
 | Source frames | `frames\` beside them (kept so the brush is instant; dropped on very long clips) |
@@ -219,8 +222,8 @@ that file has the full trace.
 | A job fails with an odd message | Open `%LOCALAPPDATA%\BetterBrush\engine.log`; the panel's error card shows the path. |
 | A job seems to hang at 0% | Update the panel (`install.ps1`) — an unread output pipe used to block the engine mid-job. The log now records every step, so a genuine stall names the step it stalled in. |
 | A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. Automatic matting adds another model pass — turn it off for speed. |
-| Scrolling the preview does nothing | The wheel only zooms once a result is on screen (there has to be something to zoom into). Use the `−` / `+` buttons if the wheel is captured by something else. |
-| Panning moves the frame instead of the mask | You are painting. At fit there is nowhere to pan to: zoom in first, then middle-drag or hold <kbd>Space</kbd> and drag. |
+| Scrolling the preview does nothing | The wheel only scrolls and zooms once a result is on screen (there has to be something to move into). At fit there is nowhere to pan to: zoom in first. |
+| Panning moves the frame instead of the mask | You are painting. Use the middle button, or hold <kbd>Space</kbd> and drag. |
 | The preview jumps back to the key frame | Update the panel (`install.ps1`). An older build re-set the preview image on every status poll, so a scrubbed frame was overwritten a second later. |
 | The matte looks milky inside the character | Update both (`install.ps1`). The matte is now snapped back to the mask in flat colour regions, which is where the network used to leave a ghost of the background. |
 | Matting switch is greyed out | The MatAnyone 2 weights aren't in `checkpoints\matanyone2\`. Run the app's model setup; until then runs fall back to the outline. |

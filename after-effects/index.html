@@ -24,7 +24,13 @@
           <span id="layerMeta" class="chip-meta">—</span>
         </div>
 
-        <div id="elapsed" class="elapsed hidden">0:00</div>
+        <div id="progressWrap" class="progress hidden">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div class="meta-line">
+          <p id="progressMeta" class="progress-meta"></p>
+          <span id="elapsed" class="elapsed hidden">0:00</span>
+        </div>
 
         <ol id="stages" class="stages hidden">
           <li data-stage="load"><i></i><span>Loading the model</span></li>
@@ -34,11 +40,6 @@
           <li data-stage="matte"><i></i><span>Refining the edges</span></li>
           <li data-stage="export"><i></i><span>Writing the alpha movie</span></li>
         </ol>
-
-        <div id="progressWrap" class="progress hidden">
-          <div id="progressBar" class="progress-bar"></div>
-        </div>
-        <p id="progressMeta" class="progress-meta"></p>
 
         <figure id="previewWrap" class="preview hidden">
           <div id="brushStage" class="checker brush-stage">
@@ -71,14 +72,14 @@
               <span id="zoomLabel" class="num zoom">Fit</span>
               <button id="zoomIn" type="button" class="step" title="Zoom in (+)">+</button>
               <button id="zoomFit" type="button" class="ghost tiny" title="Fit the whole frame (0)">Fit</button>
-              <button id="compareBtn" type="button" class="ghost tiny" title="Show the original frame, without the cut-out">Original</button>
+              <button id="compareBtn" type="button" class="ghost tiny" title="Show the original frame, without the cut-out (C)">Original</button>
             </div>
             <div class="brush-row brush-actions">
               <button id="brushUndo" type="button" class="ghost" title="Remove the last stroke (Ctrl+Z)">Undo</button>
               <button id="brushClear" type="button" class="ghost">Clear</button>
-              <button id="brushApply" type="button" class="ghost">Apply correction</button>
+              <button id="brushApply" type="button" class="ghost">Apply</button>
             </div>
-            <p class="note">Paint the frame that is wrong — green adds, red removes — then Apply. Scroll to zoom, middle-drag or space-drag to pan.</p>
+            <p class="note">Paint the frame that is wrong — the brush follows the Add/Remove colour — then Apply. Scroll to pan, Ctrl+scroll to zoom, space-drag also pans.</p>
           </div>
         </figure>
 
@@ -90,31 +91,27 @@
     </main>
 
     <footer class="dock">
-      <div class="opt">
+      <div class="opt-row">
         <span class="label">Quality</span>
         <div id="qualitySeg" class="seg">
-          <button type="button" data-value="tiny" title="SAM 2.1 Tiny — fastest, rough edges">Tiny</button>
+          <button type="button" data-value="tiny" title="SAM 2.1 Tiny — fastest, roughest edges">Tiny</button>
           <button type="button" data-value="fast" title="SAM 2.1 Small">Fast</button>
           <button type="button" data-value="balanced" class="on" title="SAM 2.1 Base+">Balanced</button>
           <button type="button" data-value="best" title="Best installed checkpoint">Best</button>
         </div>
-        <span id="modelNote" class="note">—</span>
+        <span id="modelNote" class="note inline">—</span>
       </div>
 
-      <div class="opt">
-        <span class="label">Result</span>
+      <div class="opt-row">
         <div id="modeSeg" class="seg">
-          <button type="button" data-value="replace" class="on">Replace layer</button>
-          <button type="button" data-value="add">New layer</button>
+          <button type="button" data-value="replace" class="on" title="Replace the layer's source, keeping trims and effects">Replace</button>
+          <button type="button" data-value="add" title="Add the cut-out as a new layer above">Above</button>
         </div>
-      </div>
-
-      <div class="opt">
-        <label class="toggle" title="Refine the cut-out into a soft alpha — hair, motion blur and partial edges">
+        <label class="toggle" title="Refine the cut-out into a soft alpha — hair and partial edges. Slower.">
           <input id="mattingToggle" type="checkbox" checked />
-          <span>Automatic matting <em>soft edges &amp; hair</em></span>
+          <span>Matting</span>
         </label>
-        <span id="mattingNote" class="note"></span>
+        <span id="mattingNote" class="note inline"></span>
       </div>
 
       <button id="runBtn" type="button" class="primary">Remove Background</button>
