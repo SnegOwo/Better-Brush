@@ -51,13 +51,30 @@ For-Agent/
 checkpoints/
 
 # Local build outputs, scratch footage and downloaded sources (never committed)
-BetterbrushDistV3/
+# Wildcards on purpose: the next frozen build or trailer pass gets a new folder
+# name, and it must be ignored by default rather than by remembering to add it.
+BetterbrushDist*/
 Sammie-Roto-2-main/
 Training-Date/
-trailer/
-trailerKIMI/
-clip/
+trailer*/
+clip*/
 logs/
+
+# Local AI tool state (the checkpoints themselves live under .git/refs)
+.cline/
+
+# Media never belongs in a commit: renders, exports and scratch footage stay on
+# disk under clip*/, trailer*/, exports/ and logs/ (all ignored above). The
+# specific assets/icons/*.mov rule below is kept for the build, but this general
+# block is what stops the next .mp4 from turning the repo into several GB.
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.m4v
+*.wav
+*.mp3
 
 # Large local media assets
 assets/icons/*.mov
