@@ -9,6 +9,8 @@ Routes
 ``GET  /health``            capability + current-job snapshot (cheap)
 ``GET  /health?full=1``     adds the hardware/model description
 ``GET  /job/<id>``          job state / progress / result / error
+``GET  /frame``             PNG of one tracked frame (``?dir=&index=``) for the
+                            panel's correction brush
 ``POST /job``               start a job -> 202 ``{"id": ...}`` (409 when busy)
                             also the brush-correction entry point: the body
                             carries ``resume_dir`` plus base64 ``correction_add``
@@ -231,6 +233,15 @@ class EngineHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        for key, value in _CORS.items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(body)
+
     def _read_json(self) -> Any:
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
@@ -276,6 +287,10 @@ class EngineHandler(BaseHTTPRequestHandler):
             self._send_json(200, record.to_dict())
             return
 
+        if parts == ["frame"]:
+            self._serve_frame(query)
+            return
+
         self._send_json(404, {"error": {"kind": "not_found", "message": "no such route"}})
 
     def do_POST(self) -> None:
@@ -295,6 +310,39 @@ class EngineHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ #
     # Handlers
     # ------------------------------------------------------------------ #
+    def _serve_frame(self, query: dict[str, str]) -> None:
+        """``GET /frame?dir=<work_dir>&index=N`` — a PNG of one tracked frame.
+
+        This is what the panel's brush paints on: it returns the cut-out at any
+        frame of a finished result so the user can correct the frame they are
+        looking at, not just the key frame.
+        """
+        from src.engine import pipeline
+
+        work_dir = query.get("dir") or ""
+        if not work_dir:
+            self._send_json(
+                400,
+                {"error": {"kind": "bad_request", "message": "'dir' is required"}},
+            )
+            return
+        try:
+            index = int(query.get("index", "0"))
+        except (TypeError, ValueError):
+            self._send_json(
+                400,
+                {"error": {"kind": "bad_request", "message": "'index' must be an integer"}},
+            )
+            return
+        try:
+            body = pipeline.render_frame(work_dir, index)
+        except Exception as exc:  # noqa: BLE001 - reported to the panel as JSON
+            kind = getattr(exc, "kind", "internal")
+            status = 400 if kind == "bad_request" else 404
+            self._send_json(status, {"error": {"kind": kind, "message": str(exc)}})
+            return
+        self._send_bytes(200, body, "image/png")
+
     def _health(self, full: bool) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "app": ENGINE_NAME,

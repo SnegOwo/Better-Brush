@@ -341,10 +341,17 @@ def test_failed_export_reports_ffmpeg_stderr(monkeypatch, tmp_path):
 # --------------------------------------------------------------------- #
 # Matting + brush corrections
 # --------------------------------------------------------------------- #
-def _mask_png_b64(shape: tuple[int, int], value: int = 255) -> str:
+def _mask_png_b64(
+    shape: tuple[int, int], rect: tuple[int, int, int, int] | None = None
+) -> str:
     import base64
 
-    image = np.full(shape, value, dtype=np.uint8)
+    image = np.zeros(shape, dtype=np.uint8)
+    if rect is None:
+        image[:] = 255
+    else:
+        x, y, w, h = rect
+        image[y : y + h, x : x + w] = 255
     ok, buf = cv2.imencode(".png", image)
     assert ok
     return base64.b64encode(buf.tobytes()).decode("ascii")
@@ -464,13 +471,93 @@ def test_a_correction_reuses_the_stored_seed(monkeypatch, synth_video, tmp_path)
             "fps": 10.0,
             "quality": "fast",
             "resume_dir": first.work_dir,
-            "correction_remove": _mask_png_b64((256, 256)),
+            # Trim a corner, not the subject: erasing everything is refused.
+            "correction_remove": _mask_png_b64((256, 256), rect=(0, 0, 40, 40)),
         }
     )
     second = pipeline.run_job(correction)
 
     assert calls["n"] == before, "a correction must not run the subject search"
     assert second.frame_count == first.frame_count
+
+
+def test_a_correction_refuses_to_erase_the_whole_subject(
+    monkeypatch, synth_video, tmp_path
+):
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    first = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+
+    erased = JobRequest.from_dict(
+        {
+            "input_path": str(synth_video),
+            "output_dir": str(tmp_path / "out2"),
+            "fps": 10.0,
+            "quality": "fast",
+            "resume_dir": first.work_dir,
+            "correction_remove": _mask_png_b64((256, 256)),
+        }
+    )
+    with pytest.raises(pipeline.PipelineError):
+        pipeline.run_job(erased)
+
+
+def test_a_correction_paints_the_frame_it_targets(monkeypatch, synth_video, tmp_path):
+    """The painted frame becomes the seed, so a wrong frame is fixed where seen."""
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    first = pipeline.run_job(_request(synth_video, tmp_path / "a"))
+
+    correction = JobRequest.from_dict(
+        {
+            "input_path": str(synth_video),
+            "output_dir": str(tmp_path / "b"),
+            "fps": 10.0,
+            "quality": "fast",
+            "resume_dir": first.work_dir,
+            "correction_frame": 4,
+            # A block in the corner: certainly not part of the auto mask.
+            "correction_add": _mask_png_b64((256, 256), rect=(5, 5, 30, 30)),
+        }
+    )
+    second = pipeline.run_job(correction)
+
+    assert second.key_idx == 4
+    mask = pipeline._mask_at(Path(second.work_dir), 4)
+    assert mask is not None
+    assert mask[10, 10], "the painted block must survive on the frame it was painted"
+
+
+def test_fill_holes_closes_an_enclosed_gap():
+    mask = np.zeros((200, 200), dtype=bool)
+    mask[20:180, 20:180] = True
+    mask[80:100, 80:100] = False  # an enclosed hole, like a dark patch of hair
+
+    filled = pipeline._fill_holes(mask)
+
+    assert filled[90, 90], "the enclosed gap must be closed"
+    assert not filled[5, 5], "the outside must stay outside"
+
+
+def test_render_frame_returns_a_png_of_that_frame(monkeypatch, synth_video, tmp_path):
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr(
+        "src.export.exporter._resolve_ffmpeg", lambda: "not-a-real-ffmpeg"
+    )
+    result = pipeline.run_job(_request(synth_video, tmp_path / "out"))
+
+    png = pipeline.render_frame(result.work_dir, 1)
+
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    frame = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_UNCHANGED)
+    assert frame.shape == (result.height, result.width, 4)
+
+    with pytest.raises(pipeline.PipelineError):
+        pipeline.render_frame(result.work_dir, result.frame_count + 5)
 
 
 def test_apply_correction_adds_then_removes():

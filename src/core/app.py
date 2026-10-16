@@ -115,11 +115,34 @@ def _load_heavy_deps() -> None:
     import src.processing.video_reader  # noqa: F401  (OpenCV)
 
 
-def _cli_project_arg() -> Path | None:
-    """Return the .bbproj path the app was double-clicked with, if any."""
+_OPEN_SUFFIXES = {
+    ".bbproj",
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".webm",
+    ".m4v",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
+
+
+def _cli_open_arg() -> Path | None:
+    """Return the project or clip the app was launched with, if any.
+
+    A ``.bbproj`` (double-clicked via the file association) reopens a session;
+    any other supported path — such as the clip handed over by the After Effects
+    panel — is imported straight away.
+    """
     for arg in sys.argv[1:]:
         path = Path(arg)
-        if path.suffix.lower() == ".bbproj" and path.is_file():
+        if path.suffix.lower() in _OPEN_SUFFIXES and path.is_file():
             return path
     return None
 
@@ -178,13 +201,16 @@ def run() -> int:
         QTimer.singleShot(120, _fade)
 
     # Welcome launcher once the window is visible (blocking modal on purpose).
-    # A .bbproj passed on the command line (double-clicked file association)
-    # is opened instead of the welcome launcher.
-    _project_arg = _cli_project_arg()
-    if _project_arg is None:
+    # A file passed on the command line is opened instead: a .bbproj (double-
+    # clicked via the file association) as a project, anything else — such as
+    # the clip the After Effects panel hands over — as media.
+    _open_arg = _cli_open_arg()
+    if _open_arg is None:
         QTimer.singleShot(200, window.show_welcome)
+    elif _open_arg.suffix.lower() == ".bbproj":
+        QTimer.singleShot(200, lambda: window._open_project(_open_arg))
     else:
-        QTimer.singleShot(200, lambda: window._open_project(_project_arg))
+        QTimer.singleShot(200, lambda: window._load_video(_open_arg))
     return app.exec()
 
 

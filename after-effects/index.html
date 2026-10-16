@@ -49,6 +49,11 @@
 
           <div id="brushTools" class="brush-tools hidden">
             <div class="brush-row">
+              <span class="label">Frame</span>
+              <input id="brushFrame" type="range" min="0" max="0" step="1" value="0" title="Scrub to the frame you want to fix" />
+              <span id="brushFrameLabel" class="num">—</span>
+            </div>
+            <div class="brush-row">
               <div id="brushToolSeg" class="seg">
                 <button type="button" data-value="add" class="on" title="Paint pixels in">Add</button>
                 <button type="button" data-value="remove" title="Paint pixels out">Remove</button>
@@ -62,7 +67,7 @@
               <button id="brushClear" type="button" class="ghost">Clear strokes</button>
               <button id="brushApply" type="button" class="ghost">Apply correction</button>
             </div>
-            <p class="note">Paint on the key frame — green adds, red removes — then Apply. The clip is re-tracked.</p>
+            <p class="note">Scrub to the frame that's wrong, paint on it — green adds, red removes — then Apply. The clip is re-tracked from that frame.</p>
           </div>
         </figure>
 

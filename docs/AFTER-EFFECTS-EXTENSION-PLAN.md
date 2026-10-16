@@ -722,3 +722,78 @@ stage rows are present, and a painted stroke produces exactly one correction
 `POST` with the right fields. Engine-side, 37 pipeline/schema tests pass,
 including a correction that provably never calls `find_subject` again, and
 matting that both applies (flat 0.5 alpha reaches the export) and falls back.
+
+---
+
+## 20 · Round 5 — making the brush actually work
+
+Reported straight after Round 4 shipped: "I tried several times adding her hair
+to the mask but it just doesn't work." The screenshot showed exactly that — the
+tracked head with the dark patches of hair punched out of the matte.
+
+Two separate defects were behind it, plus one automatic-quality gap.
+
+### 20.1 Why the brush did nothing
+
+- **The strokes were only a prompt.** The correction went back through SAM 2,
+  which re-derived the mask from the painted seed. A patch it did not believe
+  belonged to the subject — a disconnected clump of hair — was dropped again, so
+  the result looked identical. The desktop app never had this problem because its
+  canvas *is* the mask (`main_window._masks[idx] = mask`); SAM is only ever a
+  convenience there.
+- **Only the key frame could be painted.** The panel showed one frame, chosen by
+  the engine, and any correction had to be made on it. If the bad frame was
+  somewhere else in the clip, no amount of painting on the key frame would help.
+
+### 20.2 What changed
+
+- **The painted frame is authoritative.** After propagation the correction frame
+  is set to exactly the corrected seed, so a patch SAM 2 disbelieves still
+  survives where the user put it. Propagation carries it to the rest of the clip.
+- **Any frame can be painted.** The masks are persisted once per job
+  (`masks.npz`, bit-packed and compressed — a few MB for a 120-frame 1080p clip,
+  never a float image per frame) and a new `GET /frame?dir=&index=` renders that
+  frame's cut-out as a PNG. The panel grew a Frame scrubber that pulls the frame
+  on demand, debounced, and the correction carries `correction_frame`.
+- **Moving the slider clears the strokes**, because a stroke belongs to the frame
+  it was painted on; the alternative is a stroke that silently lands somewhere
+  the user never saw.
+- A correction that would erase the subject entirely is refused with a readable
+  message instead of producing an empty matte.
+
+### 20.3 Automatic quality: close the gaps
+
+`fill_mask_holes` (from the app's own post-processing) now runs on the seed,
+before SAM is prompted, and again on every tracked frame before matting and
+export. The app's default cap (~0.2 % of the frame) is smaller than the hair
+defect, so the engine uses **1 %** — big enough for a clump of hair, still far
+short of a genuine window behind the subject, and it still only fills regions
+that are *enclosed* (anything touching the frame border is outside).
+
+Order matters: the seed's gaps are closed *before* the user's strokes land, so a
+"remove" that deliberately opens a gap is never quietly re-filled under them.
+
+### 20.4 Speed
+
+The frames are now kept beside the result, which does two things: the brush can
+render any frame without touching the source, and a correction skips the
+re-extraction pass entirely (about 9 s of the 120-frame test clip). Packs longer
+than 1 800 frames drop the frames again and fall back to decoding the source on
+demand, so disk does not grow without limit.
+
+### 20.5 Open in app, on the clip
+
+`bbOpenFullApp` now takes the selected file and hands it to the app's command
+line; `core/app.py` accepts any supported media path as well as a `.bbproj`, so
+the app opens straight on the footage instead of the welcome launcher. The panel
+passes the *original* source, not the current selection — after a replace the
+selection is the cut-out.
+
+### 20.6 Verified
+
+Engine: 47 pipeline/schema tests, including a correction that provably never
+calls `find_subject` again, a correction whose painted block provably survives on
+the frame it was painted on, hole filling that closes an enclosed gap and leaves
+the outside alone, and `render_frame` returning a true-colour PNG of the right
+size. Panel: the same QtWebEngine probe at 250 px and 300 px, extended to cover
+the frame scrubber and the `/frame` fetch.

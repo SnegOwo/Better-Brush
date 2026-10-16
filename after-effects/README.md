@@ -62,14 +62,20 @@ Both are undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
 
 ### Correcting the mask with the brush
 
-If the tracked outline is wrong somewhere, fix it on the key-frame preview:
-pick **Add** (green) or **Remove** (red), set the brush size, and paint over the
-key frame. **Apply correction** re-runs the clip from that frame with your
-strokes layered onto the mask, then replaces the result layer. **Clear strokes**
-wipes the overlay; corrections are repeatable (paint, apply, paint again).
+The panel keeps a cut-out for **every frame** of the result, so you can fix the
+frame that is actually wrong instead of a single key frame:
 
-The key frame is the one frame the panel shows; corrections there are re-tracked
-across the whole clip. For per-frame edits, use the full app.
+1. Scrub the **Frame** slider to that frame.
+2. Pick **Add** (green) to paint pixels in, or **Remove** (red) to paint them
+   out, and set the brush size.
+3. **Apply correction.** The clip is re-tracked from *that* frame with your
+   strokes layered onto the mask, and the result layer is replaced.
+
+**Clear strokes** wipes the overlay. Corrections are repeatable — paint, apply,
+scrub elsewhere, paint again — and each pass builds on the last. The frame you
+paint on is treated as ground truth, so even a patch SAM 2 does not believe
+belongs to the subject survives there. Moving the Frame slider clears the current
+strokes, because strokes belong to the frame they were painted on.
 
 ### When it hands off to the full app
 
@@ -78,6 +84,9 @@ across the whole clip. For per-frame edits, use the full app.
 | Several characters in frame | Message + the full app opens — pick subjects there |
 | No clear character found | Message + the full app opens — paint a brush stroke there |
 | Layer is a pre-comp, time-remapped, or has no file | The panel says why and points you at the full app |
+
+**Open in app** always opens Better Brush **on the clip you selected**, ready to
+work on, rather than on the welcome screen.
 
 That is deliberate: the button is for the common case, and the full app is one
 click away for everything else.
@@ -92,7 +101,8 @@ After Effects
        │  ExtendScript (js/host.jsx)           selection + apply back
        │  HTTP on 127.0.0.1:8765
        └─ Better Brush engine (python -m src.engine)
-            VideoReader → SAM 2 auto-subject → propagate → ffmpeg (ProRes 4444)
+            VideoReader → SAM 2 auto-subject → propagate → close gaps
+                        → MatAnyone 2 (soft alpha) → ffmpeg (ProRes 4444)
 ```
 
 - The engine is **out of process** on purpose: no torch inside After Effects,
@@ -101,6 +111,12 @@ After Effects
   It also attaches to a job that is already running, so reopening the panel
   never hides progress.
 - Cancelling is supported (`Cancel` while working).
+- After tracking, **enclosed gaps are closed** before anything else runs. SAM 2
+  reads dark hair, finger webbing and the space inside a curled hand as
+  background, which composites as see-through patches; filling them is what
+  makes hair read as solid.
+- The masked frames are kept next to the result (packed and compressed), so the
+  brush can show any frame and a correction does not have to re-read the source.
 
 ---
 
@@ -139,7 +155,8 @@ setting is much quicker than the first time.
 | --- | --- |
 | Alpha movie (`alpha.mov`) | `%LOCALAPPDATA%\BetterBrush\AfterEffects\<timestamp>_<id>\` |
 | Key-frame preview | `preview.png` beside it (shown in the panel) |
-| Correction seed (`seed.png`, `seed.json`) | beside them — the key-frame mask a brush correction re-tracks from |
+| Correction data | `seed.png`/`seed.json` plus `masks.npz` — what the brush re-tracks from |
+| Source frames | `frames\` beside them (kept so the brush is instant; dropped on very long clips) |
 | Engine log | `%LOCALAPPDATA%\BetterBrush\engine.log` |
 
 Results deliberately live in application data rather than `%TEMP%`, which
@@ -163,6 +180,8 @@ that file has the full trace.
 | A run takes much longer than the full app | Check the **Quality** line: `Balanced` (Base+) is several times slower than `Tiny`, and a cold first run also pays for loading the checkpoint. Automatic matting adds another model pass — turn it off for speed. |
 | Matting switch is greyed out | The MatAnyone 2 weights aren't in `checkpoints\matanyone2\`. Run the app's model setup; until then runs fall back to the outline. |
 | "Apply correction" does nothing | Paint at least one stroke first; a correction with no strokes is ignored. Also update the panel (`install.ps1`) if it's an older build. |
+| Holes in hair or between fingers | The panel closes enclosed gaps automatically; update the panel (`install.ps1`) if you still see them. If a gap is genuinely open to the background, paint it in with the brush. |
+| The brush shows the mask, not the soft matte | Expected: the brush surface is the tracked mask, which is what you are editing. The layer itself still uses the matted alpha. |
 | Nothing happens when a fine-tuned model is picked | The sidecar in `checkpoints\custom\` must name a config the engine ships (`sam2.1_hiera_b+.yaml` and friends). |
 | Panel needs inspecting | `install.ps1 -DebugPort 8092`, then open `http://localhost:8092` in Chrome. |
 

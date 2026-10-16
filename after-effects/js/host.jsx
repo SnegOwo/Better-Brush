@@ -267,10 +267,11 @@ function bbLaunchEngine(pythonw, root, port) {
     }
 }
 
-function bbOpenFullApp(pythonPath, root) {
+function bbOpenFullApp(pythonPath, root, file) {
     try {
         pythonPath = String(pythonPath || "");
         root = String(root || "");
+        file = String(file || "");
         if (!pythonPath || !root) {
             return bbJson({
                 ok: false,
@@ -278,6 +279,11 @@ function bbOpenFullApp(pythonPath, root) {
             });
         }
         var inner = 'cd /d "' + root + '" && start "" "' + pythonPath + '" -m src.main';
+        if (file) {
+            // Hand the clip straight to the app so it opens on the footage the
+            // panel was working on, instead of the welcome launcher.
+            inner += ' "' + file + '"';
+        }
         bbRunDetached(inner);
         return bbJson({ ok: true });
     } catch (e) {

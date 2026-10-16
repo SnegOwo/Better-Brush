@@ -355,6 +355,14 @@ body { display: flex; flex-direction: column; }
 .brush-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .brush-row .label { flex: 0 0 auto; }
 .brush-row .seg { flex: 1 1 auto; }
+.brush-row .num {
+  flex: 0 0 auto;
+  min-width: 4.2em;
+  text-align: right;
+  color: var(--dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 .brush-row input[type="range"] {
   flex: 1 1 auto;
   min-width: 0;

@@ -60,6 +60,27 @@ _PROGRESS_EVERY = 5
 _SEED_MASK = "seed.png"
 _SEED_META = "seed.json"
 
+#: The per-frame masks, packed and compressed. They are what lets the panel
+#: render *any* frame for the brush and correct the frame the user is looking
+#: at, without keeping a matte-sized float image per frame.
+_MASKS_FILE = "masks.npz"
+
+#: Interior background regions up to this fraction of the frame are treated as
+#: holes and filled. SAM 2 leaves gaps in dark hair, inside a curled hand and
+#: between fingers; those composite as see-through patches. The app's own
+#: default cap (~0.2 %) is too small for hair, which is exactly the defect the
+#: panel brush was brought in to fix.
+_FILL_HOLE_RATIO = 0.01
+
+#: Extracted frames are kept so the brush can render any frame and a correction
+#: can skip re-extraction. Beyond this many frames the disk cost stops being
+#: worth it, so they are dropped and the brush decodes the source on demand.
+_KEEP_FRAMES_LIMIT = 1800
+
+#: Last packed mask set, keyed by path. The brush hits /frame once per scrub,
+#: and re-reading a multi-megabyte archive each time would make scrubbing janky.
+_MASK_CACHE: dict[str, tuple[float, tuple[int, int], np.ndarray]] = {}
+
 
 class PipelineError(RuntimeError):
     """A job that failed for a reason the panel can explain to the user."""
@@ -342,34 +363,206 @@ def _apply_correction(
     return corrected
 
 
+def _read_meta(work: Path) -> dict:
+    path = work / _SEED_META
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _fill_holes(mask: np.ndarray) -> np.ndarray:
+    """Close enclosed gaps (dark hair, finger webbing) that SAM 2 leaves open."""
+    from src.processing.mask_refine import fill_mask_holes
+
+    if mask is None or not np.asarray(mask).any():
+        return mask
+    area = int(mask.shape[0] * mask.shape[1])
+    return fill_mask_holes(
+        mask, max_hole_area=max(4096, int(area * _FILL_HOLE_RATIO))
+    )
+
+
+def _close_holes(
+    masks: dict[int, np.ndarray],
+    count: int,
+    on_progress,
+    cancel_event: threading.Event | None,
+) -> None:
+    """Fill enclosed gaps in every tracked mask, in place."""
+    for n, index in enumerate(sorted(masks)):
+        _check_cancel(cancel_event)
+        masks[index] = _fill_holes(masks[index])
+        if n % _PROGRESS_EVERY == 0:
+            _emit(on_progress, "propagate", n + 1, count, "closing gaps in the mask")
+    _emit(on_progress, "propagate", count, count, "closing gaps in the mask")
+
+
+def _save_masks(
+    work: Path, masks: dict[int, np.ndarray], count: int, shape: tuple[int, int]
+) -> None:
+    """Persist the per-frame masks as one packed, compressed archive."""
+    packed = np.zeros((count, (shape[0] * shape[1] + 7) // 8), dtype=np.uint8)
+    for i in range(count):
+        mask = masks.get(i)
+        if mask is None:
+            continue
+        mask = np.asarray(mask)
+        if mask.shape[:2] != shape:
+            mask = cv2.resize(
+                (mask.astype(np.uint8) * 255),
+                (shape[1], shape[0]),
+                interpolation=cv2.INTER_NEAREST,
+            )
+        packed[i] = np.packbits(mask.reshape(-1).astype(bool))
+    np.savez_compressed(
+        work / _MASKS_FILE, shape=np.array(shape, dtype=np.int64), packed=packed
+    )
+
+
+def _masks_packed(work: Path) -> tuple[tuple[int, int], np.ndarray]:
+    path = work / _MASKS_FILE
+    if not path.is_file():
+        raise PipelineError(
+            "This result has no stored masks, so it cannot be brushed — run the "
+            "removal again.",
+            ERR_UNSUPPORTED,
+        )
+    stamp = path.stat().st_mtime
+    cached = _MASK_CACHE.get(str(path))
+    if cached is not None and cached[0] == stamp:
+        return cached[1], cached[2]
+    with np.load(path) as data:
+        shape = tuple(int(v) for v in data["shape"])
+        packed = np.ascontiguousarray(data["packed"])
+    _MASK_CACHE.clear()  # only the newest result is ever worth caching
+    _MASK_CACHE[str(path)] = (stamp, shape, packed)
+    return shape, packed
+
+
+def _mask_at(work: Path, index: int) -> np.ndarray | None:
+    shape, packed = _masks_packed(work)
+    if packed.shape[0] == 0 or index < 0 or index >= packed.shape[0]:
+        return None
+    bits = np.unpackbits(packed[index], count=shape[0] * shape[1])
+    return bits.reshape(shape).astype(bool)
+
+
+def _read_source_rgb(source: Path, index: int) -> np.ndarray:
+    """Decode one frame of the source by absolute frame index."""
+    if source.is_dir():
+        files = sorted(
+            p for p in source.iterdir() if p.suffix.lower() in _IMAGE_SUFFIXES
+        )
+        if not files:
+            raise PipelineError(f"no image files in {source}", ERR_UNSUPPORTED)
+        return _read_rgb(files[max(0, min(index, len(files) - 1))])
+    if source.suffix.lower() in _IMAGE_SUFFIXES:
+        return _read_rgb(source)
+
+    from src.processing.video_reader import VideoReader
+
+    reader = VideoReader(source)
+    try:
+        frame = reader.read_frame(index)
+    finally:
+        reader.close()
+    if frame is None:
+        raise PipelineError(
+            f"could not decode frame {index} from {source.name}", ERR_INTERNAL
+        )
+    return frame
+
+
+def _frame_at(work: Path, index: int) -> np.ndarray:
+    """The source frame for *index*, from the kept frames or the source file."""
+    kept = work / "frames" / f"{index:05d}.jpg"
+    if kept.is_file():
+        return _read_rgb(kept)
+    meta = _read_meta(work)
+    source = Path(str(meta.get("source", "")))
+    if not source.exists():
+        raise PipelineError(
+            "The source clip is no longer available for this result.",
+            ERR_UNSUPPORTED,
+        )
+    return _read_source_rgb(source, int(meta.get("frame_in", 0)) + index)
+
+
+def render_frame(work_dir: str, index: int) -> bytes:
+    """PNG (RGBA) of the cut-out at *index*, for the panel's brush surface."""
+    work = Path(work_dir)
+    mask = _mask_at(work, index)
+    if mask is None:
+        raise PipelineError("That frame is outside this result.", ERR_BAD_REQUEST)
+    frame = _frame_at(work, index)
+    if mask.shape[:2] != frame.shape[:2]:
+        mask = cv2.resize(
+            (mask.astype(np.uint8) * 255),
+            (frame.shape[1], frame.shape[0]),
+            interpolation=cv2.INTER_NEAREST,
+        ) > 127
+    from src.processing.edge_finish import soft_coverage
+
+    rgba = _rgba(frame, mask, soft_coverage(mask, feather=_EDGE_FEATHER))
+    ok, buf = cv2.imencode(".png", cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA))
+    if not ok:
+        raise PipelineError("could not encode the preview frame.", ERR_INTERNAL)
+    return buf.tobytes()
+
+
 def _resume_seed(
     request: JobRequest,
     info: _SourceInfo,
     on_progress,
 ) -> tuple[auto_subject.SubjectSelection, int]:
-    """Rebuild the seed from an earlier job, applying the panel's brush strokes."""
-    seed, meta = _load_seed(request.resume_dir or "")
-    shape = (info.height, info.width)
-    if seed.shape[:2] != shape:
-        seed = cv2.resize(
-            (seed.astype(np.uint8) * 255),
-            (shape[1], shape[0]),
-            interpolation=cv2.INTER_NEAREST,
-        ) > 127
-    add = _decode_stroke(request.correction_add, "correction_add", shape)
-    remove = _decode_stroke(request.correction_remove, "correction_remove", shape)
-    seed = _apply_correction(seed, add, remove)
-    key_idx = int(meta.get("key_idx", 0))
-    key_idx = max(0, min(key_idx, info.count - 1))
+    """Rebuild the seed from an earlier result, applying the panel's strokes.
+
+    The frame the user painted becomes the new propagation seed, so a wrong
+    frame is fixed where it was seen rather than only at the original key frame.
+    """
+    work = Path(request.resume_dir or "")
+    fallback, meta = _load_seed(str(work))
+    frame = request.correction_frame
+    if frame is None:
+        frame = int(meta.get("key_idx", 0))
+    frame = max(0, min(int(frame), info.count - 1))
+
+    base = _mask_at(work, frame)
+    if base is None:
+        base = fallback
+        shape = (info.height, info.width)
+        if base.shape[:2] != shape:
+            base = cv2.resize(
+                base.astype(np.uint8) * 255,
+                (shape[1], shape[0]),
+                interpolation=cv2.INTER_NEAREST,
+            ) > 127
+    # Fill the automatic holes *before* the strokes land, so a user "remove"
+    # that closes a gap is never quietly re-filled underneath them.
+    base = _fill_holes(base)
+    add = _decode_stroke(request.correction_add, "correction_add", base.shape[:2])
+    remove = _decode_stroke(
+        request.correction_remove, "correction_remove", base.shape[:2]
+    )
+    corrected = _apply_correction(base, add, remove)
+    if not corrected.any():
+        raise PipelineError(
+            "That correction erased the whole subject, so there is nothing left "
+            "to track — undo a few strokes and try again.",
+            ERR_UNSUPPORTED,
+        )
     _emit(on_progress, "analyze", 1, 1, "using your correction")
     box = meta.get("box")
     selection = auto_subject.SubjectSelection(
-        mask=seed,
+        mask=corrected,
         confidence=float(meta.get("confidence", 0.0)),
         box=tuple(box) if isinstance(box, (list, tuple)) and len(box) == 4 else None,
         reasons=["your brush correction"],
     )
-    return selection, key_idx
+    return selection, frame
 
 
 # --------------------------------------------------------------------- #
@@ -500,7 +693,9 @@ def _rgba(
     """Compose RGBA. *alpha* (a learned matte) wins over the segment outline."""
     if alpha is None:
         alpha = _alpha_for(frame_rgb, mask)
-    elif alpha.shape[:2] != frame_rgb.shape[:2]:
+    # SAM 2 can hand back a mask below source resolution; the alpha must line up
+    # with the frame whatever it is measured against.
+    if alpha.shape[:2] != frame_rgb.shape[:2]:
         alpha = cv2.resize(
             alpha.astype(np.float32),
             (frame_rgb.shape[1], frame_rgb.shape[0]),
@@ -857,18 +1052,31 @@ def run_job(
             selection.face_seeded,
         )
 
+        # A solid seed gives a solid track: close the enclosed gaps in the
+        # prompt itself before SAM 2 ever sees it, at source resolution.
+        seed = selection.mask
+        if seed is None:
+            seed = np.zeros((info.height, info.width), dtype=bool)
+        if seed.shape[:2] != (info.height, info.width):
+            seed = cv2.resize(
+                seed.astype(np.uint8) * 255,
+                (info.width, info.height),
+                interpolation=cv2.INTER_NEAREST,
+            ) > 127
+        seed = _fill_holes(seed)
+        selection.mask = seed
+
         # Persist the seed before tracking: a later brush correction re-tracks
         # from exactly this frame, and the panel only needs the directory back.
         _save_seed(
             work,
-            selection.mask if selection.mask is not None else np.zeros(
-                (info.height, info.width), dtype=bool
-            ),
+            seed,
             {
                 "key_idx": int(key_idx),
                 "confidence": float(selection.confidence),
                 "box": list(selection.box) if selection.box else None,
                 "count": int(info.count),
+                "frame_in": int(info.frame_in),
                 "source": str(source),
             },
         )
@@ -879,12 +1087,18 @@ def run_job(
             manager,
             frames_dir,
             key_idx,
-            selection.mask,
+            seed,
             info.count,
             on_progress,
             cancel_event,
         )
         manager.reset_video_state()
+        # Close the interior gaps SAM leaves behind, then make the frame the
+        # user painted authoritative: a disconnected patch that SAM does not
+        # believe belongs to the subject must still survive there.
+        _close_holes(masks, info.count, on_progress, cancel_event)
+        masks[key_idx] = seed
+        _save_masks(work, masks, info.count, (info.height, info.width))
         logger.info(
             "phase tracking: %.1fs (%d/%d frames masked)",
             time.time() - started,
@@ -984,6 +1198,7 @@ def run_job(
             model=recommendation.model_size.value,
             work_dir=str(work),
             matting=alphas is not None,
+            key_idx=int(key_idx),
         )
         logger.info(
             "job finished: %s frames in %.1fs (%s, %s, matting=%s)",
@@ -1003,9 +1218,16 @@ def run_job(
         logger.exception("job failed while %s", phase)
         raise PipelineError(f"{exc} (while {phase})", ERR_INTERNAL) from exc
     finally:
-        # The extracted frames are disposable; the alpha movie next to them is
-        # not, so only the frames sub-folder is removed.
-        shutil.rmtree(frames_dir, ignore_errors=True)
+        # Frames are kept so the panel's brush can render any frame and a
+        # correction can skip re-extraction — both are what make brushing feel
+        # instant rather than a re-run. On a very long clip that disk cost stops
+        # being worth it, so those fall back to decoding the source on demand.
+        try:
+            frame_files = list(frames_dir.glob("*.jpg")) if frames_dir.is_dir() else []
+        except OSError:
+            frame_files = []
+        if len(frame_files) > _KEEP_FRAMES_LIMIT:
+            shutil.rmtree(frames_dir, ignore_errors=True)
 
 
-__all__ = ["JobProgress", "PipelineError", "default_output_root", "run_job"]
+__all__ = ["JobProgress", "PipelineError", "default_output_root", "render_frame", "run_job"]

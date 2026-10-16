@@ -118,6 +118,13 @@
     apply: null,
     resumeDir: null,
     brush: { tool: "add", size: 48, strokes: [], stroke: null, painting: false },
+    /* Which frame the brush is showing. The panel can render any frame of a
+     * finished result, so a correction can target the frame that is wrong. */
+    frameCount: 0,
+    keyIdx: 0,
+    brushFrame: 0,
+    frameUrl: null,
+    frameTimer: null,
     resultModel: "",
     doneTitle: "",
     doneText: "",
@@ -636,6 +643,71 @@
     redrawBrush();
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Frame scrubber                                                      */
+  /* ------------------------------------------------------------------ */
+  function frameLabel(index) {
+    return (index + 1) + "/" + (state.frameCount || 0);
+  }
+
+  function resetFrameView() {
+    var count = state.frameCount || 0;
+    var max = count > 0 ? count - 1 : 0;
+    ui.brushFrame.min = "0";
+    ui.brushFrame.max = String(max);
+    var index = Math.max(0, Math.min(state.keyIdx || 0, max));
+    ui.brushFrame.value = String(index);
+    state.brushFrame = index;
+    ui.brushFrameLabel.textContent = count ? frameLabel(index) : "—";
+  }
+
+  /* Pull one frame's cut-out from the engine. This is what makes a correction
+   * target the frame that is actually wrong instead of the key frame. */
+  function loadFrame(index) {
+    state.brushFrame = index;
+    ui.brushFrameLabel.textContent = frameLabel(index);
+    if (!state.resumeDir) {
+      return;
+    }
+    var url =
+      baseUrl() +
+      "/frame?dir=" + encodeURIComponent(state.resumeDir) +
+      "&index=" + index;
+    fetch(url)
+      .then(function (resp) {
+        return resp.ok ? resp.blob() : null;
+      })
+      .then(function (blob) {
+        if (!blob) {
+          return;
+        }
+        if (state.frameUrl) {
+          URL.revokeObjectURL(state.frameUrl);
+        }
+        state.frameUrl = URL.createObjectURL(blob);
+        ui.previewImg.src = state.frameUrl;
+      })
+      .catch(function () { /* a failed fetch keeps the previous frame */ });
+  }
+
+  function scrubFrame() {
+    var index = parseInt(ui.brushFrame.value, 10) || 0;
+    ui.brushFrameLabel.textContent = frameLabel(index);
+    /* Strokes belong to the frame they were painted on: moving the playhead
+     * moves on, so the overlay never lands on the wrong frame. */
+    if (index !== state.brushFrame && state.brush.strokes.length) {
+      clearBrush();
+    }
+    if (state.frameTimer) {
+      clearTimeout(state.frameTimer);
+    }
+    /* Debounce: dragging the handle would otherwise decode a frame per pixel. */
+    state.frameTimer = setTimeout(function () {
+      state.frameTimer = null;
+      loadFrame(index);
+    }, 140);
+  }
+
   /* Rasterise one tool's strokes into a base64 PNG in source resolution, or
    * null when nothing was painted with that tool. */
   function rasterizeStrokes(tool) {
@@ -843,6 +915,7 @@
     }
     var body = jobBody(state.source, {
       resume_dir: state.resumeDir,
+      correction_frame: state.brushFrame,
       correction_add: addPng || null,
       correction_remove: removePng || null
     });
@@ -995,7 +1068,14 @@
         state.previewPath = result.preview_path || null;
         state.previewSize = { w: result.width || 0, h: result.height || 0 };
         state.resumeDir = result.work_dir || null;
+        state.frameCount = result.frame_count || 0;
+        state.keyIdx = result.key_idx || 0;
+        if (state.frameUrl) {
+          URL.revokeObjectURL(state.frameUrl);
+          state.frameUrl = null;
+        }
         clearBrush();
+        resetFrameView();
         /* From here on, applying goes to the layer that now holds the cut-out,
          * so a correction replaces this result rather than the original. */
         state.apply = {
@@ -1044,10 +1124,18 @@
   }
 
   function openFullApp() {
+    /* Pass the original footage, not the current selection: after a replace the
+     * selection describes the cut-out, and the app should open the source clip. */
+    var file = state.source
+      ? state.source.file
+      : state.selection
+        ? state.selection.file
+        : "";
     return callHost(
       "bbOpenFullApp(" +
         csString(state.config.pythonPath) + "," +
-        csString(state.config.projectRoot) +
+        csString(state.config.projectRoot) + "," +
+        csString(file) +
       ")"
     ).catch(function () {});
   }
@@ -1142,6 +1230,8 @@
       brushCanvas: id("brushCanvas"),
       brushTools: id("brushTools"),
       brushToolSeg: id("brushToolSeg"),
+      brushFrame: id("brushFrame"),
+      brushFrameLabel: id("brushFrameLabel"),
       brushSize: id("brushSize"),
       brushClear: id("brushClear"),
       brushApply: id("brushApply"),
@@ -1225,6 +1315,7 @@
         brushUp();
       }
     });
+    ui.brushFrame.addEventListener("input", scrubFrame);
     ui.brushSize.addEventListener("input", function () {
       state.brush.size = parseInt(ui.brushSize.value, 10) || 48;
     });

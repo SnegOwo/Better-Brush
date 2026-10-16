@@ -122,3 +122,12 @@ def test_matting_and_correction_fields_round_trip():
 def test_resume_dir_must_be_a_string():
     with pytest.raises(RequestError):
         JobRequest.from_dict({"input_path": "a", "resume_dir": 3})
+
+
+def test_correction_frame_round_trips_and_is_validated():
+    req = JobRequest.from_dict({"input_path": "a", "correction_frame": 12})
+    assert req.correction_frame == 12
+    assert req.to_dict()["correction_frame"] == 12
+
+    with pytest.raises(RequestError):
+        JobRequest.from_dict({"input_path": "a", "correction_frame": "12"})

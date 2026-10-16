@@ -71,6 +71,14 @@ def _as_optional_str(value: Any, name: str) -> str | None:
     return value
 
 
+def _as_optional_int(value: Any, name: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RequestError(f"'{name}' must be an integer")
+    return int(value)
+
+
 # --------------------------------------------------------------------- #
 # Request
 # --------------------------------------------------------------------- #
@@ -112,6 +120,11 @@ class JobRequest:
     #: before the clip is re-tracked from the stored key frame.
     correction_add: str | None = None
     correction_remove: str | None = None
+    #: Frame the correction was painted on (0-based within this job's range).
+    #: The clip is re-tracked from *this* frame, so a wrong frame is fixed where
+    #: the user saw it rather than only at the original key frame. ``None``
+    #: falls back to the stored key frame.
+    correction_frame: int | None = None
 
     @classmethod
     def from_dict(cls, data: Any) -> JobRequest:
@@ -163,6 +176,9 @@ class JobRequest:
         correction_remove = _as_optional_str(
             data.get("correction_remove"), "correction_remove"
         )
+        correction_frame = _as_optional_int(
+            data.get("correction_frame"), "correction_frame"
+        )
         matting = bool(data.get("matting", False))
 
         roi_raw = data.get("roi")
@@ -188,6 +204,7 @@ class JobRequest:
             resume_dir=resume_dir,
             correction_add=correction_add,
             correction_remove=correction_remove,
+            correction_frame=correction_frame,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -204,6 +221,7 @@ class JobRequest:
             "output_dir": self.output_dir,
             "matting": self.matting,
             "resume_dir": self.resume_dir,
+            "correction_frame": self.correction_frame,
             # The correction strokes are one-shot payloads: echoing the base64
             # in every progress poll would dwarf the job state itself.
         }
@@ -266,6 +284,9 @@ class JobResult:
     work_dir: str = ""
     #: Whether the soft matte was applied (False = the segment outline only).
     matting: bool = False
+    #: The frame the subject was seeded on (0-based within this job's range).
+    #: The panel opens its correction scrubber here.
+    key_idx: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -283,6 +304,7 @@ class JobResult:
             "model": self.model,
             "work_dir": self.work_dir,
             "matting": self.matting,
+            "key_idx": self.key_idx,
         }
 
 
