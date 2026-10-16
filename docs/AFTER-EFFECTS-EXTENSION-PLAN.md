@@ -1130,9 +1130,22 @@ CSXS.16 rather than stopping at 13.
 - The Premiere install was rehearsed in both scopes and then run for real, and the
   installed files were confirmed byte-identical to the repository with the shared
   copy in place and the per-user copy gone.
-- **The Premiere host is written against the documented ExtendScript API and has
-  not been run**: every call in `js/host.jsx` is defended (feature-checked,
-  wrapped, and given a fallback or a clear message) rather than trusted. The first
-  real test in Premiere Pro is what will confirm it.
+- **The Premiere host has still only run its selection path.** The first real test
+  in Premiere Pro 26.0 found that `TrackItem.type` is a *number* (1 is video, 2 is
+  audio) where `TrackItem.mediaType` is the string "Video"/"Audio"; the host read
+  the number and compared it to "Video", so it rejected the clip that was plainly
+  selected and every other one. Fixed, and the fix is now covered: `host.jsx` runs
+  unmodified against a mock Premiere DOM (`TrackItem.type` as a number, a linked
+  audio twin in the selection) and the old expression is kept in the test as the
+  guard that proves what was wrong. The rest of `js/host.jsx` — the apply half —
+  is still written against the documented API and defended call by call.
+- The selection path is also tested for a `getSelection()` that answers with a
+  keyed collection rather than an array, for an audio-only selection, for two
+  different clips (it asks for one), for an offline clip, and for the track index
+  it remembers to re-find the clip when the result comes back.
+- When a selection cannot be used, the panel now says what Premiere reported
+  ("Premiere reports 2 selected: "shot01.mp4" (video), "shot01.mp4" (audio)"),
+  and a host script that throws is reported as such instead of being shown as an
+  empty selection.
 
 

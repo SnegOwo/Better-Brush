@@ -271,6 +271,7 @@ that file has the full trace.
 | Symptom | Fix |
 | --- | --- |
 | Panel missing from the Extensions menu | Re-run `install.ps1` (elevated), restart Premiere. Check `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro\CSXS\manifest.xml` exists. |
+| The panel doesn't see the clip you selected | Click the clip once in the timeline so it highlights, and give the panel a second — it polls. If it still refuses, the panel now repeats what Premiere reported, which is the useful part. |
 | The installer says it needs administrator rights | It installs for all users by default. Re-run it from an **Administrator** PowerShell, or add `-Scope User` to install for your account only. |
 | The panel is listed twice | There is a copy in two CEP folders. Re-run `install.ps1` — it removes the copies it isn't using — and restart Premiere. |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |

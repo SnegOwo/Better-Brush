@@ -113,33 +113,115 @@ function bbPing() {
 /* ------------------------------------------------------------------ */
 /* Timeline lookups                                                    */
 /* ------------------------------------------------------------------ */
-function bbIsVideoClip(clip) {
-    if (!clip) { return false; }
-    var kind = "";
-    try { kind = String(clip.type || ""); } catch (e1) {}
-    if (!kind) {
-        try { kind = String(clip.mediaType || ""); } catch (e2) {}
-    }
-    if (kind) { return kind === "Video"; }
-    /* No usable type: assume video, and let the media path check below sort it
-     * out — an audio clip has no video project item to speak of. */
-    return true;
+/* Premiere describes a clip's kind twice, in two different vocabularies, and
+ * only one of them is a string:
+ *
+ *   TrackItem.type       Number: 1 is video, 2 is audio
+ *   TrackItem.mediaType  String: "Video" or "Audio"
+ *
+ * Reading `type` and comparing it to "Video" is how a selection comes back
+ * empty while the clip sits right there on the timeline, so both are read and
+ * neither is assumed to exist. */
+function bbKindOfValue(value) {
+    if (value === null || value === undefined || value === "") { return ""; }
+    var text = String(value);
+    if (text === "1" || /^video/i.test(text)) { return "video"; }
+    if (text === "2" || /^audio/i.test(text)) { return "audio"; }
+    return "";
 }
 
+function bbClipKind(clip) {
+    if (!clip) { return ""; }
+    var kind = "";
+    try { kind = bbKindOfValue(clip.type); } catch (eType) {}
+    if (kind) { return kind; }
+    try { kind = bbKindOfValue(clip.mediaType); } catch (eMedia) {}
+    return kind;
+}
+
+/* getSelection() is an array on most builds but a keyed collection on others. */
+function bbToList(collection) {
+    if (!collection) { return []; }
+    if (collection instanceof Array) { return collection; }
+    var out = [];
+    var count = 0;
+    try { count = bbNum(collection.length); } catch (eLen) {}
+    for (var i = 0; i < count; i++) {
+        try { if (collection[i]) { out.push(collection[i]); } } catch (eItem) {}
+    }
+    if (out.length) { return out; }
+    for (var key in collection) {
+        var item = null;
+        try { item = collection[key]; } catch (eValue) {}
+        var named = false;
+        try { named = !!(item && item.name !== undefined); } catch (eName) {}
+        if (named) { out.push(item); }
+    }
+    return out;
+}
+
+/* Two track items are the same clip when they sit at the same time under the
+ * same name; Premiere gives us no id to compare. */
+function bbSameItem(a, b) {
+    try {
+        if (String(a.name) !== String(b.name)) { return false; }
+        return Math.abs(bbTicks(a.start) - bbTicks(b.start)) <= 1;
+    } catch (e) { return false; }
+}
+
+/* Selecting a clip that carries linked audio hands back a video track item and
+ * an audio one. Only the video half can be cut out, so the audio half is
+ * dropped, and only when its kind can actually be read: a kind we cannot read
+ * is not evidence of anything. */
 function bbVideoSelection(seq) {
     var picked = [];
+    var unnamed = [];
     try {
-        var selection = seq.getSelection();
-        if (selection) {
-            for (var i = 0; i < selection.length; i++) {
-                if (bbIsVideoClip(selection[i])) { picked.push(selection[i]); }
-            }
+        var items = bbToList(seq.getSelection());
+        for (var i = 0; i < items.length; i++) {
+            var kind = bbClipKind(items[i]);
+            if (kind === "audio") { continue; }
+            if (kind === "video") { picked.push(items[i]); }
+            else { unnamed.push(items[i]); }
         }
     } catch (eSel) { /* very old builds throw instead of returning an empty list */ }
+    for (var j = 0; j < unnamed.length; j++) {
+        var twin = false;
+        for (var k = 0; k < picked.length; k++) {
+            if (bbSameItem(unnamed[j], picked[k])) { twin = true; break; }
+        }
+        if (!twin) { picked.push(unnamed[j]); }
+    }
     return picked;
 }
 
+/* "It doesn't see my clip" is a dead end to debug from a distance, so when the
+ * selection comes back empty, say what Premiere did report. */
+function bbSelectionHint(seq) {
+    var items = [];
+    try { items = bbToList(seq.getSelection()); } catch (e) { return ""; }
+    if (!items.length) { return " (Premiere reports nothing selected.)"; }
+    var bits = [];
+    for (var i = 0; i < items.length && i < 4; i++) {
+        var name = "?";
+        try { name = String(items[i].name); } catch (eName) {}
+        var kind = bbClipKind(items[i]);
+        bits.push('"' + name + '"' + (kind ? " (" + kind + ")" : ""));
+    }
+    if (items.length > 4) { bits.push("..."); }
+    return " (Premiere reports " + items.length + " selected: " + bits.join(", ") + ".)";
+}
+
+/* Premiere hands the track index over directly, and comparing two ExtendScript
+ * wrappers of the same native object is not dependable, so the direct answer is
+ * preferred and the scan is only a fallback. */
 function bbTrackIndexOf(seq, clip) {
+    try {
+        var direct = clip.parentTrackIndex;
+        if (direct !== null && direct !== undefined && !isNaN(parseFloat(direct))) {
+            return parseInt(direct, 10);
+        }
+    } catch (eDirect) {}
     for (var i = 0; i < seq.videoTracks.numTracks; i++) {
         var track = seq.videoTracks[i];
         for (var j = 0; j < track.clips.numItems; j++) {
@@ -242,11 +324,14 @@ function bbSelectedLayer() {
         if (picked.length > 1) {
             return bbJson({
                 ok: false,
-                reason: "Several clips are selected. Select just the one to cut out."
+                reason: "Several clips are selected. Select just the one to cut out." + bbSelectionHint(seq)
             });
         }
         if (!picked.length) {
-            return bbJson({ ok: false, reason: "Select a video clip in the timeline." });
+            return bbJson({
+                ok: false,
+                reason: "Select a video clip in the timeline." + bbSelectionHint(seq)
+            });
         }
         var clip = picked[0];
 

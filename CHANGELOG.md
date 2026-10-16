@@ -68,6 +68,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
   both panels can be installed side by side.
 
 ### Fixed
+- **The Premiere Pro panel can see the clip you selected.** `TrackItem.type` is a
+  *number* — 1 for video, 2 for audio — while `TrackItem.mediaType` is the string
+  "Video"/"Audio". The host read `type`, turned it into `"1"`, and compared it to
+  `"Video"`, so every clip failed that test: select a clip and the panel still
+  asked you to select one. Both vocabularies are now read. Selecting a clip with
+  linked audio no longer counts as two clips, either — the audio half is dropped
+  once its video twin is in hand. When a selection still cannot be used, the
+  panel now names what Premiere reported instead of leaving you to guess, and a
+  host script that throws is reported as a failure rather than as "nothing
+  selected".
 - **The spill cleaner panel no longer looks dead on a fresh project.** The Pick,
   Set Area and Protect buttons and both sliders were greyed out whenever the
   mode was Off, so a new user saw a disabled panel and pressing Pick did nothing.

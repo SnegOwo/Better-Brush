@@ -262,6 +262,20 @@
     });
   }
 
+  /* A reply that is not JSON means the host script never ran; After Effects
+   * answers "EvalScript error." when it throws. Showing that beats showing the
+   * empty-selection prompt, which reads as "the panel cannot see my layer". */
+  function hostSilent() {
+    return {
+      ok: false,
+      reason: "The host script did not answer the panel. Quit and reopen After Effects."
+    };
+  }
+
+  function hostMissing() {
+    return { ok: false, reason: "The panel is not connected to After Effects." };
+  }
+
   function csString(value) {
     return JSON.stringify(value == null ? "" : String(value));
   }
@@ -411,10 +425,10 @@
     }
     return callHost("bbSelectedLayer()")
       .then(function (sel) {
-        apply(sel);
+        apply(sel || hostSilent());
       })
       .catch(function () {
-        apply(null);
+        apply(hostMissing());
       });
   }
 
