@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Public documentation for Better Brush, a local-first AI rotoscoping studio for video editors.">
+  <meta name="description" content="Better Brush documentation — a local-first AI rotoscoping studio for video editors.">
   <meta name="theme-color" content="#0a0b0e">
   <title>Better Brush Docs — AI rotoscoping, made clear</title>
   <link rel="icon" type="image/png" href="assets/betterbrush-logo.png">
@@ -11,12 +11,12 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
+
   <div class="site-shell" id="top">
     <header class="topbar">
       <a class="brand" href="#overview" aria-label="Better Brush documentation home">
         <img src="assets/betterbrush-logo.png" alt="" width="34" height="34">
-        <span>Better Brush</span>
-        <b>Docs</b>
+        <span>Better Brush</span><b>Docs</b>
       </a>
       <nav class="top-nav" aria-label="Primary navigation">
         <a href="#workflow">Workflow</a>
@@ -42,173 +42,240 @@
           <p class="side-label">Learn</p>
           <a class="side-link active" href="#overview"><span>01</span>Overview</a>
           <a class="side-link" href="#start"><span>02</span>Quick start</a>
-          <a class="side-link" href="#workflow"><span>03</span>Editing workflow</a>
-          <a class="side-link" href="#inspect"><span>04</span>QC &amp; Coach</a>
-          <a class="side-link" href="#cleanup"><span>05</span>Clean Up</a>
-          <a class="side-link" href="#export"><span>06</span>Export &amp; queue</a>
-          <p class="side-label">Reference</p>
-          <a class="side-link" href="#shortcuts"><span>07</span>Shortcuts</a>
-          <a class="side-link" href="#editions"><span>08</span>Editions</a>
-          <a class="side-link" href="#faq"><span>09</span>FAQ</a>
-          <a class="side-link" href="#roadmap"><span>10</span>What’s next</a>
+          <a class="side-link" href="#workflow"><span>03</span>Workflow</a>
+          <p class="side-label">Master</p>
+          <a class="side-link" href="#mattes"><span>04</span>Mattes &amp; refinement</a>
+          <a class="side-link" href="#inspect"><span>05</span>Matte QC Inspector</a>
+          <a class="side-link" href="#coach"><span>06</span>QC Coach</a>
+          <a class="side-link" href="#cleanup"><span>07</span>Cleanup &amp; repair</a>
+          <a class="side-link" href="#performance"><span>08</span>Performance</a>
+          <p class="side-label">Ship</p>
+          <a class="side-link" href="#export"><span>09</span>Export</a>
+          <a class="side-link" href="#shortcuts"><span>10</span>Shortcuts</a>
+          <a class="side-link" href="#faq"><span>11</span>FAQ</a>
         </nav>
-        <div class="sidebar-note">
-          <span class="status-dot"></span>
-          <div><strong>Local by design</strong><p>Your footage stays on your machine.</p></div>
-        </div>
       </aside>
 
       <main id="main-content">
-        <section class="hero section" id="overview" data-searchable="overview better brush local ai rotoscoping product">
-          <div class="hero-copy">
-            <p class="eyebrow"><span class="eyebrow-line"></span>Public documentation</p>
-            <h1>Make the matte.<br><em>Keep the control.</em></h1>
-            <p class="hero-lead">Better Brush is a local-first AI rotoscoping studio for editors. Prompt a subject, propagate the mask, inspect the edge, and export a clean alpha — without sending footage away.</p>
-            <div class="hero-actions">
-              <a class="button primary" href="#start">Read the quick start <span aria-hidden="true">→</span></a>
-              <a class="button secondary" href="#inspect">Explore QC tools</a>
-            </div>
-            <div class="hero-meta">
-              <span class="meta-item"><b>Windows</b> desktop app</span>
-              <span class="meta-separator"></span>
-              <span class="meta-item"><b>Local</b> processing</span>
-              <span class="meta-separator"></span>
-              <span class="meta-item"><b>Alpha</b> exports</span>
-            </div>
-          </div>
-          <div class="hero-art" aria-label="Illustration of a video frame being turned into a clean cutout">
-            <div class="art-window">
-              <div class="art-bar"><i></i><i></i><i></i><span>scene_014.mov</span></div>
-              <div class="art-canvas">
-                <div class="art-grid"></div>
-                <div class="art-person"><span class="head"></span><span class="body"></span></div>
-                <div class="art-mask"></div>
-                <div class="art-scan"></div>
-                <div class="art-label">alpha matte</div>
-              </div>
-              <div class="art-timeline"><span class="art-track"></span><i class="kf kf-a"></i><i class="kf kf-b"></i><i class="kf kf-c"></i><span class="playhead"></span></div>
-            </div>
-            <div class="character-slot" aria-label="Character placeholder slot">
-              <span class="character-slot-label">character slot</span>
-              <i class="character-silhouette" aria-hidden="true"></i>
-            </div>
-            <div class="art-orbit orbit-a"></div>
-            <div class="art-orbit orbit-b"></div>
-          </div>
-        </section>
 
-        <section class="section start-section" id="start" data-searchable="quick start first steps import video content preset point segment propagate">
-          <div class="section-heading">
-            <p class="section-kicker">01 / First five minutes</p>
-            <h2>Start with one good frame.</h2>
-            <p>You do not need to understand the whole app before making a useful matte. Follow this path, then open the advanced tools when you need them.</p>
-          </div>
-          <div class="step-grid">
-            <article class="step-card" data-searchable="open video import clip drag drop"><span class="step-index">01</span><h3>Open a video</h3><p>Use <b>File → Open Video</b> or drop a clip onto the window.</p><span class="card-link">Ctrl + O</span></article>
-            <article class="step-card" data-searchable="content preset anime human object amv"><span class="step-index">02</span><h3>Pick a content preset</h3><p>Choose Anime/AMV, Human, or Object so the model starts with the right bias.</p><span class="card-link">Right panel</span></article>
-            <article class="step-card" data-searchable="point prompt include exclude click segment"><span class="step-index">03</span><h3>Point at the subject</h3><p>Left-click to include. Right-click to exclude. Then press <b>Segment Frame</b>.</p><span class="card-link">Point tool</span></article>
-            <article class="step-card" data-searchable="propagate track timeline keyframe"><span class="step-index">04</span><h3>Track the shot</h3><p>Use <b>Propagate to End</b> and add a correction keyframe when the subject changes.</p><span class="card-link">Propagation</span></article>
-            <article class="step-card" data-searchable="inspect qc matte export"><span class="step-index">05</span><h3>Inspect, then export</h3><p>Open the QC inspector, fix the edge, then choose PNG, ProRes, or H.264.</p><span class="card-link">Ctrl + Shift + M</span></article>
-          </div>
-        </section>
-
-        <section class="section band-section" id="workflow" data-searchable="workflow propagation brush keyframes scene cuts shot profiles post process edge softness soft alpha coverage ramp antialias matte edge spill despill fringe alpha key colour cast protect area jagged hair">
-          <div class="section-heading">
-            <p class="section-kicker">02 / The editing loop</p>
-            <h2>Every correction has a place.</h2>
-            <p>Better Brush separates semantic tracking from edge craft. Use the fast path for the subject, then the focused tools for the parts that need an editor’s eye.</p>
-          </div>
-          <div class="workflow-list">
-            <article class="workflow-row"><div class="workflow-number">01</div><div class="workflow-icon icon-points" aria-hidden="true"></div><div><h3>Prompt the subject</h3><p>Use positive and negative points on the frame that best represents the shot. The prompt stays in the project, so you can return to it.</p></div><span class="workflow-tag">SAM 2 / 3.1</span></article>
-            <article class="workflow-row"><div class="workflow-number">02</div><div class="workflow-icon icon-propagate" aria-hidden="true"></div><div><h3>Propagate with intent</h3><p>Track forward or backward through a shot. Scene cuts stop propagation naturally, so edits do not leak into the next shot.</p></div><span class="workflow-tag">Keyframes</span></article>
-            <article class="workflow-row"><div class="workflow-number">03</div><div class="workflow-icon icon-brush" aria-hidden="true"></div><div><h3>Correct locally</h3><p>Switch to the Brush, add or erase small areas, and keep the change scoped to the frame that needs it.</p></div><span class="workflow-tag">Non-destructive</span></article>
-            <article class="workflow-row"><div class="workflow-number">04</div><div class="workflow-icon icon-profile" aria-hidden="true"></div><div><h3>Tune per shot</h3><p>Give an anime close-up, a live-action plate, or a graphic overlay its own edge, temporal, and detail settings.</p></div><span class="workflow-tag">Profiles</span></article>
-            <article class="workflow-row"><div class="workflow-number">05</div><div class="workflow-icon icon-profile" aria-hidden="true"></div><div><h3>Finish the edge</h3><p>Exports carry a real coverage ramp instead of a hard matte, so hair and motion blur composite smoothly. The spill cleaner removes background colour from the edge, and boxes let you clean one part of frame or shield detail that is genuinely the spill colour.</p></div><span class="workflow-tag">At export</span></article>
-          </div>
-        </section>
-
-        <section class="section" id="inspect" data-searchable="qc matte inspector coach hair spill holes flicker linked views source current">
-          <div class="section-heading">
-            <p class="section-kicker">03 / Quality control</p>
-            <h2>Look closer before you commit.</h2>
-            <p>The Matte QC Inspector turns a vague “it looks off” feeling into a small, actionable list.</p>
+        <section id="overview" data-searchable="overview introduction local-first ai rotoscoping studio privacy offline">
+          <p class="eyebrow">Documentation</p>
+          <h1>AI rotoscoping, <em>made clear.</em></h1>
+          <p class="lede">
+            Better Brush is a <strong>local-first AI rotoscoping studio</strong> for video editors.
+            Paint a few strokes, let the model propagate a clean matte across your shot,
+            refine the edges, and export production-ready alpha — all on your machine.
+          </p>
+          <div class="pill-row">
+            <span class="pill">🔒 100% local — footage never leaves your machine</span>
+            <span class="pill">⚡ GPU-accelerated propagation</span>
+            <span class="pill">🎬 Editor-friendly exports</span>
           </div>
           <div class="feature-grid">
-            <article class="feature-card accent-blue" data-searchable="qc inspector linked views zoom pan source frame current matte"><div class="feature-icon">◫</div><h3>Two views, one decision</h3><p>Compare the untouched source frame with the current matte and QC overlay. <b>Link views</b> mirrors zoom and panning; turn it off for independent inspection.</p><a href="#shortcuts">Open with Ctrl + Shift + M <span aria-hidden="true">→</span></a></article>
-            <article class="feature-card accent-green" data-searchable="hair detail spill holes flicker diagnostics"><div class="feature-icon">✦</div><h3>Evidence, not guesswork</h3><p>Hair/detail loss, background spill, holes, and edge flicker are highlighted where they happen, with a raw-versus-current score.</p><a href="#faq">Learn the checks <span aria-hidden="true">→</span></a></article>
-            <article class="feature-card accent-amber" data-searchable="qc coach local analysis tip database question answer settings"><div class="feature-icon">?</div><h3>QC Coach that stays local</h3><p>Type “the hair is too smooth” or “it’s too sharp” and get the opposite, correct direction of advice. Save a custom answer for your own studio’s habits.</p><a href="#cleanup">See the cleanup flow <span aria-hidden="true">→</span></a></article>
+            <article class="feature-card" data-searchable="stroke propagation ai tracking frames">
+              <h3>Stroke-guided AI</h3>
+              <p>A handful of foreground/background strokes on a keyframe is enough. The model builds a matte and tracks it through motion, occlusion and lighting changes.</p>
+            </article>
+            <article class="feature-card" data-searchable="edge refinement hair detail spill">
+              <h3>Edge-obsessed refinement</h3>
+              <p>Dedicated tools for hair, motion blur and semi-transparent regions, with colour evidence that shows exactly where detail is lost.</p>
+            </article>
+            <article class="feature-card" data-searchable="quality control qc coach offline deterministic">
+              <h3>Built-in quality control</h3>
+              <p>The Matte QC Inspector and QC Coach analyse every frame and suggest concrete fixes — deterministic, offline, reproducible.</p>
+            </article>
           </div>
         </section>
 
-        <section class="section band-section" id="cleanup" data-searchable="cleanup subtitles logo watermark low opacity white inpaint remove mask to end regenerate">
-          <div class="section-heading">
-            <p class="section-kicker">04 / Clean Up</p>
-            <h2>Subtitles and logos are different jobs.</h2>
-            <p>Use the target that matches the overlay. Subtitle detection stays separate from watermark detection, so one never widens the other.</p>
-          </div>
-          <div class="cleanup-grid">
-            <article class="cleanup-card"><div class="cleanup-badge blue">Auto or guided</div><h3>Remove subtitles</h3><p>Detects caption-shaped regions, then cleans them from the preview and exports. Draw a box when a caption is unusual or always on.</p><ul><li>Flickering captions use a clean temporal plate.</li><li>Always-on captions use per-frame glyph repair.</li></ul></article>
-            <article class="cleanup-card highlight"><div class="cleanup-badge green">Faint marks welcome</div><h3>Remove logos &amp; watermarks</h3><p>Corner marks, wordmarks, and low-opacity white overlays are detected with local contrast and temporal stability, then repaired with a feathered inpaint.</p><ul><li>Use <b>Mask to End</b> for smooth long-clip playback.</li><li>Use <b>Regenerate</b> when a repair needs a different grain.</li></ul></article>
-          </div>
-          <div class="callout"><span class="callout-mark">i</span><p><b>Best result:</b> draw a slightly larger box than the visible mark. The padding gives the repair room to remove anti-aliased edges and faint traces.</p></div>
+        <section id="start" data-searchable="quick start first shot five minutes tutorial">
+          <p class="eyebrow">02 — Quick start</p>
+          <h2>Your first matte in five minutes</h2>
+          <ol class="steps">
+            <li class="step-card" data-searchable="import footage drag drop">
+              <b>1. Import a clip</b>
+              <p>Drag a video file or image sequence into the timeline. Better Brush reads common edit-friendly formats directly.</p>
+            </li>
+            <li class="step-card" data-searchable="keyframe strokes paint foreground background">
+              <b>2. Paint strokes on a keyframe</b>
+              <p>Pick a representative frame. Green strokes mark the subject, red strokes mark the background. A few seconds of painting is usually enough.</p>
+            </li>
+            <li class="step-card" data-searchable="propagate track forward backward">
+              <b>3. Propagate</b>
+              <p>Press <button class="key" data-copy="Space">Space</button> to track the matte forward and backward from the keyframe. Watch the overlay as it solves.</p>
+            </li>
+            <li class="step-card" data-searchable="refine correct touch up">
+              <b>4. Refine where it matters</b>
+              <p>Jump to any drifting frame, add a corrective stroke, and re-propagate just that range. Corrections stay local.</p>
+            </li>
+            <li class="step-card" data-searchable="export alpha matte prores png">
+              <b>5. Export</b>
+              <p>Send a premultiplied or straight-alpha render to your editor. See <a href="#export">Export</a>.</p>
+            </li>
+          </ol>
         </section>
 
-        <section class="section" id="export" data-searchable="export png prores quicktime h264 alpha queue batch render destination presets">
-          <div class="section-heading">
-            <p class="section-kicker">05 / Delivery</p>
-            <h2>Export for the next tool.</h2>
-            <p>Choose alpha video for compositing, PNGs for another mask-aware pipeline, or H.264 for review and chroma-key work.</p>
+        <section id="workflow" data-searchable="workflow pipeline keyframes ranges correction">
+          <p class="eyebrow">03 — Workflow</p>
+          <h2>How a shot flows</h2>
+          <p>Better Brush treats rotoscoping as a <strong>keyframe-and-correct</strong> loop rather than frame-by-frame labour:</p>
+          <div class="flow">
+            <span>Import</span><i>→</i><span>Stroke keyframe</span><i>→</i><span>Propagate</span><i>→</i><span>Inspect</span><i>→</i><span>Correct</span><i>→</i><span>Export</span>
           </div>
-          <div class="format-table-wrap"><table class="format-table"><thead><tr><th>Format</th><th>Best for</th><th>Alpha</th></tr></thead><tbody><tr><td><b>PNG Sequence</b></td><td>Compositors that prefer frame files</td><td><span class="yes">Yes</span></td></tr><tr><td><b>ProRes 4444</b></td><td>Production alpha video in MOV</td><td><span class="yes">Yes</span></td></tr><tr><td><b>QuickTime Animation</b></td><td>Large, predictable alpha files</td><td><span class="yes">Yes</span></td></tr><tr><td><b>H.264 MP4</b></td><td>Review, delivery, chroma-key backgrounds</td><td><span class="no">No</span></td></tr></tbody></table></div>
-          <div class="queue-banner"><div><p class="eyebrow-inline">Batch Render Queue</p><h3>Many clips, one calm finish.</h3><p>Save several projects, choose a preset and destination, then pause, resume, or retry each render without losing completed work.</p></div><a class="button secondary" href="#shortcuts">Ctrl + Shift + Q <span aria-hidden="true">→</span></a></div>
+          <ul class="tight">
+            <li><strong>Sparse keyframes.</strong> Work from a few well-chosen frames instead of every frame.</li>
+            <li><strong>Local corrections.</strong> A new stroke only re-solves the surrounding range — the rest of the shot is untouched.</li>
+            <li><strong>Reproducible results.</strong> The same strokes and settings always produce the same matte.</li>
+          </ul>
         </section>
 
-        <section class="section band-section" id="shortcuts" data-searchable="keyboard shortcuts hotkeys ctrl shift b space brush point play timeline">
-          <div class="section-heading">
-            <p class="section-kicker">06 / Reference</p>
-            <h2>Keep your hands on the work.</h2>
-            <p>These are the shortcuts worth memorizing. Every action is still available from the menu if you prefer clicking.</p>
+        <section id="mattes" data-searchable="mattes refinement edges hair motion blur transparency feather">
+          <p class="eyebrow">04 — Mattes &amp; refinement</p>
+          <h2>Edges that hold up</h2>
+          <div class="feature-grid">
+            <article class="feature-card" data-searchable="hair fine detail refine brush">
+              <h3>Hair &amp; fine detail</h3>
+              <p>A dedicated refinement pass recovers strand-level detail the base matte misses, without sharpening the whole edge.</p>
+            </article>
+            <article class="feature-card" data-searchable="motion blur semi transparent glass">
+              <h3>Motion blur &amp; transparency</h3>
+              <p>Soft regions stay soft. Better Brush keeps partial alpha where the image genuinely calls for it.</p>
+            </article>
+            <article class="feature-card" data-searchable="spill background colour contamination decontaminate">
+              <h3>Spill control</h3>
+              <p>Edge colour decontamination removes background bleed so the matte composites cleanly over any plate.</p>
+            </article>
           </div>
-          <div class="shortcut-grid">
-            <div class="shortcut-group"><h3>Core editing</h3><div class="shortcut-row"><span>Open video</span><button class="key" data-copy="Ctrl+O">Ctrl O</button></div><div class="shortcut-row"><span>Segment current frame</span><button class="key" data-copy="Segment Frame">Segment Frame</button></div><div class="shortcut-row"><span>Point / Brush</span><button class="key" data-copy="B">B</button></div><div class="shortcut-row"><span>Play / pause</span><button class="key" data-copy="Space">Space</button></div><div class="shortcut-row"><span>Previous / next frame</span><button class="key" data-copy="← / →">← →</button></div></div>
-            <div class="shortcut-group"><h3>Precision</h3><div class="shortcut-row"><span>Matte QC</span><button class="key" data-copy="Ctrl+Shift+M">Ctrl ⇧ M</button></div><div class="shortcut-row"><span>Performance</span><button class="key" data-copy="Ctrl+Shift+G">Ctrl ⇧ G</button></div><div class="shortcut-row"><span>Shot profiles</span><button class="key" data-copy="Ctrl+Shift+P">Ctrl ⇧ P</button></div><div class="shortcut-row"><span>Version history</span><button class="key" data-copy="Ctrl+Shift+H">Ctrl ⇧ H</button></div><div class="shortcut-row"><span>Export</span><button class="key" data-copy="Ctrl+E">Ctrl E</button></div></div>
-            <div class="shortcut-group"><h3>Timeline</h3><div class="shortcut-row"><span>Undo / redo</span><button class="key" data-copy="Ctrl+Z / Ctrl+Y">Ctrl Z / Y</button></div><div class="shortcut-row"><span>Set in / out</span><button class="key" data-copy="I / O">I / O</button></div><div class="shortcut-row"><span>Clear range</span><button class="key" data-copy="X">X</button></div><div class="shortcut-row"><span>Erase while brushing</span><button class="key" data-copy="Shift">Shift</button></div><div class="shortcut-row"><span>Brush size</span><button class="key" data-copy="[ / ]">[ / ]</button></div></div>
-          </div>
-          <p class="copy-hint">Click a shortcut chip to copy it.</p>
         </section>
 
-        <section class="section" id="editions" data-searchable="editions lite pro free watermark multi object audio resolution license">
-          <div class="section-heading">
-            <p class="section-kicker">07 / Editions</p>
-            <h2>Start free. Upgrade when the work needs it.</h2>
-            <p>The core rotoscoping loop is available in Lite. Pro removes delivery friction for professional pipelines.</p>
+        <section id="inspect" data-searchable="matte qc inspector evidence hair loss spill holes flicker link views">
+          <p class="eyebrow">05 — Matte QC Inspector</p>
+          <h2>See problems before your client does</h2>
+          <p>Open with <strong>Inspect → Matte QC Inspector</strong> (<button class="key" data-copy="Ctrl+Shift+M">Ctrl+Shift+M</button>).</p>
+          <ul class="tight">
+            <li><strong>Source frame</strong> on the left, <strong>current matte + QC overlay</strong> on the right.</li>
+            <li><strong>Link views</strong> (on by default) mirrors zoom and pan across both panes; <strong>Reset view</strong> returns to 100%.</li>
+            <li>Raw-versus-current scores and changed-pixel counts quantify every fix.</li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Evidence</th><th>What it detects</th></tr></thead>
+              <tbody>
+                <tr><td><b>Hair/detail loss</b></td><td>Fine structures missing from the matte</td></tr>
+                <tr><td><b>Background spill</b></td><td>Background colour bleeding into the edge</td></tr>
+                <tr><td><b>Enclosed holes</b></td><td>Gaps inside the subject that should be filled</td></tr>
+                <tr><td><b>Edge flicker</b></td><td>Frame-to-frame instability at the boundary</td></tr>
+              </tbody>
+            </table>
           </div>
-          <div class="edition-grid"><article class="edition-card"><p class="edition-label">Lite</p><h3>Free to explore</h3><p class="edition-price">€0</p><ul><li>Point prompts and brush correction</li><li>Propagation and post-processing</li><li>PNG, ProRes, and H.264 export</li></ul><a class="button secondary full" href="#start">Start with Lite</a></article><article class="edition-card pro"><div class="pro-ribbon">Pro</div><p class="edition-label">For production</p><h3>More room to deliver</h3><p class="edition-price">€5 <small>one-time</small></p><ul><li>Everything in Lite</li><li>Multi-object scenes</li><li>Original audio and higher resolution</li><li>Watermark-free exports</li></ul><a class="button primary full" href="https://sneg.dev/BetterBrush">Learn about Pro <span aria-hidden="true">→</span></a></article></div>
+          <p class="note">Reports are shape-safe, use boolean evidence masks, and never raise on empty or mismatched masks. Comparison reports use after-minus-before deltas — “improved” means lower severity.</p>
         </section>
 
-        <section class="section band-section" id="faq" data-searchable="faq troubleshooting hair flicker logo faint project video gpu export">
-          <div class="section-heading"><p class="section-kicker">08 / Common questions</p><h2>When the matte misbehaves.</h2><p>Start with the smallest change that addresses the problem.</p></div>
+        <section id="coach" data-searchable="qc coach tips settings suggestion offline deterministic complaints">
+          <p class="eyebrow">06 — QC Coach</p>
+          <h2>A coach that speaks your language</h2>
+          <p>The QC Coach is a <strong>local, deterministic, offline</strong> assistant inside the inspector. It turns complaints into concrete settings.</p>
+          <ol class="steps">
+            <li class="step-card"><b>1. Describe the issue</b><p>Pick a common complaint or type your own — e.g. “the hair is too smooth”.</p></li>
+            <li class="step-card"><b>2. Ask</b><p>Get a direct explanation and a recommended setting change, prioritised from the current QC report.</p></li>
+            <li class="step-card"><b>3. Save &amp; apply</b><p>Store the answer as a custom tip, or apply the suggested profile to the current shot in one click.</p></li>
+          </ol>
+          <p class="note">The matcher has explicit polarity: “too smooth” and “too sharp” require opposite settings and are never merged into one keyword bag. Answers and recent questions persist locally between sessions.</p>
+        </section>
+
+        <section id="cleanup" data-searchable="cleanup repair remove object rig wire texture preserving inpainting">
+          <p class="eyebrow">07 — Cleanup &amp; repair</p>
+          <h2>Remove what shouldn't be there</h2>
+          <p>Beyond mattes, Better Brush ships a <strong>texture-preserving repair</strong> tool for removing rigs, wires, dust and unwanted objects.</p>
+          <ul class="tight">
+            <li>Paint over the offending region; the repair fills it with surrounding texture, not blur.</li>
+            <li>Repairs are <strong>reproducible</strong> and always available — no cloud round-trip.</li>
+            <li>Combine with a matte to constrain repairs to the subject or the background.</li>
+          </ul>
+        </section>
+
+        <section id="performance" data-searchable="performance monitor gpu vram temperature render time telemetry">
+          <p class="eyebrow">08 — Performance Monitor</p>
+          <h2>Know what your GPU is doing</h2>
+          <p>Open with <strong>Inspect → Performance Monitor</strong> (<button class="key" data-copy="Ctrl+Shift+G">Ctrl+Shift+G</button>). When the platform exposes telemetry, you get live:</p>
+          <ul class="tight">
+            <li>GPU utilization</li>
+            <li>Used and total VRAM</li>
+            <li>Temperature and thermal pressure</li>
+            <li>Estimated render time</li>
+          </ul>
+        </section>
+
+        <section id="export" data-searchable="export render alpha prores png exr sequence premultiplied straight nuke after effects premiere resolve">
+          <p class="eyebrow">09 — Export</p>
+          <h2>Out the door, into your edit</h2>
+          <div class="feature-grid">
+            <article class="feature-card" data-searchable="alpha prores 4444 video">
+              <h3>Video with alpha</h3>
+              <p>ProRes 4444 with straight or premultiplied alpha — drops straight into Premiere, Resolve or After Effects.</p>
+            </article>
+            <article class="feature-card" data-searchable="image sequence png exr">
+              <h3>Image sequences</h3>
+              <p>PNG or EXR sequences for VFX pipelines, with lossless 16-bit alpha where you need it.</p>
+            </article>
+            <article class="feature-card" data-searchable="matte only grayscale mask">
+              <h3>Matte-only renders</h3>
+              <p>Clean grayscale mattes for use as track mattes or luma keys in any compositor.</p>
+            </article>
+          </div>
+          <p class="note">Exports preserve your chosen colour space and frame rate, and filenames follow a consistent, script-friendly pattern.</p>
+        </section>
+
+        <section id="shortcuts" data-searchable="keyboard shortcuts hotkeys keys">
+          <p class="eyebrow">10 — Shortcuts</p>
+          <h2>Keep your hands on the keyboard</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+              <tbody>
+                <tr><td>Propagate / pause</td><td><button class="key" data-copy="Space">Space</button></td></tr>
+                <tr><td>Matte QC Inspector</td><td><button class="key" data-copy="Ctrl+Shift+M">Ctrl+Shift+M</button></td></tr>
+                <tr><td>Performance Monitor</td><td><button class="key" data-copy="Ctrl+Shift+G">Ctrl+Shift+G</button></td></tr>
+                <tr><td>Search these docs</td><td><button class="key" data-copy="/">/</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">💡 Click any shortcut on this page to copy it.</p>
+        </section>
+
+        <section id="faq" data-searchable="faq questions privacy internet gpu formats">
+          <p class="eyebrow">11 — FAQ</p>
+          <h2>Common questions</h2>
           <div class="faq-list">
-            <details open><summary>Why is my hair disappearing?</summary><p>Lower <b>Edge smoothness</b>, raise <b>Detail preservation</b>, and turn off temporal smoothing for a close-up. The QC Coach gives the same answer when you type “hair is too smooth”.</p></details>
-            <details><summary>Why do my exported edges look jagged?</summary><p>Raise <b>Edge softness</b> in the Shot Profile dialog. It anti-aliases the exported matte and removes the background colour from edge pixels, instead of writing hard 0/255 alpha. <b>0</b> restores a hard matte if a downstream tool needs one.</p></details>
-            <details><summary>Why does the edge flicker between frames?</summary><p>Enable temporal smoothing and use a two-frame window. If the subject is moving quickly, add a correction keyframe instead of over-smoothing the whole shot.</p></details>
-            <details><summary>A faint white watermark is still visible. What now?</summary><p>Use <b>Remove Logo</b>, choose the guided region, and draw a slightly larger box. Then press <b>Mask to End</b> so the same repair is applied consistently through the clip.</p></details>
-            <details><summary>Does Better Brush upload my footage?</summary><p>No. The desktop app is designed to keep processing local. Model files and project files stay under your control.</p></details>
-            <details><summary>What if I need to try a risky change?</summary><p>Create a checkpoint first. Version History stores recoverable project snapshots you can compare and restore.</p></details>
+            <details data-searchable="internet cloud offline privacy">
+              <summary>Does my footage leave my machine?</summary>
+              <p><b>No.</b> Better Brush is local-first: inference, QC and repair all run on your hardware. No account, no upload, no cloud dependency.</p>
+            </details>
+            <details data-searchable="gpu requirements vram">
+              <summary>Do I need a GPU?</summary>
+              <p>A dedicated GPU is strongly recommended for interactive propagation. The Performance Monitor shows utilization and VRAM so you can size shots to your hardware.</p>
+            </details>
+            <details data-searchable="formats import export compatibility">
+              <summary>Which formats are supported?</summary>
+              <p>Common edit-friendly video formats on import; ProRes 4444, PNG and EXR on export. Matte-only renders are also available.</p>
+            </details>
+            <details data-searchable="corrections fix drift mistakes">
+              <summary>What if the matte drifts mid-shot?</summary>
+              <p>Add a corrective stroke on the drifting frame and re-propagate. Corrections are local — only the affected range is re-solved.</p>
+            </details>
+            <details data-searchable="reproducible deterministic same result">
+              <summary>Are results reproducible?</summary>
+              <p>Yes. The same footage, strokes and settings always produce the same matte — essential for revisions and team handoffs.</p>
+            </details>
           </div>
         </section>
 
-        <section class="section roadmap-section" id="roadmap" data-searchable="roadmap next ideas future product direction">
-          <div class="section-heading"><p class="section-kicker">09 / What’s next</p><h2>Built around the editor’s feedback loop.</h2><p>Public product direction: more quality where it is visible, more speed where it is measurable, and more reversibility everywhere else.</p></div>
-          <div class="roadmap-grid"><article><span>01</span><h3>Soft alpha matting</h3><p>Shipped. Exports now carry a real coverage ramp instead of a hard matte, with edge colour decontaminated, so hair and motion blur composite smoothly.</p></article><article><span>02</span><h3>Faster propagation</h3><p>Make long clips practical on the hardware the app already detects.</p></article><article><span>03</span><h3>Shot-aware suggestions</h3><p>Suggest bounded settings from measured shot behavior, never silently.</p></article><article><span>04</span><h3>Safe experiments</h3><p>Make profile changes, cleanup seeds, and model trials one-click reversible.</p></article><article><span>05</span><h3>Pre-flight QC</h3><p>Catch failed shots, flicker hotspots, and residue before a long render.</p></article></div>
-        </section>
-
-        <section class="closing-banner" data-searchable="local private offline production promise"><div><p class="eyebrow-inline">The short promise</p><h2>Source clip in.<br>Clean matte out.</h2><p>Keep the footage. Keep the decisions. Keep the undo button.</p></div><a class="button primary" href="#start">Back to the quick start <span aria-hidden="true">→</span></a></section>
+        <footer class="site-footer">
+          <a href="#top">↑ Back to top</a>
+        </footer>
       </main>
     </div>
-
-    <footer class="footer"><div class="footer-brand"><img src="assets/betterbrush-logo.png" alt="" width="24" height="24"><span>Better Brush Docs</span></div><p>Public product documentation · Local-first rotoscoping for editors</p><a href="#top">Back to top <span aria-hidden="true">↑</span></a></footer>
   </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>
