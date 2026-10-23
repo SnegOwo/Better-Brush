@@ -560,19 +560,21 @@ Shot profiles resolve in this order:
 
 ---
 
-## 19. Editions and pricing
+## 19. Licensing
 
-| Capability | Lite | Pro |
-|---|---|---|
-| Point prompts and brush | Yes | Yes |
-| PNG / ProRes / H.264 | Yes | Yes |
-| Multi-object scenes | — | Yes |
-| Original audio | — | Yes |
-| Watermark-free export | — | Yes |
-| Higher-resolution export | — | Yes |
+Better Brush **1.0.0** is free and fully unlocked: there is no "Lite"/"Pro"
+split, no activation keys, no watermark and nothing to buy. Every capability —
+point prompts and brush, PNG / ProRes / QuickTime / H.264 export, exports up to
+8K, multi-object scenes, original-audio muxing, learned matting and AI object
+removal — is included for everyone.
 
-- **Free to start** — the Lite edition covers the core workflow.
-- **Pro is a one-time payment** (€5) — no subscription.
+The source is published under the **Functional Source License 1.1, MIT Future
+License** (FSL-1.1-MIT): use, modify and share it freely, including for
+monetised YouTube / TikTok / AMV videos; reselling it or shipping it inside a
+competing paid tool is not allowed, and the license becomes MIT on 2028-10-23.
+Some bundled model weights (MatAnyone, NTU S-Lab License 1.0; MiniMax-Remover,
+CC-BY-NC-4.0) keep their own non-commercial terms. See `LICENSE` and
+`THIRD-PARTY-NOTICES.md`.
 
 ---
 

@@ -346,14 +346,10 @@ Use checkpoints before experimenting with a model change, aggressive smoothing, 
 
 ## 16. Editions and local files
 
-| Capability | Lite | Pro |
-|---|---:|---:|
-| Point prompts and brush | Yes | Yes |
-| PNG / ProRes / H.264 | Yes | Yes |
-| Multi-object scenes | — | Yes |
-| Original audio | — | Yes |
-| Watermark-free export | — | Yes |
-| Higher-resolution export | — | Yes |
+There is only one edition: **free, fully unlocked**. No Lite/Pro split, no
+activation, no watermark — multi-object scenes, original audio and
+higher-resolution exports are all included. The source is published under
+FSL-1.1-MIT (see `LICENSE`).
 
 Everything is local. The app stores projects where you save them, models under `checkpoints/`, and user preferences under the Better Brush application-data directory.
 

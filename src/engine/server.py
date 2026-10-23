@@ -168,12 +168,8 @@ def _default_pipeline(request, on_progress=None, cancel_event=None):
 
 
 def _license_is_pro() -> bool:
-    try:
-        from src.core.licensing import is_pro
-
-        return bool(is_pro())
-    except Exception:  # noqa: BLE001 - licensing is best-effort telemetry here
-        return False
+    """Better Brush is free — every engine instance is fully unlocked."""
+    return True
 
 
 class EngineServer(ThreadingHTTPServer):

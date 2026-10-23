@@ -10,15 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BUSL--1.1-blue" alt="License: BUSL-1.1" /></a>
-  <a href="https://sneg.dev/BetterBrush"><img src="https://img.shields.io/badge/get%20pro-%E2%82%AC5%20one--time-2ea043" alt="Get Pro" /></a>
-  <img src="https://img.shields.io/badge/version-0.3.0-blueviolet" alt="Version 0.3.0" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-FSL--1.1--MIT-2ea043" alt="License: FSL-1.1-MIT (source-available, becomes MIT in 2028)" /></a>
+  <img src="https://img.shields.io/badge/version-1.0.0-blueviolet" alt="Version 1.0.0" />
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python: 3.11+" />
-  <img src="https://img.shields.io/badge/tests-471%20passing-brightgreen" alt="Tests: 471 passing" />
+  <img src="https://img.shields.io/badge/tests-524%20passing-brightgreen" alt="Tests: 524 passing" />
 </p>
 
-<p align="center"><b>100% local.</b> Your footage never leaves your machine.</p>
+<p align="center"><b>100% local</b> · <b>100% free</b> · <b>source-available</b></p>
 
 ---
 
@@ -113,16 +112,29 @@ drive the same local engine, so install one or both. Windows, AE 2022+ / Premier
 **[after-effects/README.md](after-effects/README.md)** and
 **[premiere-pro/README.md](premiere-pro/README.md)**.
 
-## Editions
+## Free, and fully unlocked
 
-| | **Lite** — free | **Pro** — €5 one-time |
-|---|:---:|:---:|
-| Segmentation, brush, propagation, learned matting, object removal | ✅ | ✅ |
-| PNG / ProRes / QuickTime / MP4 export | ✅ ≤1080p | ✅ ≤8K |
-| Multi-object scenes · original audio · recoding · no watermark | ❌ | ✅ |
+Better Brush is free, and **every feature is included** — no "Lite" tier, no
+activation keys, no watermark, no account: segmentation, brush, propagation,
+learned matting, AI object removal, PNG / ProRes / QuickTime / MP4 export up
+to 8K, multi-object scenes, original-audio muxing and Library recoding.
 
-Keys are issued offline (HMAC-signed) and activated under **Help → Activate Pro…** — no
-account, no server, no telemetry. [Get Pro →](https://sneg.dev/BetterBrush)
+## License
+
+Better Brush is **source-available** under the
+[Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT).
+You can read, fork, modify, build and share it, and you can use it to make
+**any video — including monetised YouTube, TikTok and AMV edits**. The videos
+you create are yours.
+
+You may **not** resell Better Brush, sell the source code, or ship it inside a
+competing or paid rotoscoping/video tool. On **2028-10-23** the license
+automatically converts to **MIT**, and those restrictions disappear.
+
+Some bundled AI model weights are licensed separately for non-commercial use
+(MatAnyone 2, NTU S-Lab License 1.0; MiniMax-Remover, CC-BY-NC-4.0). Those are
+third-party terms and are unaffected by the code license — review
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) if you plan commercial work.
 
 ## Documentation
 
@@ -143,7 +155,7 @@ Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
 ## Development
 
 ```bash
-python -m pytest tests/ -q                    # 471 tests, no GPU required
+python -m pytest tests/ -q                    # 524 tests, no GPU required
 python -m ruff check src/                      # lint
 pyinstaller --clean better_brush.spec          # developer build
 ```
@@ -152,12 +164,14 @@ Vendored packages and licenses: [src/vendor/README.md](src/vendor/README.md).
 
 ## License
 
-Business Source License 1.1 (BUSL-1.1) — see [LICENSE](LICENSE). Personal, evaluation and
-educational use is free; commercial production use requires a license. Converts to Apache
-License 2.0 on 2030-09-11.
+Source-available under the
+[Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT):
+free to use, modify and share; no reselling or competing paid products; becomes
+MIT on 2028-10-23. Third-party components keep their own licenses — see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 <div align="center">
 
-**© 2026 Sneg — Sneg HQ, a company of Lugunica** · [sneg.dev](https://sneg.dev) · [Get Pro](https://sneg.dev/BetterBrush)
+**© 2026 Sneg — Sneg HQ, a company of Lugunica** · [sneg.dev](https://sneg.dev)
 
 </div>

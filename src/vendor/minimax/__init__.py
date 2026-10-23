@@ -1,11 +1,11 @@
-# Copyright (c) 2025 MiniMax-Remover authors.
+# Copyright (c) 2025 MiniMax-Remover authors (Bojia Zi et al.).
 # All rights reserved.
 #
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-#
 # Upstream: https://github.com/zibojia/MiniMax-Remover
-# (transformer_minimax_remover.py)
+# (transformer_minimax_remover.py). The upstream repository publishes no license
+# file, so its source remains all rights reserved by its authors; this adapted
+# module is included for interoperability, with attribution retained. See
+# NOTICE.md in this directory for provenance and the list of modifications.
 #
 # Better Brush modifications:
 #   * class renamed Transformer3DModel -> MinimaxRemoverTransformer3DModel

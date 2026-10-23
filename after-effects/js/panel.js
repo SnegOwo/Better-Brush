@@ -22,7 +22,6 @@
   var BOOT_TIMEOUT_MS = 120000;
   var SELECTION_POLL_MS = 1500;
   var HEALTH_POLL_MS = 5000;
-  var PRO_REQUIRED = "__pro_required__";
 
   /* Engine progress stages, in the order the pipeline reports them. "load" is
    * the cold-start model load: it has no frame count, so it reports 0/0 and
@@ -536,7 +535,6 @@
   /* ------------------------------------------------------------------ */
   function render() {
     var sel = state.selection;
-    var pro = state.health ? !!state.health.pro : true;
     var plan = {
       tone: "",
       icon: "film",
@@ -642,19 +640,11 @@
       ui.heroAction.setAttribute("data-action", plan.action.value);
     }
 
-    // Pro is a client-side gate, same as the desktop app.
-    show(ui.notice, !pro);
-    if (!pro) {
-      ui.notice.className = "notice";
-      ui.notice.textContent =
-        "Better Brush Pro is required. Activate it in the desktop app, then reopen this panel.";
-    }
-
     ui.noticeDetail.textContent = state.errDetail || "";
     show(ui.noticeDetail, !!state.errDetail);
     ui.noticeDetail.className = "notice-detail";
 
-    ui.runBtn.disabled = state.running || !pro || !(sel && sel.ok);
+    ui.runBtn.disabled = state.running || !(sel && sel.ok);
     show(ui.cancelBtn, state.running);
     updateModelNote();
     updateMattingNote();
@@ -1436,9 +1426,6 @@
 
     ensureEngine()
       .then(function () {
-        if (state.health && state.health.pro === false) {
-          throw new Error(PRO_REQUIRED);
-        }
         return postJob(jobBody(state.source));
       })
       .then(function (job) {
@@ -1447,15 +1434,7 @@
       })
       .catch(function (err) {
         var message = err && err.message ? err.message : String(err);
-        if (message === PRO_REQUIRED) {
-          failRun(
-            "Better Brush Pro is required for the After Effects panel.",
-            "internal",
-            false
-          );
-        } else {
-          failRun(message, err && err.kind ? err.kind : "internal", false);
-        }
+        failRun(message, err && err.kind ? err.kind : "internal", false);
       });
   }
 

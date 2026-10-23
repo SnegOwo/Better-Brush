@@ -95,7 +95,7 @@ class InferenceWorker(QThread):
             if self._sam is not None:
                 try:
                     torch.cuda.empty_cache()
-                except Exception:  # noqa: BLE001 - cache clear is best effort
+                except Exception:  # noqa: BLE001, S110 - cache clear is best effort
                     pass
             self.finished.emit(
                 RuntimeError(
@@ -284,7 +284,7 @@ class PropagationWorker(QThread):
             logger.error("Propagation ran out of GPU memory")
             try:
                 torch.cuda.empty_cache()
-            except Exception:  # noqa: BLE001 - cache clear is best effort
+            except Exception:  # noqa: BLE001, S110 - cache clear is best effort
                 pass
             self.finished.emit(
                 RuntimeError(

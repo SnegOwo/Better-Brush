@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-17
+
+### Changed
+- **Better Brush is now completely free.** The Lite/Pro split, the offline
+  activation keys and the export watermark are gone: every feature —
+  multi-object projects, exports up to 8K, original-audio muxing, learned
+  matting, AI object removal and Library recoding — is unlocked for everyone,
+  with nothing to buy and nothing to activate. The baked-in signing secret and
+  the key-issuing tool have been removed.
+- **Licensed under FSL-1.1-MIT** (see `LICENSE`): free to use, modify and
+  share, including for monetised YouTube / TikTok / AMV videos; reselling it or
+  shipping it inside a competing paid tool is not allowed; becomes MIT on
+  2028-10-23. The MatAnyone (NTU S-Lab License 1.0) and MiniMax-Remover
+  (CC-BY-NC-4.0) model weights keep their own non-commercial terms — full
+  attributions are in `THIRD-PARTY-NOTICES.md`.
+- Application version bumped to 1.0.0 across the package and the Windows
+  executable's version resource.
+
 ### Added
 - **`keep_audio` on the engine's job request.** Mux the source file's own audio
   into the alpha movie, as a stream copy, windowed to the frames the job actually

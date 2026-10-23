@@ -12,9 +12,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
-from src.core import licensing
 from src.utils.proc import no_window
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,12 @@ def has_audio_stream(path: Path | str, ffmpeg_path: str | None = None) -> bool:
     ]
     try:
         done = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30, **no_window()
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            **no_window(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("ffprobe could not be run (%s); assuming audio", exc)
@@ -258,35 +262,13 @@ class Exporter:
         solid color and disables alpha — for H.264 MP4 exports that will be
         chroma-keyed (green/blue screen) by editors without alpha support.
 
-        ``watermark`` defaults to the edition: Lite exports carry a small
-        "Better Brush" watermark; Pro exports are clean.
+        ``watermark`` is accepted for callers that still pass it but is never
+        drawn: Better Brush is free, so every export is watermark-free.
         """
         if not self._ffmpeg_available():
             raise RuntimeError(
                 "ffmpeg not found — reinstall Better Brush or add ffmpeg to PATH"
             )
-
-        pro = licensing.is_pro()
-
-        # ── Lite: cap resolution + audio, add watermark (codecs are shared) ──
-        if not pro:
-            if resolution:
-                w, h = resolution
-                capped = (
-                    min(int(w), licensing.LITE_MAX_WIDTH),
-                    min(int(h), licensing.LITE_MAX_HEIGHT),
-                )
-                if capped != (int(w), int(h)):
-                    logger.info(
-                        "Lite edition: scaling %sx%s -> %sx%s",
-                        w,
-                        h,
-                        *capped,
-                    )
-                resolution = capped
-            audio_source = None  # original-audio muxing is a Pro feature
-        if watermark is None:
-            watermark = not pro
 
         if fmt == "prores":
             codec, pix_fmt, ext = "prores_ks", "yuva444p10le", "mov"
@@ -335,8 +317,6 @@ class Exporter:
                 rgba = self._compose_rgba(
                     frame, mask, background=background, alpha=alpha
                 )
-                if watermark:
-                    rgba = self._draw_watermark(rgba)
                 Image.fromarray(rgba, mode="RGBA").save(tmp_path / f"frm_{i:06d}.png")
                 if on_progress is not None:
                     on_progress(i + 1, total)
@@ -456,35 +436,6 @@ class Exporter:
         rgba[:, :, :3] = rgb
         rgba[:, :, 3] = np.clip(alpha * 255.0, 0.0, 255.0).astype(np.uint8)
         return rgba
-
-    @staticmethod
-    def _draw_watermark(rgba: np.ndarray) -> np.ndarray:
-        """Burn a large, soft 'Better Brush' mark into the bottom-right.
-
-        Text is drawn over the subject only (masked pixels), so transparent
-        exports keep a clean alpha channel while every Lite video still
-        carries a visible, watermark. No shadow/outline — just translucent
-        type so it reads clearly but never hides the footage.
-        """
-        h, w = rgba.shape[:2]
-        if h < 60 or w < 120:
-            return rgba  # too small to watermark legibly
-        img = Image.fromarray(rgba, mode="RGBA")
-        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        size = max(24, min(96, h // 8))
-        try:
-            font = ImageFont.truetype("arial.ttf", size)
-        except Exception:  # noqa: BLE001 - fall back to the default bitmap font
-            font = ImageFont.load_default()
-        text = "Better Brush"
-        text_w = draw.textlength(text, font=font)
-        pad = max(16, h // 14)
-        top = h - int(size * 1.35) - pad
-        left = w - int(text_w) - pad
-        translucent = (235, 235, 238, 100)
-        draw.text((left, top), text, font=font, fill=translucent)
-        return np.asarray(Image.alpha_composite(img, overlay), dtype=np.uint8)
 
     def _ffmpeg_available(self) -> bool:
         return shutil.which(self._ffmpeg_path) is not None

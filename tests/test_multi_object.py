@@ -59,12 +59,9 @@ def _stub_video(win: MainWindow, tmp_path: Path, name: str = "clip.mp4") -> None
 def isolated_settings(tmp_path, monkeypatch):
     """Keep settings / autosave / registry files inside tmp_path."""
     monkeypatch.setattr(ProjectManager, "settings_dir", lambda: tmp_path)
-    # Multi-object editing is a Pro feature — run these tests with Pro active.
-    key = licensing.issue_key("CI Tester")
-    ok, msg = licensing.activate(key)
-    assert ok, msg
+    # Multi-object editing is included in the free app.
+    assert licensing.is_pro()
     yield
-    licensing.deactivate()
 
 
 def test_initial_single_object():

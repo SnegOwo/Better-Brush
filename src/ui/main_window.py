@@ -45,7 +45,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.core import licensing
 from src.core.config import AppConfig
 from src.core.constants import APP_VERSION
 from src.core.history import ProjectHistory
@@ -87,8 +86,6 @@ from src.processing.training_data import dataset_summary, export_clip
 from src.processing.video_reader import VideoReader
 from src.ui.assets import app_icon, logo_path
 from src.ui.components import CollapsibleSection, DiagnosticsConsole, Separator
-from src.ui.components.activation_dialog import ActivationDialog
-from src.ui.components.edition import LiteNoticeDialog, ProFeaturesDialog
 from src.ui.components.export_dialog import ExportDialog
 from src.ui.components.export_progress import ExportProgressDialog
 from src.ui.components.gpu_monitor_dialog import GpuMonitorDialog
@@ -538,14 +535,6 @@ class MainWindow(QMainWindow):
 
         help_menu = menubar.addMenu("&Help")
 
-        self._act_pro_features = QAction("Pro vs &Lite…", self)
-        self._act_pro_features.triggered.connect(self._show_pro_features)
-        help_menu.addAction(self._act_pro_features)
-
-        self._act_activate_pro = QAction("&Activate Pro…", self)
-        self._act_activate_pro.triggered.connect(self._show_activation)
-        help_menu.addAction(self._act_activate_pro)
-
         tutorial_act = QAction("&Quick Tutorial", self)
         tutorial_act.triggered.connect(lambda: self._show_tutorial(parent=self))
         help_menu.addAction(tutorial_act)
@@ -567,8 +556,6 @@ class MainWindow(QMainWindow):
         about_act = QAction("&About Better Brush", self)
         about_act.triggered.connect(self._on_about)
         help_menu.addAction(about_act)
-
-        self._on_edition_changed()  # sync the Pro action label on startup
 
     def _setup_central_widget(self) -> None:
         central = QWidget()
@@ -766,10 +753,7 @@ class MainWindow(QMainWindow):
         obj_row.addWidget(self._btn_object_color)
         self._btn_add_object = QPushButton("+")
         self._btn_add_object.setFixedWidth(28)
-        if licensing.is_pro():
-            self._btn_add_object.setToolTip("Add object — multiple subjects (Pro)")
-        else:
-            self._btn_add_object.setToolTip("Add object (2nd + is a Pro feature)")
+        self._btn_add_object.setToolTip("Add object — cut out multiple subjects")
         self._btn_add_object.clicked.connect(self._add_object)
         obj_row.addWidget(self._btn_add_object)
         self._btn_delete_object = QPushButton("\u2212")
@@ -1455,23 +1439,6 @@ class MainWindow(QMainWindow):
             "border: none; padding-right: 8px;"
         )
         self._status.addPermanentWidget(self._lbl_context)
-
-        # Edition upsell pill (Lite only) — hidden entirely for Pro.
-        self._btn_edition = QPushButton(
-            f"Lite (free) · Pro €{licensing.PRO_PRICE_EUR} at {licensing.PRO_URL}"
-        )
-        self._btn_edition.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_edition.setStyleSheet(
-            "QPushButton { background: #26262b; border: 1px solid #3a3a42; "
-            "border-radius: 9px; color: #ffb454; font-size: 10px; padding: 2px 8px; }"
-            "QPushButton:hover { border-color: #4a9eff; color: #ffd18a; }"
-        )
-        self._btn_edition.setToolTip(
-            "You are on the free Lite edition. See what Pro adds."
-        )
-        self._btn_edition.clicked.connect(self._show_pro_features)
-        self._status.addPermanentWidget(self._btn_edition)
-        self._on_edition_changed()  # hide the pill entirely for Pro users
 
     # ──────────────────────────────────────────────────────────────────────
     # Static helpers
@@ -2638,15 +2605,6 @@ class MainWindow(QMainWindow):
         return obj
 
     def _add_object(self) -> None:
-        if not licensing.is_pro() and len(self._objects) >= 1:
-            QMessageBox.information(
-                self,
-                "Pro feature",
-                "Editing more than one object is a Better Brush Pro feature.\n\n"
-                f"Upgrade €{licensing.PRO_PRICE_EUR} (one-time) at "
-                f"{licensing.PRO_URL} to cut out several subjects at once.",
-            )
-            return
         obj = self._new_object()
         self._set_active_object(obj.obj_id)
         self._status.showMessage(f"Added object - {obj.name}")
@@ -2949,22 +2907,15 @@ class MainWindow(QMainWindow):
         dlg = WelcomeDialog(self)
         dlg.exec()
         self._on_welcome_result(dlg.choice)
-        self._maybe_show_lite_notice()
         # Quick tutorial on the very first launch
         if ProjectManager.is_first_run():
             ProjectManager.set_first_run_done()
             QTimer.singleShot(0, lambda: self._show_tutorial(parent=self))
 
     def _maybe_show_lite_notice(self) -> None:
-        """One-time WinRAR-style Lite notice; never repeats (even after reset)."""
-        if licensing.is_pro():
-            return
-        settings = ProjectManager.load_user_settings()
-        if settings.get("lite_notice_shown"):
-            return
-        settings["lite_notice_shown"] = True
-        ProjectManager.save_user_settings(settings)
-        LiteNoticeDialog(self).exec()
+        """Kept for backwards compatibility — Better Brush is free, so there is
+        no Lite/Pro notice to show."""
+        return
 
     def show_welcome(self) -> None:
         """Public hook called by the app bootstrap to open the launcher."""
@@ -2976,35 +2927,6 @@ class MainWindow(QMainWindow):
             self._load_video(path)
         elif kind == "open" and path is not None:
             self._open_project(path)
-
-    def _show_pro_features(self) -> None:
-        """Comparison of what is included in Lite vs Pro (Help → Pro vs Lite)."""
-        dlg = ProFeaturesDialog(self)
-        dlg.exec()
-
-    def _show_activation(self) -> None:
-        """Open the Activate Pro window (Help → Activate Pro…)."""
-        dlg = getattr(self, "_activation_dlg", None)
-        if dlg is None:
-            dlg = ActivationDialog(self)
-            self._activation_dlg = dlg
-            dlg.changed.connect(self._on_edition_changed)
-        dlg._refresh()
-        dlg.show()
-        dlg.raise_()
-        dlg.activateWindow()
-
-    def _on_edition_changed(self) -> None:
-        """Edition changed — refresh Pro-sensitive UI state."""
-        self._act_activate_pro.setText(
-            "Activate Pro…" if not licensing.is_pro() else "Pro edition — licensed"
-        )
-        btn = getattr(self, "_btn_edition", None)
-        if btn is not None:
-            btn.setVisible(not licensing.is_pro())
-        dlg = getattr(self, "_library_dialog", None)
-        if dlg is not None and hasattr(dlg, "panel"):
-            dlg.panel._apply_edition()
 
     def _show_tutorial(self, parent: QWidget | None = None) -> None:
         dialog = TutorialDialog(parent or self)
@@ -3255,23 +3177,17 @@ class MainWindow(QMainWindow):
             self._console.clear_output()
 
     def _on_about(self) -> None:
-        if licensing.is_pro():
-            edition = "Pro (licensed to %s)" % (licensing.current_licensee() or "you")
-        else:
-            edition = (
-                f"Lite (free, forever) — one-time €{licensing.PRO_PRICE_EUR} upgrade at {licensing.PRO_URL} unlocks "
-                "multi-object, 4K, audio & no watermark. See Help → Pro vs Lite."
-            )
         QMessageBox.about(
             self,
             "About Better Brush",
-            f"Better Brush v{APP_VERSION} (beta)\n\n"
+            f"Better Brush v{APP_VERSION} — free\n\n"
             "AI-powered rotoscoping with SAM 2.\n"
             "Import a video, prompt SAM 2 with points, propagate the mask "
             "across the timeline, refine with the brush, then export.\n\n"
-            f"Edition: {edition}\n"
-            "Proprietary software — © 2026 Sneg, Sneg HQ, a company of Lugunica.\n"
-            "See the LICENSE file for the full EULA.\n\n"
+            "Free for personal and non-commercial use: every feature is\n"
+            "unlocked — no account, no activation, no watermark.\n\n"
+            "Source-available under FSL-1.1-MIT — © 2026 Sneg, Sneg HQ, a company of Lugunica.\n"
+            "See the LICENSE file for the full terms.\n\n"
             "Solo developer: Sneg — https://sneg.dev",
         )
 

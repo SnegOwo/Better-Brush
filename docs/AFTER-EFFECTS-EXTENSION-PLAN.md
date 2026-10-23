@@ -5,6 +5,10 @@
 > [`src/engine/`](../src/engine) (the headless engine). The rest of this
 > document is the original plan, kept for rationale; §14 records the decisions
 > and the deviations that were made while building it.
+>
+> **Note (1.0.0):** the Lite/Pro split and the Pro licensing gate described in
+> §8 and §14 below were removed. Better Brush is now free and fully unlocked,
+> and the source is published under FSL-1.1-MIT.
 
 ## 0 · The one-line pitch
 

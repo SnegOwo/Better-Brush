@@ -74,6 +74,23 @@ hiddenimports += [
 ]
 datas.append((str(PROJECT_ROOT / "src" / "vendor"), "src/vendor"))
 
+# A local dev run leaves __pycache__ inside src/vendor.  Every vendored package
+# ships its .py sources, so the stale bytecode is dropped here (Python simply
+# recompiles); this keeps the bundle deterministic and free of build machine
+# leftovers.  Scoped to src/vendor so packages that genuinely ship only .pyc
+# are left untouched.
+datas = [
+    (src, dest)
+    for src, dest in datas
+    if not (
+        dest.replace("\\", "/").startswith("src/vendor")
+        and (
+            "__pycache__" in dest.replace("\\", "/").split("/")
+            or dest.endswith(".pyc")
+        )
+    )
+]
+
 # Dev-only torch payloads: C++ headers and unit-test data are not needed.
 datas = [
     (src, dest)
@@ -117,14 +134,19 @@ except Exception:  # noqa: BLE001 - optional dep, keep the build going
 # End-user license terms travel with the product (shown next to the EXE).
 datas.append((str(PROJECT_ROOT / "LICENSE"), "."))
 
+# Third-party attributions (bundled models, FFmpeg, Qt, …) travel with it too.
+_third_party = PROJECT_ROOT / "THIRD-PARTY-NOTICES.md"
+if _third_party.is_file():
+    datas.append((str(_third_party), "."))
+
 # Self-contained FFmpeg: sits next to BetterBrush.exe on disk so export
 # works without the user installing anything.
 datas.append((str(PROJECT_ROOT / "For-Agent" / "ffmpeg.exe"), "."))
 
 _version_info = VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(0, 3, 0, 0),
-        prodvers=(0, 3, 0, 0),
+        filevers=(1, 0, 0, 0),
+        prodvers=(1, 0, 0, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,
@@ -140,7 +162,7 @@ _version_info = VSVersionInfo(
                     [
                         StringStruct("CompanyName", "Sneg HQ, a company of Lugunica"),
                         StringStruct("FileDescription", "Better Brush — AI rotoscoping"),
-                        StringStruct("FileVersion", "0.3.0"),
+                        StringStruct("FileVersion", "1.0.0"),
                         StringStruct("InternalName", "BetterBrush"),
                         StringStruct(
                             "LegalCopyright",
@@ -148,7 +170,7 @@ _version_info = VSVersionInfo(
                         ),
                         StringStruct("OriginalFilename", "BetterBrush.exe"),
                         StringStruct("ProductName", "Better Brush"),
-                        StringStruct("ProductVersion", "0.3.0"),
+                        StringStruct("ProductVersion", "1.0.0"),
                     ],
                 )
             ]
