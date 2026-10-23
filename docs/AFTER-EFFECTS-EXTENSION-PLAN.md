@@ -281,10 +281,15 @@ panel feels like Better Brush, not a generic Adobe panel.
 
 ---
 
-## 8 · Licensing & editions
+## 8 · Licensing & editions (historical)
 
-Reuse the offline HMAC licensing already in `src/core/licensing.py`.
-**Locked: the AE extension is a Pro feature.** Split:
+> **Superseded in 1.0.0.** The original plan below gated the panel behind a
+> Pro licence. That split no longer exists: Better Brush is free, every feature
+> is unlocked, and the source is published under FSL-1.1-MIT. The section is
+> kept only to record the original design.
+
+The original design reused the offline licensing module (since removed) and
+made the AE extension a Pro feature, with this split:
 
 | Capability | Lite (free) | Pro |
 |---|---|---|
@@ -293,9 +298,9 @@ Reuse the offline HMAC licensing already in `src/core/licensing.py`.
 | Batch all selected layers | ❌ | ✅ |
 | Refine UI | ✅ | ✅ |
 
-The panel asks the engine `capabilities` at connect; the engine is the single
-source of truth for license state (the panel never decides). No accounts, no
-server, no telemetry — same as the desktop app.
+The panel asked the engine `capabilities` at connect, with the engine as the
+single source of truth for licence state. The shipping 1.0.0 panel has no
+licence check at all; it asks `/health` for readiness.
 
 ---
 
@@ -340,7 +345,7 @@ Each milestone is independently demoable.
 | **M2** | One-click background removal end-to-end: render intermediates, progress/cancel, default **Replace** + Add-as-layer toggle, colour/alpha contract | 2–3 wk | Select 1080p layer → click → layer replaced with correct alpha; cancel works mid-job |
 | **M3** | Refine UI: brush/points, keyframe a frame, re-run from frame | 2–3 wk | Paint a fix, re-run, result reflects it |
 | **M4** | Anime polish: preset wiring, cel hold/line lock, QC gate → "needs review" | 1–2 wk | Low-confidence shot surfaces Review instead of silently replacing |
-| **M5** | Packaging: `.ccx` (UXP) install, engine discovery, version handshake, **Pro** licensing gate, diagnostics | 1–2 wk | Fresh machine: install app + panel, panel finds engine, gates on licence |
+| **M5** | Packaging: `.ccx` (UXP) install, engine discovery, version handshake, diagnostics | 1–2 wk | Fresh machine: install app + panel, panel finds engine |
 | **M6** | Hardening: AE version matrix, colour/premult edge cases, docs, optional macOS | 2–3 wk | Documented supported-AE matrix all pass |
 
 Rough total: ~10–16 focused weeks. M0 proves the riskiest assumption (IPC +
@@ -387,9 +392,9 @@ timeline grab) fastest.
    Rationale in "Deviations" below.
 2. **Default mode: Replace layer**, with **Add as new layer** one toggle away;
    the choice is **persisted** (panel `localStorage`).
-3. **Licensing: Pro feature** — the panel checks `/health` and blocks the button
-   when the engine reports `pro: false` (same client-side model as the desktop
-   app).
+3. **Licensing: none** — the panel asks `/health` for readiness. (A Pro gate
+   existed in the original plan; it was removed in 1.0.0 when Better Brush
+   became free.)
 4. **Scope: characters only.** The one button removes the background behind a
    single character. Multi-object and anything ambiguous opens the full app.
 5. **Cold start: acceptable.** The panel starts the engine on demand and polls

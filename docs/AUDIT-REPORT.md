@@ -194,7 +194,7 @@ getter is visible, while still never killing the run.
 
 ```
 $env:QT_QPA_PLATFORM="offscreen"; python -m pytest tests/ -q
-# 359 passed, 1 warning
+# 359 passed, 1 warning (at the time of this audit; the suite now has 524 tests)
 ```
 
 New / updated regression tests:

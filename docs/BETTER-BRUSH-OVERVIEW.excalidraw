@@ -132,15 +132,15 @@
    "updated": 1,
    "link": null,
    "locked": false,
-   "text": "v0.3.0",
+   "text": "v1.0.0",
    "fontSize": 15,
    "fontFamily": 2,
    "textAlign": "center",
    "verticalAlign": "top",
    "containerId": null,
-   "originalText": "v0.3.0",
+   "originalText": "v1.0.0",
    "lineHeight": 1.25,
-   "rawText": "v0.3.0"
+   "rawText": "v1.0.0"
   },
   {
    "id": "r005",
@@ -266,15 +266,15 @@
    "updated": 1,
    "link": null,
    "locked": false,
-   "text": "Lite free · Pro €5",
+   "text": "Free · FSL-1.1-MIT",
    "fontSize": 15,
    "fontFamily": 2,
    "textAlign": "center",
    "verticalAlign": "top",
    "containerId": null,
-   "originalText": "Lite free · Pro €5",
+   "originalText": "Free · FSL-1.1-MIT",
    "lineHeight": 1.25,
-   "rawText": "Lite free · Pro €5"
+   "rawText": "Free · FSL-1.1-MIT"
   },
   {
    "id": "r009",
@@ -1931,15 +1931,15 @@
    "updated": 1,
    "link": null,
    "locked": false,
-   "text": "Lite, free\nSAM 2 segmentation, brush and keyframes · PNG alpha · ProRes 4444 and\nQuickTime Animation · H.264 MP4 with chroma-key · up to 1080p\nWatermark on video exports\n\nPro, €5 once\nMulti-object projects · exports to 4K/8K · original audio in exports\nLibrary recoding (MP4 ↔ MOV ↔ WebM) · no watermark",
+   "text": "One edition, free\nSAM 2 segmentation, brush and keyframes · PNG alpha · ProRes 4444 and\nQuickTime Animation · H.264 MP4 with chroma-key · up to 8K\nMulti-object projects · original audio · learned matting · AI object removal\nLibrary recoding (MP4 ↔ MOV ↔ WebM) · no watermark · no account",
    "fontSize": 13,
    "fontFamily": 2,
    "textAlign": "left",
    "verticalAlign": "top",
    "containerId": null,
-   "originalText": "Lite, free\nSAM 2 segmentation, brush and keyframes · PNG alpha · ProRes 4444 and\nQuickTime Animation · H.264 MP4 with chroma-key · up to 1080p\nWatermark on video exports\n\nPro, €5 once\nMulti-object projects · exports to 4K/8K · original audio in exports\nLibrary recoding (MP4 ↔ MOV ↔ WebM) · no watermark",
+   "originalText": "One edition, free\nSAM 2 segmentation, brush and keyframes · PNG alpha · ProRes 4444 and\nQuickTime Animation · H.264 MP4 with chroma-key · up to 8K\nMulti-object projects · original audio · learned matting · AI object removal\nLibrary recoding (MP4 ↔ MOV ↔ WebM) · no watermark · no account",
    "lineHeight": 1.5,
-   "rawText": "Lite, free\nSAM 2 segmentation, brush and keyframes · PNG alpha · ProRes 4444 and\nQuickTime Animation · H.264 MP4 with chroma-key · up to 1080p\nWatermark on video exports\n\nPro, €5 once\nMulti-object projects · exports to 4K/8K · original audio in exports\nLibrary recoding (MP4 ↔ MOV ↔ WebM) · no watermark"
+   "rawText": "One edition, free\nSAM 2 segmentation, brush and keyframes · PNG alpha · ProRes 4444 and\nQuickTime Animation · H.264 MP4 with chroma-key · up to 8K\nMulti-object projects · original audio · learned matting · AI object removal\nLibrary recoding (MP4 ↔ MOV ↔ WebM) · no watermark · no account"
   },
   {
    "id": "r057",

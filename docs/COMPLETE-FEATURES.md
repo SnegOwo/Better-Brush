@@ -24,7 +24,7 @@
 16. [Multi-object scenes](#16-multi-object-scenes)
 17. [Models and hardware](#17-models-and-hardware)
 18. [Project files (.bbproj)](#18-project-files-bbproj)
-19. [Editions and pricing](#19-editions-and-pricing)
+19. [Licensing](#19-licensing)
 20. [Fine-tuning: train your own anime SAM 2](#20-fine-tuning-train-your-own-anime-sam-2)
 21. [Keyboard shortcuts](#21-keyboard-shortcuts)
 22. [Preview modes](#22-preview-modes)

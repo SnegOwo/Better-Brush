@@ -21,7 +21,6 @@ import pytest
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from src.core import licensing
 from src.core.project import ObjectRecord, ProjectData, ProjectManager, mask_to_b64
 from src.core.scene import OBJECT_PALETTE
 from src.ui.main_window import MainWindow
@@ -59,8 +58,6 @@ def _stub_video(win: MainWindow, tmp_path: Path, name: str = "clip.mp4") -> None
 def isolated_settings(tmp_path, monkeypatch):
     """Keep settings / autosave / registry files inside tmp_path."""
     monkeypatch.setattr(ProjectManager, "settings_dir", lambda: tmp_path)
-    # Multi-object editing is included in the free app.
-    assert licensing.is_pro()
     yield
 
 

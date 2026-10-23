@@ -119,23 +119,6 @@ activation keys, no watermark, no account: segmentation, brush, propagation,
 learned matting, AI object removal, PNG / ProRes / QuickTime / MP4 export up
 to 8K, multi-object scenes, original-audio muxing and Library recoding.
 
-## License
-
-Better Brush is **source-available** under the
-[Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT).
-You can read, fork, modify, build and share it, and you can use it to make
-**any video — including monetised YouTube, TikTok and AMV edits**. The videos
-you create are yours.
-
-You may **not** resell Better Brush, sell the source code, or ship it inside a
-competing or paid rotoscoping/video tool. On **2028-10-23** the license
-automatically converts to **MIT**, and those restrictions disappear.
-
-Some bundled AI model weights are licensed separately for non-commercial use
-(MatAnyone 2, NTU S-Lab License 1.0; MiniMax-Remover, CC-BY-NC-4.0). Those are
-third-party terms and are unaffected by the code license — review
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) if you plan commercial work.
-
 ## Documentation
 
 | Guide | Contents |
@@ -164,11 +147,23 @@ Vendored packages and licenses: [src/vendor/README.md](src/vendor/README.md).
 
 ## License
 
-Source-available under the
-[Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT):
-free to use, modify and share; no reselling or competing paid products; becomes
-MIT on 2028-10-23. Third-party components keep their own licenses — see
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Better Brush is **source-available** under the
+[Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT).
+You can read, fork, modify, build and share it, and you can use it to make
+**any video — including monetised YouTube, TikTok and AMV edits**. The videos
+you create are yours.
+
+You may **not** resell Better Brush, sell the source code, or ship it inside a
+competing or paid rotoscoping/video tool. On **2028-10-23** the license
+automatically converts to **MIT**, and those restrictions disappear.
+
+Some bundled AI model weights are licensed separately for non-commercial use
+(MatAnyone 2, NTU S-Lab License 1.0; MiniMax-Remover, CC-BY-NC-4.0). Those are
+third-party terms and are unaffected by the code license — review
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) if you plan commercial work.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the
+contribution license.
 
 <div align="center">
 

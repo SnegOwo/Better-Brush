@@ -286,7 +286,7 @@ Run:
 python -m ruff check src/ tests/
 $env:QT_QPA_PLATFORM="offscreen"; python -m pytest tests/ -q
 python -m compileall -q src tests
-python test_imports.py
+python tools/check_imports.py
 ```
 
 There is no configured static type checker in this repository. Keep new public functions annotated and add focused tests for pure logic and headless GUI construction.
@@ -307,7 +307,7 @@ The Windows bundle is produced with PyInstaller:
 
 ```bash
 pyinstaller --clean better_brush.spec
-pyinstaller --clean --noconfirm --distpath BetterbrushDistV3 -y better_brush.spec
+pyinstaller --clean --noconfirm --distpath BetterbrushDistV3 better_brush.spec
 ```
 
 Optional models and FFmpeg are resolved through the constants and detector modules. New modules imported from `MainWindow` or a package `__init__` are included automatically; if a module is only discovered dynamically, add it to the spec explicitly.

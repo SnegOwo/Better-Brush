@@ -2912,11 +2912,6 @@ class MainWindow(QMainWindow):
             ProjectManager.set_first_run_done()
             QTimer.singleShot(0, lambda: self._show_tutorial(parent=self))
 
-    def _maybe_show_lite_notice(self) -> None:
-        """Kept for backwards compatibility — Better Brush is free, so there is
-        no Lite/Pro notice to show."""
-        return
-
     def show_welcome(self) -> None:
         """Public hook called by the app bootstrap to open the launcher."""
         self._show_welcome()
@@ -3184,8 +3179,9 @@ class MainWindow(QMainWindow):
             "AI-powered rotoscoping with SAM 2.\n"
             "Import a video, prompt SAM 2 with points, propagate the mask "
             "across the timeline, refine with the brush, then export.\n\n"
-            "Free for personal and non-commercial use: every feature is\n"
-            "unlocked — no account, no activation, no watermark.\n\n"
+            "Better Brush is free and fully unlocked: every feature is\n"
+            "included — no account, no activation, no watermark. Use it for\n"
+            "any video, including monetised YouTube, TikTok and AMV edits.\n\n"
             "Source-available under FSL-1.1-MIT — © 2026 Sneg, Sneg HQ, a company of Lugunica.\n"
             "See the LICENSE file for the full terms.\n\n"
             "Solo developer: Sneg — https://sneg.dev",

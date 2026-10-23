@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-17
+## [1.0.0] - 2026-10-23
 
 ### Changed
 - **Better Brush is now completely free.** The Lite/Pro split, the offline
