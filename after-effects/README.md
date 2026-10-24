@@ -266,6 +266,4 @@ that file has the full trace.
 | `config.sample.json` | Shape of the `config.json` the installer writes |
 | `install.ps1` | Installer / uninstaller (`-Scope User` by default, `-Scope System` for all users) |
 
-The engine itself lives in the repository under `src/engine/`. The design record
-for both panels — every round, what was verified, and what was not — is
-[`docs/AFTER-EFFECTS-EXTENSION-PLAN.md`](../docs/AFTER-EFFECTS-EXTENSION-PLAN.md).
+The engine itself lives in the repository under src/engine/.

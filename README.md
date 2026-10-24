@@ -28,6 +28,16 @@ unwanted subjects out**, then export transparent ProRes 4444 or a PNG sequence
 straight into your edit. It's tuned first for **anime / AMV** — crisp line art,
 flat cel shading, thin hair strands — and handles live-action just as well.
 
+## Screenshots
+
+![Better Brush editor with the mask overlay](docs/images/app-overlay.webp)
+
+| Cutout view | Inside After Effects |
+|---|---|
+| ![Cutout view with checkerboard](docs/images/app-cutout.webp) | ![Better Brush After Effects panel](docs/images/after-effects.webp) |
+
+<sub>Demo footage: Big Buck Bunny (CC-BY, Blender Foundation).</sub>
+
 ## Highlights
 
 - **Segment** — point prompts (click to include, right-click to exclude), prompt-aware
@@ -106,6 +116,8 @@ powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1    # After 
 powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1     # Premiere Pro (elevated)
 ```
 
+![Better Brush panel inside Premiere Pro](docs/images/premiere-pro.webp)
+
 One character per click; multi-subject and oddball layers are handed to the full app. A replace
 keeps the clip's own audio — the cut-out is the same footage minus the background. Both panels
 drive the same local engine, so install one or both. Windows, AE 2022+ / Premiere Pro 2022+ — see
@@ -130,7 +142,6 @@ to 8K, multi-object scenes, original-audio muxing and Library recoding.
 | [Fine-tuning](docs/FINE-TUNING.md) · [Build Lugnica SAM](docs/LUGNICA-SAM.md) · [Colab Kit](tools/sam2_training/colab/README.md) | Train your own model |
 | [After Effects panel](after-effects/README.md) | One-click background removal inside AE (Windows, AE 2022+) |
 | [Premiere Pro panel](premiere-pro/README.md) | The same panel ported to Premiere Pro (Windows, PPro 2022+) |
-| [Audit Report](docs/AUDIT-REPORT.md) · [Roadmap](docs/ROADMAP-IDEAS.md) | Recent fixes · backlog |
 
 Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
 [Complete Feature Reference](docs/COMPLETE-FEATURES.md).

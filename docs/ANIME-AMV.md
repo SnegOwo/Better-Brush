@@ -141,4 +141,3 @@ exactly as before. The letterbox scan runs on every import but only ever logs.
 - [Complete Feature Reference](COMPLETE-FEATURES.md) — the whole tool, in depth.
 - [Fine-tuning guide](FINE-TUNING.md) — train a model on *your* anime.
 - [Build Lugnica SAM](LUGNICA-SAM.md) — the short step-by-step to your own model.
-- [Audit report](AUDIT-REPORT.md) — recent fixes and why.
