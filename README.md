@@ -133,6 +133,8 @@ to 8K, multi-object scenes, original-audio muxing and Library recoding.
 
 ## Documentation
 
+**Read the docs online:** https://snegowo.github.io/Better-Brush/
+
 | Guide | Contents |
 |---|---|
 | [User Guide](docs/USER-GUIDE.md) | The complete editor-facing workflow |
