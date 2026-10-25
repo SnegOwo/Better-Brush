@@ -83,3 +83,6 @@ logs/
 
 # Large local media assets
 assets/icons/*.mov
+
+# Private maintainer notes (release checklist, where the beta label lives).
+READ-FIRST-IMPORTANT.md

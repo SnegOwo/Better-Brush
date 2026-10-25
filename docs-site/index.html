@@ -93,18 +93,6 @@
               <p><strong>Line lock</strong> snaps mattes to the pencil line, <strong>cel hold</strong> stops boiling on held drawings, and letterbox bars are detected on import.</p>
             </article>
           </div>
-          <a class="callout" href="#effectcraft" data-searchable="effectcraft beta plugin integration track matte brush">
-            <span class="shot"><img src="assets/effectcraft-beta.webp" alt="Better Brush docked in EffectCraft, showing a corrected matte and the brush panel"></span>
-            <span class="callout-body">
-              <span class="beta">New &middot; beta</span>
-              <h3>Better Brush inside EffectCraft</h3>
-              <p>Remove Background, then paint the fix: <strong style="color:var(--green)">green</strong> keeps pixels,
-                <strong style="color:#ef4444">red</strong> deletes them. Source install today; the portable build and
-                one-file setup land on Hugging Face between 2 and 8 November. Tested on
-                <code>effectcraft-0.17.0-windows-x64-portable</code> only.</p>
-              <span class="callout-more">How to install and use it &rarr;</span>
-            </span>
-          </a>
         </section>
 
         <section id="start" data-searchable="quick start first shot five minutes tutorial install download">
@@ -255,6 +243,79 @@
           <p class="note">Exports go up to 8K, can mux the clip's original audio, and can be queued across several projects with the Batch Render Queue (<button class="key" data-copy="Ctrl+Shift+Q">Ctrl+Shift+Q</button>).</p>
         </section>
 
+        <section id="shortcuts" data-searchable="keyboard shortcuts hotkeys keys brush play pause">
+          <p class="eyebrow">10 — Shortcuts</p>
+          <h2>Keep your hands on the keyboard</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+              <tbody>
+                <tr><td>Open video</td><td><button class="key" data-copy="Ctrl+O">Ctrl+O</button></td></tr>
+                <tr><td>Export</td><td><button class="key" data-copy="Ctrl+E">Ctrl+E</button></td></tr>
+                <tr><td>Batch render queue</td><td><button class="key" data-copy="Ctrl+Shift+Q">Ctrl+Shift+Q</button></td></tr>
+                <tr><td>Point / Brush tool</td><td><button class="key" data-copy="B">B</button></td></tr>
+                <tr><td>Play / pause</td><td><button class="key" data-copy="Space">Space</button> or <button class="key" data-copy="P">P</button></td></tr>
+                <tr><td>Previous / next frame</td><td><button class="key" data-copy="Left">←</button> / <button class="key" data-copy="Right">→</button></td></tr>
+                <tr><td>Brush size</td><td><button class="key" data-copy="[">[</button> / <button class="key" data-copy="]">]</button></td></tr>
+                <tr><td>Erase with brush</td><td><button class="key" data-copy="Shift">Shift</button></td></tr>
+                <tr><td>Matte QC Inspector</td><td><button class="key" data-copy="Ctrl+Shift+M">Ctrl+Shift+M</button></td></tr>
+                <tr><td>Shot Profiles</td><td><button class="key" data-copy="Ctrl+Shift+P">Ctrl+Shift+P</button></td></tr>
+                <tr><td>Version History</td><td><button class="key" data-copy="Ctrl+Shift+H">Ctrl+Shift+H</button></td></tr>
+                <tr><td>Performance Monitor</td><td><button class="key" data-copy="Ctrl+Shift+G">Ctrl+Shift+G</button></td></tr>
+                <tr><td>Search these docs</td><td><button class="key" data-copy="/">/</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">💡 Click any shortcut on this page to copy it.</p>
+        </section>
+
+        <section id="faq" data-searchable="faq questions privacy internet gpu formats license free commercial">
+          <p class="eyebrow">11 — FAQ</p>
+          <h2>Common questions</h2>
+          <div class="faq-list">
+            <details data-searchable="free license cost commercial youtube monetised">
+              <summary>Is Better Brush really free?</summary>
+              <p><b>Yes.</b> Every feature is unlocked — no Lite/Pro split, no activation, no watermark, no account. The source is published under <b>FSL-1.1-MIT</b>: use, modify and share it, including for monetised YouTube, TikTok and AMV videos. You may not resell it or ship it inside a competing paid tool; the license becomes MIT on <b>2028-10-23</b>. Some bundled model weights keep their own non-commercial terms — see the <a href="https://github.com/SnegOwo/Better-Brush/blob/master/THIRD-PARTY-NOTICES.md">third-party notices</a>.</p>
+            </details>
+            <details data-searchable="internet cloud offline privacy">
+              <summary>Does my footage leave my machine?</summary>
+              <p><b>No.</b> Segmentation, matting, QC and cleanup all run locally. No account, no upload, no telemetry. The only network traffic is one-time model downloads.</p>
+            </details>
+            <details data-searchable="gpu requirements vram cuda directml cpu amd intel">
+              <summary>Do I need an NVIDIA GPU?</summary>
+              <p>An NVIDIA GPU is strongly recommended, but Better Brush also runs on AMD/Intel via DirectML and on CPU (much slower). It picks the strongest SAM&nbsp;2.1 model that fits your VRAM with headroom.</p>
+            </details>
+            <details data-searchable="formats import export compatibility prores png h264">
+              <summary>Which formats are supported?</summary>
+              <p>Common edit-friendly video formats on import. On export: PNG sequence (RGBA), ProRes 4444 (MOV), QuickTime Animation (MOV) and H.264 (MP4, optionally over a chroma-key background), up to 8K.</p>
+            </details>
+            <details data-searchable="effectcraft plugin beta integration">
+              <summary>Does it work inside EffectCraft?</summary>
+              <p>Yes &mdash; as a <b>beta</b>. Select a footage layer, click <b>Remove Background</b> and the matte
+                is applied as a track matte; paint green/red on the result to fix a frame and re-run. Install from
+                source today (<code>extensions\effectcraft\install.cmd</code>); the portable build and one-file setup
+                arrive on <b>Hugging Face between 2 and 8 November</b>. It is tested on
+                <code>effectcraft-0.17.0-windows-x64-portable</code> only.</p>
+            </details>
+            <details data-searchable="after effects premiere pro plugin panel">
+              <summary>Does it work inside After Effects or Premiere Pro?</summary>
+              <p>Yes. Both panels install separately and drive the same local engine: select a layer or clip, click <b>Remove Background</b>, and it is rotoscoped in place. Windows, AE 2022+ / Premiere Pro 2022+.</p>
+            </details>
+            <details data-searchable="corrections fix drift mistakes">
+              <summary>What if the matte drifts mid-shot?</summary>
+              <p>Paint a corrective stroke on the drifting frame and re-run. A brush stroke acts as a SAM&nbsp;2 prompt, so only the affected area is re-solved.</p>
+            </details>
+            <details data-searchable="reproducible deterministic same result">
+              <summary>Are results reproducible?</summary>
+              <p>Yes. The same footage, prompts and settings produce the same matte — essential for revisions and team handoffs.</p>
+            </details>
+            <details data-searchable="mac linux platforms windows">
+              <summary>Is there a Mac or Linux build?</summary>
+              <p>Windows 10/11 (64-bit) is the supported release today. The source builds on Unix-like systems, but the packaged builds and Adobe panels are Windows-only for now.</p>
+            </details>
+          </div>
+        </section>
+
         <section id="effectcraft" data-searchable="effectcraft beta integration plugin remove background track matte brush add remove force correction source install hugging face november 0.17.0 portable">
           <p class="eyebrow">Integrations &middot; EffectCraft (beta)</p>
           <h2>Better Brush inside <em>EffectCraft.</em></h2>
@@ -331,79 +392,6 @@
             <code>panel.log</code> and <code>adapter.log</code>. Full guide:
             <a href="https://github.com/SnegOwo/Better-Brush/blob/master/docs/EFFECTCRAFT.md">docs/EFFECTCRAFT.md</a>.
           </p>
-        </section>
-
-        <section id="shortcuts" data-searchable="keyboard shortcuts hotkeys keys brush play pause">
-          <p class="eyebrow">10 — Shortcuts</p>
-          <h2>Keep your hands on the keyboard</h2>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
-              <tbody>
-                <tr><td>Open video</td><td><button class="key" data-copy="Ctrl+O">Ctrl+O</button></td></tr>
-                <tr><td>Export</td><td><button class="key" data-copy="Ctrl+E">Ctrl+E</button></td></tr>
-                <tr><td>Batch render queue</td><td><button class="key" data-copy="Ctrl+Shift+Q">Ctrl+Shift+Q</button></td></tr>
-                <tr><td>Point / Brush tool</td><td><button class="key" data-copy="B">B</button></td></tr>
-                <tr><td>Play / pause</td><td><button class="key" data-copy="Space">Space</button> or <button class="key" data-copy="P">P</button></td></tr>
-                <tr><td>Previous / next frame</td><td><button class="key" data-copy="Left">←</button> / <button class="key" data-copy="Right">→</button></td></tr>
-                <tr><td>Brush size</td><td><button class="key" data-copy="[">[</button> / <button class="key" data-copy="]">]</button></td></tr>
-                <tr><td>Erase with brush</td><td><button class="key" data-copy="Shift">Shift</button></td></tr>
-                <tr><td>Matte QC Inspector</td><td><button class="key" data-copy="Ctrl+Shift+M">Ctrl+Shift+M</button></td></tr>
-                <tr><td>Shot Profiles</td><td><button class="key" data-copy="Ctrl+Shift+P">Ctrl+Shift+P</button></td></tr>
-                <tr><td>Version History</td><td><button class="key" data-copy="Ctrl+Shift+H">Ctrl+Shift+H</button></td></tr>
-                <tr><td>Performance Monitor</td><td><button class="key" data-copy="Ctrl+Shift+G">Ctrl+Shift+G</button></td></tr>
-                <tr><td>Search these docs</td><td><button class="key" data-copy="/">/</button></td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="note">💡 Click any shortcut on this page to copy it.</p>
-        </section>
-
-        <section id="faq" data-searchable="faq questions privacy internet gpu formats license free commercial">
-          <p class="eyebrow">11 — FAQ</p>
-          <h2>Common questions</h2>
-          <div class="faq-list">
-            <details data-searchable="free license cost commercial youtube monetised">
-              <summary>Is Better Brush really free?</summary>
-              <p><b>Yes.</b> Every feature is unlocked — no Lite/Pro split, no activation, no watermark, no account. The source is published under <b>FSL-1.1-MIT</b>: use, modify and share it, including for monetised YouTube, TikTok and AMV videos. You may not resell it or ship it inside a competing paid tool; the license becomes MIT on <b>2028-10-23</b>. Some bundled model weights keep their own non-commercial terms — see the <a href="https://github.com/SnegOwo/Better-Brush/blob/master/THIRD-PARTY-NOTICES.md">third-party notices</a>.</p>
-            </details>
-            <details data-searchable="internet cloud offline privacy">
-              <summary>Does my footage leave my machine?</summary>
-              <p><b>No.</b> Segmentation, matting, QC and cleanup all run locally. No account, no upload, no telemetry. The only network traffic is one-time model downloads.</p>
-            </details>
-            <details data-searchable="gpu requirements vram cuda directml cpu amd intel">
-              <summary>Do I need an NVIDIA GPU?</summary>
-              <p>An NVIDIA GPU is strongly recommended, but Better Brush also runs on AMD/Intel via DirectML and on CPU (much slower). It picks the strongest SAM&nbsp;2.1 model that fits your VRAM with headroom.</p>
-            </details>
-            <details data-searchable="formats import export compatibility prores png h264">
-              <summary>Which formats are supported?</summary>
-              <p>Common edit-friendly video formats on import. On export: PNG sequence (RGBA), ProRes 4444 (MOV), QuickTime Animation (MOV) and H.264 (MP4, optionally over a chroma-key background), up to 8K.</p>
-            </details>
-            <details data-searchable="effectcraft plugin beta integration">
-              <summary>Does it work inside EffectCraft?</summary>
-              <p>Yes &mdash; as a <b>beta</b>. Select a footage layer, click <b>Remove Background</b> and the matte
-                is applied as a track matte; paint green/red on the result to fix a frame and re-run. Install from
-                source today (<code>extensions\effectcraft\install.cmd</code>); the portable build and one-file setup
-                arrive on <b>Hugging Face between 2 and 8 November</b>. It is tested on
-                <code>effectcraft-0.17.0-windows-x64-portable</code> only.</p>
-            </details>
-            <details data-searchable="after effects premiere pro plugin panel">
-              <summary>Does it work inside After Effects or Premiere Pro?</summary>
-              <p>Yes. Both panels install separately and drive the same local engine: select a layer or clip, click <b>Remove Background</b>, and it is rotoscoped in place. Windows, AE 2022+ / Premiere Pro 2022+.</p>
-            </details>
-            <details data-searchable="corrections fix drift mistakes">
-              <summary>What if the matte drifts mid-shot?</summary>
-              <p>Paint a corrective stroke on the drifting frame and re-run. A brush stroke acts as a SAM&nbsp;2 prompt, so only the affected area is re-solved.</p>
-            </details>
-            <details data-searchable="reproducible deterministic same result">
-              <summary>Are results reproducible?</summary>
-              <p>Yes. The same footage, prompts and settings produce the same matte — essential for revisions and team handoffs.</p>
-            </details>
-            <details data-searchable="mac linux platforms windows">
-              <summary>Is there a Mac or Linux build?</summary>
-              <p>Windows 10/11 (64-bit) is the supported release today. The source builds on Unix-like systems, but the packaged builds and Adobe panels are Windows-only for now.</p>
-            </details>
-          </div>
         </section>
 
         <footer class="site-footer">
