@@ -28,26 +28,6 @@ unwanted subjects out**, then export transparent ProRes 4444 or a PNG sequence
 straight into your edit. It's tuned first for **anime / AMV** — crisp line art,
 flat cel shading, thin hair strands — and handles live-action just as well.
 
-## New: Better Brush inside EffectCraft (beta)
-
-Select a footage layer, click **Remove Background**, and the cut-out lands on
-your timeline as a track matte. Wrong frame? Paint it — green keeps pixels, red
-deletes them — and **Apply fix & re-run** re-tracks that frame with your strokes.
-
-<img src="docs/images/effectcraft-beta.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
-
-> **Beta, source-only for now.** The panel and its background adapter work today
-> but are young. **Tested on `effectcraft-0.17.0-windows-x64-portable` only** —
-> 0.11.x and older cannot run panel timers at all.
-> Install from source with `extensions\effectcraft\install.cmd`.
-> The portable build and one-file setup arrive on **Hugging Face between 2 and
-> 8 November**.
-> Found something? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
-> with `panel.log` and `adapter.log`.
-
-**[Read the EffectCraft guide →](docs/EFFECTCRAFT.md)** — install, workflow,
-brush controls, troubleshooting, uninstall.
-
 ## Screenshots
 
 ![Better Brush editor with the mask overlay](docs/images/app-overlay.webp)
@@ -201,6 +181,26 @@ third-party terms and are unaffected by the code license — review
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the
 contribution license.
+
+## Better Brush inside EffectCraft (beta)
+
+Select a footage layer, click **Remove Background**, and the cut-out lands on
+your timeline as a track matte. Wrong frame? Paint it — green keeps pixels, red
+deletes them — and **Apply fix & re-run** re-tracks that frame with your strokes.
+
+<img src="docs/images/effectcraft-beta.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
+
+> **Beta, source-only for now.** The panel and its background adapter work today
+> but are young. **Tested on `effectcraft-0.17.0-windows-x64-portable` only** —
+> 0.11.x and older cannot run panel timers at all.
+> Install from source with `extensions\effectcraft\install.cmd`.
+> The portable build and one-file setup arrive on **Hugging Face between 2 and
+> 8 November**.
+> Found something? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
+> with `panel.log` and `adapter.log`.
+
+**[Read the EffectCraft guide →](docs/EFFECTCRAFT.md)** — install, workflow,
+brush controls, troubleshooting, uninstall.
 
 ## Star History
 
