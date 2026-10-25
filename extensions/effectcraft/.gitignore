@@ -1,0 +1,11 @@
+# Local artifacts created by scripts/install.ps1 - not part of the source.
+bridge.path.json
+backups/
+examples/
+*.log
+__pycache__/
+
+# Release artifacts built by scripts/make_dist.ps1 (tens of MB each).
+dist/
+build/
+*.spec

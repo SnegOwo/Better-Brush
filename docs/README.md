@@ -13,6 +13,7 @@
 | <a href="USER-GUIDE.md"><span style="color:#4ade80">User Guide</span></a> | A fast, practical walkthrough of every visible tool |
 | <a href="DEVELOPER-GUIDE.md"><span style="color:#c084fc">Developer Guide</span></a> | Architecture, algorithms, threads, storage, and build details |
 | <a href="../after-effects/README.md"><span style="color:#4a9eff">After Effects panel</span></a> · <a href="../premiere-pro/README.md"><span style="color:#4a9eff">Premiere Pro panel</span></a> | One-click background removal inside your editor |
+| <a href="EFFECTCRAFT.md"><span style="color:#ffb454">EffectCraft panel (beta)</span></a> | One-click background removal inside EffectCraft — 0.17.0 portable, source install |
 
 </div>
 
@@ -22,7 +23,8 @@
 
 1. Read the <a href="USER-GUIDE.md"><span style="color:#4ade80">User Guide</span></a> for the editing workflow.
 2. Open **Help → Quick Tutorial** in the app for a guided, interactive walkthrough.
-3. Use the <a href="DEVELOPER-GUIDE.md"><span style="color:#c084fc">Developer Guide</span></a> before changing processing or persistence code.
+3. Installing the EffectCraft panel? Start with <a href="EFFECTCRAFT.md"><span style="color:#ffb454">the EffectCraft guide</span></a> (beta).
+4. Use the <a href="DEVELOPER-GUIDE.md"><span style="color:#c084fc">Developer Guide</span></a> before changing processing or persistence code.
 
 ## Product promise
 

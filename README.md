@@ -28,6 +28,26 @@ unwanted subjects out**, then export transparent ProRes 4444 or a PNG sequence
 straight into your edit. It's tuned first for **anime / AMV** — crisp line art,
 flat cel shading, thin hair strands — and handles live-action just as well.
 
+## New: Better Brush inside EffectCraft (beta)
+
+Select a footage layer, click **Remove Background**, and the cut-out lands on
+your timeline as a track matte. Wrong frame? Paint it — green keeps pixels, red
+deletes them — and **Apply fix & re-run** re-tracks that frame with your strokes.
+
+<img src="docs/images/effectcraft-beta.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
+
+> **Beta, source-only for now.** The panel and its background adapter work today
+> but are young. **Tested on `effectcraft-0.17.0-windows-x64-portable` only** —
+> 0.11.x and older cannot run panel timers at all.
+> Install from source with `extensions\effectcraft\install.cmd`.
+> The portable build and one-file setup arrive on **Hugging Face between 2 and
+> 8 November**.
+> Found something? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
+> with `panel.log` and `adapter.log`.
+
+**[Read the EffectCraft guide →](docs/EFFECTCRAFT.md)** — install, workflow,
+brush controls, troubleshooting, uninstall.
+
 ## Screenshots
 
 ![Better Brush editor with the mask overlay](docs/images/app-overlay.webp)
@@ -93,6 +113,27 @@ fine-tuning weights download on first use. Optional extras: `scenedetect` (sharp
 Every step is reversible — re-segment, swap models, change a profile, or roll back to a
 checkpoint at any time. Open **Help → Quick Tutorial** for a guided tour in-app.
 
+## Inside your editor
+
+The same engine behind three host integrations: the panel is thin, the AI work
+runs in a local headless process, and nothing leaves your machine.
+
+| Host | Install | Status |
+|---|---|---|
+| **After Effects** | `powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1` | stable — AE 2022+ |
+| **Premiere Pro** | `powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1` (elevated) | stable — PPro 2022+ |
+| **EffectCraft** | `extensions\effectcraft\install.cmd` | **beta** — 0.17.0 portable only |
+
+Select a footage layer (AE), a clip (Premiere) or a layer (EffectCraft), click
+**Remove Background**, and it is rotoscoped in place. A replace keeps the clip's
+own audio — the cut-out is the same footage minus the background.
+
+![Better Brush panel inside Premiere Pro](docs/images/premiere-pro.webp)
+
+Panels: **[After Effects](after-effects/README.md)** ·
+**[Premiere Pro](premiere-pro/README.md)** ·
+**[EffectCraft (beta)](docs/EFFECTCRAFT.md)**.
+
 ## Fine-tune your own anime SAM 2
 
 Better Brush is the data engine for a custom model: the app proposes masks, you correct
@@ -104,25 +145,6 @@ that names the result **Lugnica SAM** lives in
 - **[Build Lugnica SAM](docs/LUGNICA-SAM.md)** — the simple, opinionated step-by-step.
 - **[Colab kit](tools/sam2_training/colab/README.md)** — train in the browser on a free
   T4 (or L4/A100), no local GPU needed.
-
-## After Effects & Premiere Pro panels
-
-Select a footage layer (AE) or a video clip (Premiere), click **Remove Background** — it is
-rotoscoped in place. The AI work runs in a local headless engine (the same SAM 2 stack), so
-nothing leaves your machine and the host never loads torch.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1    # After Effects
-powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1     # Premiere Pro (elevated)
-```
-
-![Better Brush panel inside Premiere Pro](docs/images/premiere-pro.webp)
-
-One character per click; multi-subject and oddball layers are handed to the full app. A replace
-keeps the clip's own audio — the cut-out is the same footage minus the background. Both panels
-drive the same local engine, so install one or both. Windows, AE 2022+ / Premiere Pro 2022+ — see
-**[after-effects/README.md](after-effects/README.md)** and
-**[premiere-pro/README.md](premiere-pro/README.md)**.
 
 ## Free, and fully unlocked
 
@@ -138,6 +160,7 @@ to 8K, multi-object scenes, original-audio muxing and Library recoding.
 | Guide | Contents |
 |---|---|
 | [User Guide](docs/USER-GUIDE.md) | The complete editor-facing workflow |
+| [EffectCraft (beta)](docs/EFFECTCRAFT.md) | Install, workflow, brush, troubleshooting |
 | [Anime & AMV Engine](docs/ANIME-AMV.md) | Line lock, cel hold, letterbox, anime QC |
 | [Complete Feature Reference](docs/COMPLETE-FEATURES.md) | Every feature and system, in depth |
 | [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
@@ -152,6 +175,7 @@ Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
 
 ```bash
 python -m pytest tests/ -q                    # 524 tests, no GPU required
+python -m pytest extensions/effectcraft/tests -q   # the EffectCraft bridge (104 tests)
 python -m ruff check src/                      # lint
 pyinstaller --clean better_brush.spec          # developer build
 ```
@@ -177,6 +201,16 @@ third-party terms and are unaffected by the code license — review
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the
 contribution license.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=snegowo%2Fbetter-brush&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&legend=top-left" />
+ </picture>
+</a>
 
 <div align="center">
 
