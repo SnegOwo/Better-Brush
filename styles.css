@@ -129,3 +129,23 @@ td b{color:var(--text)}
   h1{font-size:33px}
   h2{font-size:23px}
 }
+
+/* ---------- Beta badge, callout and screenshots ---------- */
+code{font-family:var(--mono);font-size:12.5px;background:var(--panel-raised);border:1px solid var(--line);
+  border-radius:6px;padding:2px 6px;color:var(--text)}
+.beta{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:rgba(255,180,84,.14);
+  border:1px solid rgba(255,180,84,.4);border-radius:99px;color:var(--amber);font:11px var(--mono);
+  letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+.beta-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-left:6px;vertical-align:middle}
+.callout{display:block;margin:34px 0 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  background:linear-gradient(180deg,var(--panel-raised),var(--panel));color:inherit;transition:border-color .2s,transform .2s}
+.callout:hover{text-decoration:none;border-color:rgba(255,180,84,.45);transform:translateY(-2px)}
+.callout .shot{display:block;line-height:0;border-bottom:1px solid var(--line)}
+.callout img{display:block;width:100%}
+.callout .callout-body{display:block;padding:20px 22px}
+.callout h3{margin:10px 0 6px;font-size:19px}
+.callout p{color:var(--text-soft);font-size:13.5px;max-width:700px}
+.callout .callout-more{display:inline-block;margin-top:10px;color:var(--blue);font-size:13px;font-weight:600}
+.shot-figure{margin:22px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
+.shot-figure img{display:block;width:100%}
+.shot-figure figcaption{padding:10px 14px;color:var(--text-muted);font-size:12px;border-top:1px solid var(--line-soft)}

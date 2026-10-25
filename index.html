@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Better Brush documentation — a free, local-first AI rotoscoping studio for video editors. SAM 2 segmentation, propagation, soft matting, object removal and alpha export.">
+  <meta name="description" content="Better Brush documentation — a free, local-first AI rotoscoping studio for video editors. SAM 2 segmentation, propagation, soft matting, object removal, alpha export, and a beta EffectCraft panel with a paint-to-fix brush.">
   <meta name="theme-color" content="#0a0b0e">
   <title>Better Brush Docs — AI rotoscoping, made clear</title>
   <link rel="icon" type="image/png" href="assets/betterbrush-logo.png">
@@ -22,6 +22,7 @@
         <a href="#start">Quick start</a>
         <a href="#workflow">Workflow</a>
         <a href="#export">Export</a>
+        <a href="#effectcraft">EffectCraft<span class="beta-dot"></span></a>
         <a href="#faq">FAQ</a>
       </nav>
       <a class="top-cta" href="https://sneg.dev/BetterBrush">Download <span aria-hidden="true">→</span></a>
@@ -53,6 +54,8 @@
           <a class="side-link" href="#export"><span>09</span>Export</a>
           <a class="side-link" href="#shortcuts"><span>10</span>Shortcuts</a>
           <a class="side-link" href="#faq"><span>11</span>FAQ</a>
+          <p class="side-label">Integrations</p>
+          <a class="side-link" href="#effectcraft"><span>12</span>EffectCraft <em class="beta">beta</em></a>
         </nav>
         <div class="side-links">
           <a href="https://sneg.dev/BetterBrush">Download</a>
@@ -90,6 +93,18 @@
               <p><strong>Line lock</strong> snaps mattes to the pencil line, <strong>cel hold</strong> stops boiling on held drawings, and letterbox bars are detected on import.</p>
             </article>
           </div>
+          <a class="callout" href="#effectcraft" data-searchable="effectcraft beta plugin integration track matte brush">
+            <span class="shot"><img src="assets/effectcraft-beta.webp" alt="Better Brush docked in EffectCraft, showing a corrected matte and the brush panel"></span>
+            <span class="callout-body">
+              <span class="beta">New &middot; beta</span>
+              <h3>Better Brush inside EffectCraft</h3>
+              <p>Remove Background, then paint the fix: <strong style="color:var(--green)">green</strong> keeps pixels,
+                <strong style="color:#ef4444">red</strong> deletes them. Source install today; the portable build and
+                one-file setup land on Hugging Face between 2 and 8 November. Tested on
+                <code>effectcraft-0.17.0-windows-x64-portable</code> only.</p>
+              <span class="callout-more">How to install and use it &rarr;</span>
+            </span>
+          </a>
         </section>
 
         <section id="start" data-searchable="quick start first shot five minutes tutorial install download">
@@ -240,6 +255,84 @@
           <p class="note">Exports go up to 8K, can mux the clip's original audio, and can be queued across several projects with the Batch Render Queue (<button class="key" data-copy="Ctrl+Shift+Q">Ctrl+Shift+Q</button>).</p>
         </section>
 
+        <section id="effectcraft" data-searchable="effectcraft beta integration plugin remove background track matte brush add remove force correction source install hugging face november 0.17.0 portable">
+          <p class="eyebrow">Integrations &middot; EffectCraft (beta)</p>
+          <h2>Better Brush inside <em>EffectCraft.</em></h2>
+          <p class="lede">
+            Select a footage layer, click <strong>Remove Background</strong>, and the cut-out lands on the
+            timeline as a <strong>track matte</strong>. Wrong frame? Paint it on the result image &mdash;
+            <strong style="color:var(--green)">green</strong> keeps pixels,
+            <strong style="color:#ef4444">red</strong> deletes them &mdash; then
+            <strong>Apply fix &amp; re-run</strong> re-tracks that frame with your strokes.
+          </p>
+
+          <figure class="shot-figure">
+            <img src="assets/effectcraft-beta.webp" alt="The Better Brush panel docked in EffectCraft: a corrected matte as a track matte, the quality preset, and the brush with add and remove controls">
+            <figcaption>EffectCraft 0.17.0 portable &mdash; the beta panel, a corrected matte, and the brush that fixed it.</figcaption>
+          </figure>
+
+          <div class="pill-row">
+            <span class="pill">Beta &mdash; source install today</span>
+            <span class="pill">Tested on <code>effectcraft-0.17.0-windows-x64-portable</code> only</span>
+            <span class="pill">Portable + setup on Hugging Face, 2&ndash;8 November</span>
+          </div>
+
+          <h3 style="margin:26px 0 10px;font-size:16px">Installing from source</h3>
+          <ol class="steps">
+            <li class="step-card" data-searchable="clone repository git">
+              <b>1. Clone the repository</b>
+              <p><code>git clone https://github.com/SnegOwo/Better-Brush.git</code></p>
+            </li>
+            <li class="step-card" data-searchable="installer settings folder effectcraftdata">
+              <b>2. Run the installer</b>
+              <p>Double-click <code>extensions\effectcraft\install.cmd</code>. It finds the EffectCraft settings
+                folder, copies the panel and creates the bridge &mdash; pass
+                <code>-SettingsDir &quot;&hellip;\EffectCraftData&quot;</code> if you keep several installs.</p>
+            </li>
+            <li class="step-card" data-searchable="restart effectcraft scripting permission">
+              <b>3. Restart EffectCraft</b>
+              <p>The panel opens by itself. Turn on <strong>Preferences &rsaquo; Scripting &amp; Expressions &rsaquo;
+                Allow Scripts to Write Files and Access Network</strong>.</p>
+            </li>
+            <li class="step-card" data-searchable="remove background workflow run">
+              <b>4. Use it</b>
+              <p>Select a footage layer &rarr; <strong>Remove Background</strong> &rarr; scrub to a bad frame &rarr;
+                paint &rarr; <strong>Apply fix &amp; re-run</strong>.</p>
+            </li>
+          </ol>
+
+          <div class="flow" style="margin-top:26px">
+            <span>Remove background</span><i>&rarr;</i><span>Scrub</span><i>&rarr;</i><span>Paint green / red</span><i>&rarr;</i><span>Apply fix</span>
+          </div>
+
+          <div class="table-wrap" style="margin-top:24px">
+            <table>
+              <thead><tr><th>Brush control</th><th>What it does</th></tr></thead>
+              <tbody>
+                <tr><td><b style="color:var(--green)">&#65291; Add</b></td><td>Keeps pixels the matte cut away &mdash; paint the missing hair, arm or edge back in.</td></tr>
+                <tr><td><b style="color:#ef4444">&#8722; Remove</b></td><td>Deletes pixels that should not be there. The stroke is drawn red over the frame as you paint.</td></tr>
+                <tr><td><b>Shift + drag</b></td><td>Uses the other tool for that one stroke.</td></tr>
+                <tr><td><b>Remove force 1&ndash;5</b></td><td>How hard red bites: 1 is exactly what you painted, 5 grows a margin and erases it from every frame the matte still covers.</td></tr>
+                <tr><td><b>Apply fix &amp; re-run</b></td><td>Re-tracks from this frame with your strokes and swaps the new frames into the existing matte &mdash; one Ctrl+Z.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="note">
+            <strong>Beta notes.</strong> The panel, the brush and the background adapter work today, but this is a
+            young integration. It is tested on <code>effectcraft-0.17.0-windows-x64-portable</code> and nothing else:
+            EffectCraft 0.11.x cannot run panel timers, so there the panel only refreshes while the pointer is over
+            it. Strokes never touch the composition &mdash; there are no stray masks to clean up.
+          </p>
+          <p class="note" style="border-left-color:var(--amber)">
+            <strong>Roadmap.</strong> Portable build and one-file setup on <strong>Hugging Face between 2 and
+            8 November</strong>; until then, installing from source is the supported route. Bugs and oddities go to
+            <a href="https://github.com/SnegOwo/Better-Brush/issues">GitHub issues</a> &mdash; attach
+            <code>panel.log</code> and <code>adapter.log</code>. Full guide:
+            <a href="https://github.com/SnegOwo/Better-Brush/blob/master/docs/EFFECTCRAFT.md">docs/EFFECTCRAFT.md</a>.
+          </p>
+        </section>
+
         <section id="shortcuts" data-searchable="keyboard shortcuts hotkeys keys brush play pause">
           <p class="eyebrow">10 — Shortcuts</p>
           <h2>Keep your hands on the keyboard</h2>
@@ -285,6 +378,14 @@
             <details data-searchable="formats import export compatibility prores png h264">
               <summary>Which formats are supported?</summary>
               <p>Common edit-friendly video formats on import. On export: PNG sequence (RGBA), ProRes 4444 (MOV), QuickTime Animation (MOV) and H.264 (MP4, optionally over a chroma-key background), up to 8K.</p>
+            </details>
+            <details data-searchable="effectcraft plugin beta integration">
+              <summary>Does it work inside EffectCraft?</summary>
+              <p>Yes &mdash; as a <b>beta</b>. Select a footage layer, click <b>Remove Background</b> and the matte
+                is applied as a track matte; paint green/red on the result to fix a frame and re-run. Install from
+                source today (<code>extensions\effectcraft\install.cmd</code>); the portable build and one-file setup
+                arrive on <b>Hugging Face between 2 and 8 November</b>. It is tested on
+                <code>effectcraft-0.17.0-windows-x64-portable</code> only.</p>
             </details>
             <details data-searchable="after effects premiere pro plugin panel">
               <summary>Does it work inside After Effects or Premiere Pro?</summary>
