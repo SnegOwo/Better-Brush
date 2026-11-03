@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Better Brush documentation — a free, local-first AI rotoscoping studio for video editors. SAM 2 segmentation, propagation, soft matting, object removal, alpha export, and a beta EffectCraft panel with a paint-to-fix brush.">
+  <meta name="description" content="Better Brush documentation — a free, local-first AI rotoscoping studio for video editors. SAM 2 segmentation, propagation, soft matting, object removal, alpha export, and an EffectCraft panel with a paint-to-fix brush.">
   <meta name="theme-color" content="#0a0b0e">
   <title>Better Brush Docs — AI rotoscoping, made clear</title>
   <link rel="icon" type="image/png" href="assets/betterbrush-logo.png">
@@ -22,7 +22,7 @@
         <a href="#start">Quick start</a>
         <a href="#workflow">Workflow</a>
         <a href="#export">Export</a>
-        <a href="#effectcraft">EffectCraft<span class="beta-dot"></span></a>
+        <a href="#effectcraft">EffectCraft</a>
         <a href="#faq">FAQ</a>
       </nav>
       <a class="top-cta" href="https://sneg.dev/BetterBrush">Download <span aria-hidden="true">→</span></a>
@@ -55,7 +55,7 @@
           <a class="side-link" href="#shortcuts"><span>10</span>Shortcuts</a>
           <a class="side-link" href="#faq"><span>11</span>FAQ</a>
           <p class="side-label">Integrations</p>
-          <a class="side-link" href="#effectcraft"><span>12</span>EffectCraft <em class="beta">beta</em></a>
+          <a class="side-link" href="#effectcraft"><span>12</span>EffectCraft</a>
         </nav>
         <div class="side-links">
           <a href="https://sneg.dev/BetterBrush">Download</a>
@@ -67,7 +67,7 @@
       <main id="main-content">
 
         <section id="overview" data-searchable="overview introduction local first ai rotoscoping studio privacy offline free open source anime amv">
-          <p class="eyebrow">Documentation · v1.0.0</p>
+          <p class="eyebrow">Documentation · v1.0.1</p>
           <h1>AI rotoscoping, <em>made clear.</em></h1>
           <p class="lede">
             Better Brush is a <strong>free, local-first AI rotoscoping studio</strong> for video editors.
@@ -79,6 +79,11 @@
             <span class="pill">⚡ GPU-accelerated propagation</span>
             <span class="pill">🆓 Free · source-available</span>
           </div>
+
+          <figure class="shot-figure">
+            <img src="assets/demo.gif" alt="A looping demo of Better Brush: click the subject, SAM 2 segments it, propagation tracks the shot, the cutout shows the alpha, and a brush stroke fixes an edge.">
+            <figcaption>Click → propagate → cutout → brush → export. Captured from the real app on Big Buck Bunny (CC-BY, Blender Foundation).</figcaption>
+          </figure>
           <div class="feature-grid">
             <article class="feature-card" data-searchable="point prompts sam 2 segmentation click include exclude">
               <h3>Point-prompt segmentation</h3>
@@ -289,13 +294,13 @@
               <summary>Which formats are supported?</summary>
               <p>Common edit-friendly video formats on import. On export: PNG sequence (RGBA), ProRes 4444 (MOV), QuickTime Animation (MOV) and H.264 (MP4, optionally over a chroma-key background), up to 8K.</p>
             </details>
-            <details data-searchable="effectcraft plugin beta integration">
+            <details data-searchable="effectcraft plugin integration download setup">
               <summary>Does it work inside EffectCraft?</summary>
-              <p>Yes &mdash; as a <b>beta</b>. Select a footage layer, click <b>Remove Background</b> and the matte
-                is applied as a track matte; paint green/red on the result to fix a frame and re-run. Install from
-                source today (<code>extensions\effectcraft\install.cmd</code>); the portable build and one-file setup
-                arrive on <b>Hugging Face between 2 and 8 November</b>. It is tested on
-                <code>effectcraft-0.17.0-windows-x64-portable</code> only.</p>
+              <p><b>Yes.</b> Select a footage layer, click <b>Remove Background</b> and the matte is applied as a
+                track matte; paint green/red on the result to fix a frame and re-run. Download the one-file setup from
+                <a href="https://huggingface.co/Sneg0wo/better-brush">Hugging Face</a>, or install from source with
+                <code>extensions\effectcraft\install.cmd</code>. Verified on
+                <code>effectcraft-0.17.0-windows-x64-portable</code>.</p>
             </details>
             <details data-searchable="after effects premiere pro plugin panel">
               <summary>Does it work inside After Effects or Premiere Pro?</summary>
@@ -316,8 +321,8 @@
           </div>
         </section>
 
-        <section id="effectcraft" data-searchable="effectcraft beta integration plugin remove background track matte brush add remove force correction source install hugging face november 0.17.0 portable">
-          <p class="eyebrow">Integrations &middot; EffectCraft (beta)</p>
+        <section id="effectcraft" data-searchable="effectcraft integration plugin remove background track matte brush add remove force correction download source install hugging face 0.17.0 portable">
+          <p class="eyebrow">Integrations &middot; EffectCraft</p>
           <h2>Better Brush inside <em>EffectCraft.</em></h2>
           <p class="lede">
             Select a footage layer, click <strong>Remove Background</strong>, and the cut-out lands on the
@@ -328,35 +333,41 @@
           </p>
 
           <figure class="shot-figure">
-            <img src="assets/effectcraft-beta.webp" alt="The Better Brush panel docked in EffectCraft: a corrected matte as a track matte, the quality preset, and the brush with add and remove controls">
-            <figcaption>EffectCraft 0.17.0 portable &mdash; the beta panel, a corrected matte, and the brush that fixed it.</figcaption>
+            <img src="assets/effectcraft.webp" alt="The Better Brush panel docked in EffectCraft: a corrected matte as a track matte, the quality preset, and the brush with add and remove controls">
+            <figcaption>EffectCraft 0.17.0 portable &mdash; a corrected matte and the brush that fixed it.</figcaption>
           </figure>
 
           <div class="pill-row">
-            <span class="pill">Beta &mdash; source install today</span>
-            <span class="pill">Tested on <code>effectcraft-0.17.0-windows-x64-portable</code> only</span>
-            <span class="pill">Portable + setup on Hugging Face, 2&ndash;8 November</span>
+            <span class="pill">Stable &mdash; one-file setup or source</span>
+            <span class="pill">Verified on <code>effectcraft-0.17.0-windows-x64-portable</code></span>
+            <span class="pill"><a href="https://huggingface.co/Sneg0wo/better-brush">Download</a></span>
           </div>
 
-          <h3 style="margin:26px 0 10px;font-size:16px">Installing from source</h3>
+          <h3 style="margin:26px 0 10px;font-size:16px">Installing</h3>
           <ol class="steps">
-            <li class="step-card" data-searchable="clone repository git">
-              <b>1. Clone the repository</b>
+            <li class="step-card" data-searchable="one-file setup download hugging face">
+              <b>1. One-file setup (recommended)</b>
+              <p>Download <code>BetterBrush-EffectCraft-Setup-1.0.0.cmd</code> from
+                <a href="https://huggingface.co/Sneg0wo/better-brush">Hugging Face</a> and double-click it. It finds
+                EffectCraft, copies the panel and installs the adapter &mdash; nothing is registered at logon.</p>
+            </li>
+            <li class="step-card" data-searchable="clone repository git source">
+              <b>2. Or install from source</b>
               <p><code>git clone https://github.com/SnegOwo/Better-Brush.git</code></p>
             </li>
             <li class="step-card" data-searchable="installer settings folder effectcraftdata">
-              <b>2. Run the installer</b>
+              <b>3. Run the installer</b>
               <p>Double-click <code>extensions\effectcraft\install.cmd</code>. It finds the EffectCraft settings
                 folder, copies the panel and creates the bridge &mdash; pass
                 <code>-SettingsDir &quot;&hellip;\EffectCraftData&quot;</code> if you keep several installs.</p>
             </li>
             <li class="step-card" data-searchable="restart effectcraft scripting permission">
-              <b>3. Restart EffectCraft</b>
+              <b>4. Restart EffectCraft</b>
               <p>The panel opens by itself. Turn on <strong>Preferences &rsaquo; Scripting &amp; Expressions &rsaquo;
                 Allow Scripts to Write Files and Access Network</strong>.</p>
             </li>
             <li class="step-card" data-searchable="remove background workflow run">
-              <b>4. Use it</b>
+              <b>5. Use it</b>
               <p>Select a footage layer &rarr; <strong>Remove Background</strong> &rarr; scrub to a bad frame &rarr;
                 paint &rarr; <strong>Apply fix &amp; re-run</strong>.</p>
             </li>
@@ -380,14 +391,14 @@
           </div>
 
           <p class="note">
-            <strong>Beta notes.</strong> The panel, the brush and the background adapter work today, but this is a
-            young integration. It is tested on <code>effectcraft-0.17.0-windows-x64-portable</code> and nothing else:
-            EffectCraft 0.11.x cannot run panel timers, so there the panel only refreshes while the pointer is over
-            it. Strokes never touch the composition &mdash; there are no stray masks to clean up.
+            <strong>Notes.</strong> Verified on <code>effectcraft-0.17.0-windows-x64-portable</code>: the command
+            chain, the brush correction and a real SAM&nbsp;2 matte all pass. EffectCraft 0.11.x cannot run panel
+            timers, so there the panel only refreshes while the pointer is over it. Strokes never touch the
+            composition &mdash; there are no stray masks to clean up.
           </p>
-          <p class="note" style="border-left-color:var(--amber)">
-            <strong>Roadmap.</strong> Portable build and one-file setup on <strong>Hugging Face between 2 and
-            8 November</strong>; until then, installing from source is the supported route. Bugs and oddities go to
+          <p class="note" style="border-left-color:var(--green)">
+            <strong>Downloads.</strong> The one-file setup and the app's portable build live on
+            <a href="https://huggingface.co/Sneg0wo/better-brush">Hugging Face</a>. Bugs and oddities go to
             <a href="https://github.com/SnegOwo/Better-Brush/issues">GitHub issues</a> &mdash; attach
             <code>panel.log</code> and <code>adapter.log</code>. Full guide:
             <a href="https://github.com/SnegOwo/Better-Brush/blob/master/docs/EFFECTCRAFT.md">docs/EFFECTCRAFT.md</a>.
