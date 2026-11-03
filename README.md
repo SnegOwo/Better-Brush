@@ -131,7 +131,7 @@ runs in a local headless process, and nothing leaves your machine.
 |---|---|---|
 | **After Effects** | `powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1` | stable — AE 2022+ |
 | **Premiere Pro** | `powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1` (elevated) | stable — PPro 2022+ |
-| **EffectCraft** | one-file setup, or `extensions\effectcraft\install.cmd` | stable — 0.17.0 portable |
+| **EffectCraft** | bundled with the app (`Install EffectCraft Panel.bat`), or `extensions\effectcraft\install.cmd` | stable - 0.17.0 portable |
 
 Select a footage layer (AE), a clip (Premiere) or a layer (EffectCraft), click
 **Remove Background**, and it is rotoscoped in place. A replace keeps the clip's
@@ -221,7 +221,7 @@ deletes them — and **Apply fix & re-run** re-tracks that frame with your strok
 
 > **Stable, and verified on `effectcraft-0.17.0-windows-x64-portable`** — the
 > command chain, the brush correction and a real SAM 2 matte all pass.
-> **[Download the one-file setup](https://huggingface.co/Sneg0wo/better-brush)**, or install
+> **[Download the app](https://huggingface.co/Sneg0wo/better-brush)** — the panel is included — or install
 > from source with `extensions\effectcraft\install.cmd`.
 > Found something? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
 > with `panel.log` and `adapter.log`.

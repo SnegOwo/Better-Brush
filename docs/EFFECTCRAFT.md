@@ -9,8 +9,9 @@
 > * **Tested on `effectcraft-0.17.0-windows-x64-portable`.** 0.11.1 and older
 >   cannot run panel timers at all (fixed upstream in 0.17.0), so the panel there
 >   only refreshes while your pointer is over it.
-> * **Downloads** — [Better Brush for EffectCraft](https://huggingface.co/Sneg0wo/better-brush):
->   the one-file setup, or install from source with this guide.
+> * **Downloads** — the panel ships **inside the Better Brush app** ([portable zip or
+>   installer](https://huggingface.co/Sneg0wo/better-brush)); install it with
+>   `Install EffectCraft Panel.bat`, or from source with this guide.
 > * **Bugs & oddities** → [GitHub issues](https://github.com/SnegOwo/Better-Brush/issues).
 >   Attach `panel.log` and `adapter.log` if you can.
 
@@ -46,21 +47,22 @@ hung window.
   adapter imports the same engine as the app: `torch`, `opencv-python`, `numpy`
   and the SAM 2 checkpoints. A clone of this repository (or the app's
   `Install Everything.bat`) is the supported way to get that; the standalone
-  adapter in the one-file setup runs the bridge and brush but not the SAM 2
-  engine.
+  standalone adapter bundled with the app runs the bridge and brush but not the
+  SAM 2 engine.
 - **Approx. 2 GB of disk** for the first matte (SAM 2 checkpoint + frames).
 
 ## 3. Install
 
-### The one-file setup (recommended)
+### Included with the app (recommended)
 
-Download **`BetterBrush-EffectCraft-Setup-1.0.0.cmd`** from
-[Hugging Face](https://huggingface.co/Sneg0wo/better-brush) and double-click it.
-It finds EffectCraft, copies the panel, installs the adapter under
-`%LOCALAPPDATA%\BetterBrush\effectcraft-adapter`, and writes the start file the
-panel runs. Nothing is registered at logon. Real mattes still need a Python
-with Better Brush's dependencies; the setup uses the app's engine if it finds
-one.
+Download the [Better Brush app](https://huggingface.co/Sneg0wo/better-brush)
+(portable zip or installer) and double-click **`Install EffectCraft Panel.bat`**
+in the app folder. The setup already contains `effectcraft\`, so nothing extra
+to download: the script finds EffectCraft, copies the panel, installs the
+adapter under `%LOCALAPPDATA%\BetterBrush\effectcraft-adapter`, and writes the
+start file the panel runs. Nothing is registered at logon. Real mattes still
+need a Python with Better Brush's dependencies; the adapter uses the app's
+engine if it finds one.
 
 ### The quick way (from source)
 
@@ -202,7 +204,8 @@ full path to `BetterBrush.exe` into the field under the button and click
 - EffectCraft 0.17.0 portable is the tested build; 0.11.x cannot run the panel's
   timers.
 - Real mattes need a Python environment with the Better Brush engine. The
-  one-file setup alone runs in **simulate** mode (a plumbing check), not SAM 2.
+  bundled standalone adapter alone runs in **simulate** mode (a plumbing
+  check), not SAM 2.
 - Found a bug? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
   with the two logs above and, if possible, the clip's frame size and the
   quality preset you used.

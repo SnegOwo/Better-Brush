@@ -15,7 +15,7 @@ After Effects / Premiere Pro panels: no upload, no account, no watermark.
 |---|---|
 | **Stage** | Stable — verified end-to-end on EffectCraft 0.17.0 (command chain, brush correction, real SAM 2 matte). |
 | **Tested on** | **`effectcraft-0.17.0-windows-x64-portable`.** |
-| **Install** | One-file setup from [Hugging Face](https://huggingface.co/Sneg0wo/better-brush), or from source (this folder + `install.cmd`). |
+| **Install** | Bundled with the [app download](https://huggingface.co/Sneg0wo/better-brush) (`Install EffectCraft Panel.bat`), or from source (this folder + `install.cmd`). |
 | **Bugs** | Please open a [GitHub issue](https://github.com/SnegOwo/Better-Brush/issues) — include `adapter.log` and `panel.log`. |
 
 EffectCraft **0.11.1 and older cannot run panel timers** (upstream fixed that in
@@ -168,7 +168,7 @@ crashed adapter leaves a readable log instead of a hung UI.
 - Solids, precomps, nulls, 3D and time-stretched layers are rejected with a
   sentence rather than a crash.
 - Engine mode needs the Better Brush Python environment; the standalone adapter
-  in the one-file setup runs the bridge and `--mode simulate`, not the SAM 2
+  bundled with the app runs the bridge and `--mode simulate`, not the SAM 2
   engine.
 - EffectCraft 0.17.0 only — see above.
 
