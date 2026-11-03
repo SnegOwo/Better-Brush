@@ -31,32 +31,38 @@
 ## Download and install
 
 > **Install from [Hugging Face](https://huggingface.co/Sneg0wo/better-brush).**
-> That page has the installer, the portable build, and the standalone panel
+> That page has the portable build, the installer, and the standalone panel
 > installers. Nothing is downloaded from GitHub.
 
-### Recommended — the installer
+**Both options work.** The portable build is the recommended one; the setup is
+there if you prefer a normal Windows installation.
+
+### Recommended — the portable build
 
 1. Open **[huggingface.co/Sneg0wo/better-brush](https://huggingface.co/Sneg0wo/better-brush)**.
-2. In the **`installer/`** folder, download **all four files** into the same
-   folder:
-   `BetterBrush-1.0.2-Windows-Setup.exe` and the three `Setup-*.bin` parts.
-3. Run the `.exe`. It installs Better Brush **and registers all three panels**
+2. In the **`portable/`** folder, download `BetterBrush-1.0.2-Windows.zip`
+   (5.0 GB).
+3. Extract the whole archive to a normal folder. Do not run it from the zip
+   viewer.
+4. Double-click **`BetterBrush.exe`**. For the editor panels, run
+   **`Install Everything.bat`** once.
+
+The portable build installs nothing, needs no administrator rights, can live on
+an external drive, and is removed by deleting its folder.
+
+### Also works — the installer
+
+1. In the **`installer/`** folder, download **all four files** into the same
+   folder: `BetterBrush-1.0.2-Windows-Setup.exe` and the three `Setup-*.bin`
+   parts.
+2. Run the `.exe`. It installs Better Brush **and registers all three panels**
    (After Effects, Premiere Pro, EffectCraft) — there are no component choices.
-4. Restart your editor. In After Effects or Premiere Pro, open
+3. Restart your editor. In After Effects or Premiere Pro, open
    **Window → Extensions → Better Brush**.
 
 > **Why four files?** Windows caps a single `.exe` at 4.2 GB, so the installer
 > ships as one `.exe` plus three `.bin` slices. All four are required — keep
 > them together.
-
-### Portable — no installer
-
-1. In the **`portable/`** folder, download `BetterBrush-1.0.2-Windows.zip`
-   (5.0 GB).
-2. Extract the whole archive to a normal folder. Do not run it from the zip
-   viewer.
-3. Double-click **`BetterBrush.exe`**. For the editor panels, run
-   **`Install Everything.bat`** once.
 
 ### Only need one editor panel?
 
