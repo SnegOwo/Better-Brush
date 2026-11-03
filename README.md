@@ -14,14 +14,13 @@
     <img src="https://img.shields.io/badge/%E2%AC%87%20Download-Windows%201.0.2-00b4f0?style=for-the-badge" alt="Download Better Brush for Windows (Hugging Face)" />
   </a>
   <br/>
-  <sub>Portable zip or installer · <a href="https://huggingface.co/Sneg0wo/better-brush">huggingface.co/Sneg0wo/better-brush</a></sub>
+  <sub><b>All Windows builds are on <a href="https://huggingface.co/Sneg0wo/better-brush">Hugging Face</a>.</b> GitHub hosts the source and docs.</sub>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-FSL--1.1--MIT-2ea043" alt="License: FSL-1.1-MIT (source-available, becomes MIT in 2028)" /></a>
   <img src="https://img.shields.io/badge/version-1.0.2-blueviolet" alt="Version 1.0.2" />
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows" />
-  <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python: 3.11+" />
   <img src="https://img.shields.io/badge/tests-538%20passing-brightgreen" alt="Tests: 538 passing" />
 </p>
 
@@ -29,20 +28,63 @@
 
 ---
 
-Better Brush turns any clip into a production-ready alpha matte in a few clicks:
-prompt **SAM 2** on a single frame, let it propagate the subject across the
-timeline, build a **soft matte** with real hair and motion-blur detail, **paint
-unwanted subjects out**, then export transparent ProRes 4444 or a PNG sequence
-straight into your edit. It's tuned first for **anime / AMV** — crisp line art,
-flat cel shading, thin hair strands — and handles live-action just as well.
+## Download and install
+
+> **Install from [Hugging Face](https://huggingface.co/Sneg0wo/better-brush).**
+> That page has the installer, the portable build, and the standalone panel
+> installers. Nothing is downloaded from GitHub.
+
+### Recommended — the installer
+
+1. Open **[huggingface.co/Sneg0wo/better-brush](https://huggingface.co/Sneg0wo/better-brush)**.
+2. In the **`installer/`** folder, download **all four files** into the same
+   folder:
+   `BetterBrush-1.0.2-Windows-Setup.exe` and the three `Setup-*.bin` parts.
+3. Run the `.exe`. It installs Better Brush **and registers all three panels**
+   (After Effects, Premiere Pro, EffectCraft) — there are no component choices.
+4. Restart your editor. In After Effects or Premiere Pro, open
+   **Window → Extensions → Better Brush**.
+
+> **Why four files?** Windows caps a single `.exe` at 4.2 GB, so the installer
+> ships as one `.exe` plus three `.bin` slices. All four are required — keep
+> them together.
+
+### Portable — no installer
+
+1. In the **`portable/`** folder, download `BetterBrush-1.0.2-Windows.zip`
+   (5.0 GB).
+2. Extract the whole archive to a normal folder. Do not run it from the zip
+   viewer.
+3. Double-click **`BetterBrush.exe`**. For the editor panels, run
+   **`Install Everything.bat`** once.
+
+### Only need one editor panel?
+
+The **`panels/`** folder has small standalone installers:
+
+| After Effects | Premiere Pro | EffectCraft |
+|---|---|---|
+| `BetterBrush-AfterEffects-Setup-1.0.2.exe` | `BetterBrush-PremierePro-Setup-1.0.2.exe` | `BetterBrush-EffectCraft-Setup-1.0.2.cmd` |
+
+They find the installed app and reuse its `.bb-env`. EffectCraft 0.17.0 is
+required for that panel.
+
+### Requirements
+
+- **Windows 10/11, 64-bit.**
+- An **NVIDIA GPU** is recommended; AMD/Intel works through DirectML and CPU
+  works (slower). The app picks the strongest model that fits your VRAM.
+- The **editor panels** need Python. **`Install Everything.bat`** installs it,
+  creates `.bb-env`, pulls PyTorch and registers the panels in one go.
+
+---
 
 ## See it work
 
 ![Better Brush: click the subject, propagate, check the cutout, brush a fix, export](docs/images/demo.gif)
 
-<sub>Recorded from the real app on Big Buck Bunny (CC-BY, Blender Foundation). Regenerate with `python tools/make_demo_gif.py`.</sub>
-
-## Screenshots
+<sub>Recorded from the real app on Big Buck Bunny (CC-BY, Blender Foundation).
+Regenerate with `python tools/make_demo_gif.py`.</sub>
 
 ![Better Brush editor with the mask overlay](docs/images/app-overlay.webp)
 
@@ -50,65 +92,25 @@ flat cel shading, thin hair strands — and handles live-action just as well.
 |---|---|
 | ![Cutout view with checkerboard](docs/images/app-cutout.webp) | ![Better Brush After Effects panel](docs/images/after-effects.webp) |
 
-<sub>Demo footage: Big Buck Bunny (CC-BY, Blender Foundation).</sub>
+---
 
-## Highlights
+## What it does
 
-- **Segment** — point prompts (click to include, right-click to exclude), prompt-aware
-  mask ranking, anime/human/object presets, scene-cut detection, optional face-part.
-- **Matte** — learned video matting (MatAnyone) for true soft alpha, guided-filter edge
-  cleanup, optical-flow temporal smoothing, per-shot profiles.
-- **Anime / AMV engine** — **line lock** snaps mattes to the pencil line and rejects
-  background line art, **cel hold** kills boiling on held drawings, and baked-in
-  letterbox bars are detected on import.
-- **Remove** — AI video inpainting erases masked subjects and rebuilds the background;
-  LaMa subtitle/logo cleanup with CPU fallback.
-- **Refine** — brush (hold `Shift` to erase) that also acts as a SAM 2 prompt, full
-  undo/redo, overlay/cutout/raw views.
-- **Inspect** — Matte QC Inspector with issue evidence, an offline QC Coach, live GPU
-  telemetry, and checksummed version history.
-- **Export** — PNG sequence, ProRes 4444, QuickTime Animation, or H.264 with chroma-key
-  backgrounds; soft mattes and spill controls applied at render time.
-- **Bring your own model** — correct masks export straight into a SAM 2 fine-tuning
-  dataset (see below).
-
-## Install
-
-**Windows, no terminal:** download from
-**[Hugging Face](https://huggingface.co/Sneg0wo/better-brush)**. Pick **one**:
-
-| Option | Files to download | Then |
-|---|---|---|
-| **Portable** (simplest) | `portable/BetterBrush-1.0.2-Windows.zip` - 1 file, 5.0 GB | Extract it, run `BetterBrush.exe` |
-| **Installer** | `installer/` — `Setup.exe` **+ all three `Setup-*.bin`** into one folder | Run `Setup.exe` |
-
-The installer is split only because Windows caps a single `.exe` at 4.2 GB; all
-four files are required. Both options include the After Effects, Premiere Pro and
-EffectCraft panels — run `Install Everything.bat` to set up Python and register
-them.
-
-From source:
-
-```bash
-git clone https://github.com/SnegOwo/Better-Brush.git
-cd Better-Brush
-
-python -m venv .venv
-.venv\Scripts\activate            # Windows (source .venv/bin/activate on Unix)
-
-# CUDA build of PyTorch FIRST — plain `pip install torch` is CPU-only on Windows:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-
-pip install -r requirements.txt
-python -m src.main
-```
-
-The first segmentation downloads a SAM 2.1 checkpoint (~150 MB); matting, removal and
-fine-tuning weights download on first use. Optional extras: `scenedetect` (sharper cuts),
-`mediapipe` (face parts), `onnxruntime` (LaMa on CPU), `-e ".[sam3]"` (SAM 3.1).
-
-**Auto model selection** maps your GPU's *total* VRAM to the strongest tier that keeps
-~35% headroom — SAM 2.1 Tiny→Large, EfficientTAM for small GPUs, and optional SAM 3.1.
+- **Segment** — click to include, right-click to exclude. Anime, human and
+  object presets, prompt-aware mask ranking, scene-cut detection.
+- **Propagate** — SAM 2 tracks the subject across the shot, frame by frame.
+- **Matte** — learned video matting for real hair and motion blur, guided-filter
+  edge cleanup, optical-flow temporal smoothing, per-shot profiles.
+- **Anime / AMV engine** — line lock snaps mattes to the pencil line, cel hold
+  stops boiling on held drawings, letterbox bars are detected on import.
+- **Remove** — AI video inpainting erases masked subjects and rebuilds the
+  background; LaMa cleans subtitles and logos.
+- **Refine** — brush that also acts as a SAM 2 prompt, with full undo/redo and
+  overlay, cutout and raw views.
+- **Inspect** — Matte QC Inspector, offline QC Coach, live GPU telemetry and
+  checksummed version history.
+- **Export** — PNG sequence, ProRes 4444, QuickTime Animation, or H.264 over a
+  chroma-key background, up to 8K.
 
 ## Quick start
 
@@ -119,48 +121,47 @@ fine-tuning weights download on first use. Optional extras: `scenedetect` (sharp
 5. **Inspect** — `Ctrl+Shift+M` runs the QC Inspector.
 6. **Export** — `Ctrl+E`. Or queue several projects (`Ctrl+Shift+Q`).
 
-Every step is reversible — re-segment, swap models, change a profile, or roll back to a
-checkpoint at any time. Open **Help → Quick Tutorial** for a guided tour in-app.
+Every step is reversible: re-segment, swap models, change a profile, or roll
+back to a checkpoint. **Help → Quick Tutorial** gives a guided tour in-app.
 
-## Inside your editor
+---
 
-The same engine behind three host integrations: the panel is thin, the AI work
-runs in a local headless process, and nothing leaves your machine.
+## Inside your editors
 
-| Host | Install | Status |
+The same engine powers three host panels: the panel is thin, the AI runs in a
+local process, and nothing leaves your machine. Select a layer or clip, click
+**Remove Background**, and it is rotoscoped in place.
+
+| Host | Support | How to install |
 |---|---|---|
-| **After Effects** | `powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1` | stable — AE 2022+ |
-| **Premiere Pro** | `powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1` (elevated) | stable — PPro 2022+ |
-| **EffectCraft** | bundled with the app (`Install EffectCraft Panel.bat`), or `extensions\effectcraft\install.cmd` | stable - 0.17.0 portable |
-
-Select a footage layer (AE), a clip (Premiere) or a layer (EffectCraft), click
-**Remove Background**, and it is rotoscoped in place. A replace keeps the clip's
-own audio — the cut-out is the same footage minus the background.
+| **After Effects** | AE 2022–2025 | Included in the app setup |
+| **Premiere Pro** | PPro 2022–2025 | Included in the app setup |
+| **EffectCraft** | 0.17.0 portable | Included in the app setup |
 
 ![Better Brush panel inside Premiere Pro](docs/images/premiere-pro.webp)
 
-Panels: **[After Effects](after-effects/README.md)** ·
+**EffectCraft:** the cut-out lands on the timeline as a track matte. Wrong frame?
+Paint it — green keeps pixels, red deletes them — and **Apply fix & re-run**
+re-tracks that frame with your strokes.
+
+<img src="docs/images/effectcraft.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
+
+Panel guides: **[After Effects](after-effects/README.md)** ·
 **[Premiere Pro](premiere-pro/README.md)** ·
 **[EffectCraft](docs/EFFECTCRAFT.md)**.
 
+---
+
 ## Fine-tune your own anime SAM 2
 
-Better Brush is the data engine for a custom model: the app proposes masks, you correct
-the ones it gets wrong, and those corrections become the training set. A full walkthrough
-that names the result **Lugnica SAM** lives in
-**[docs/LUGNICA-SAM.md](docs/LUGNICA-SAM.md)**.
+Better Brush is also a data engine for a custom model: the app proposes masks,
+you correct the ones it gets wrong, and those corrections become the training
+set. The full walkthrough names the result **Lugnica SAM**.
 
-- **[Fine-tuning guide](docs/FINE-TUNING.md)** — the full recipe and per-GPU settings.
-- **[Build Lugnica SAM](docs/LUGNICA-SAM.md)** — the simple, opinionated step-by-step.
-- **[Colab kit](tools/sam2_training/colab/README.md)** — train in the browser on a free
-  T4 (or L4/A100), no local GPU needed.
-
-## Free, and fully unlocked
-
-Better Brush is free, and **every feature is included** — no "Lite" tier, no
-activation keys, no watermark, no account: segmentation, brush, propagation,
-learned matting, AI object removal, PNG / ProRes / QuickTime / MP4 export up
-to 8K, multi-object scenes, original-audio muxing and Library recoding.
+- **[Fine-tuning guide](docs/FINE-TUNING.md)** — full recipe and per-GPU settings.
+- **[Build Lugnica SAM](docs/LUGNICA-SAM.md)** — the simple step-by-step.
+- **[Colab kit](tools/sam2_training/colab/README.md)** — train in a browser on a
+  free T4, no local GPU needed.
 
 ## Documentation
 
@@ -169,24 +170,44 @@ to 8K, multi-object scenes, original-audio muxing and Library recoding.
 | Guide | Contents |
 |---|---|
 | [User Guide](docs/USER-GUIDE.md) | The complete editor-facing workflow |
-| [EffectCraft](docs/EFFECTCRAFT.md) | Install, workflow, brush, troubleshooting |
-| [Anime & AMV Engine](docs/ANIME-AMV.md) | Line lock, cel hold, letterbox, anime QC |
 | [Complete Feature Reference](docs/COMPLETE-FEATURES.md) | Every feature and system, in depth |
+| [Anime & AMV Engine](docs/ANIME-AMV.md) | Line lock, cel hold, letterbox, anime QC |
+| [EffectCraft](docs/EFFECTCRAFT.md) | Install, workflow, brush, troubleshooting |
 | [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
-| [Fine-tuning](docs/FINE-TUNING.md) · [Build Lugnica SAM](docs/LUGNICA-SAM.md) · [Colab Kit](tools/sam2_training/colab/README.md) | Train your own model |
-| [After Effects panel](after-effects/README.md) | One-click background removal inside AE (Windows, AE 2022+) |
-| [Premiere Pro panel](premiere-pro/README.md) | The same panel ported to Premiere Pro (Windows, PPro 2022+) |
+| [Fine-tuning](docs/FINE-TUNING.md) · [Lugnica SAM](docs/LUGNICA-SAM.md) | Train your own model |
 
-Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
-[Complete Feature Reference](docs/COMPLETE-FEATURES.md).
+---
+
+## Build from source
+
+For development, or if you prefer a Python environment you control:
+
+```bash
+git clone https://github.com/SnegOwo/Better-Brush.git
+cd Better-Brush
+
+python -m venv .venv
+.venv\Scripts\activate            # source .venv/bin/activate on macOS/Linux
+
+# CUDA PyTorch FIRST — plain `pip install torch` is CPU-only on Windows:
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+pip install -r requirements.txt
+python -m src.main
+```
+
+The first segmentation downloads a SAM 2.1 checkpoint (~150 MB); matting,
+removal and fine-tuning weights download on first use. Optional extras:
+`scenedetect` (sharper cuts), `mediapipe` (face parts), `onnxruntime` (LaMa on
+CPU), `-e ".[sam3]"` (SAM 3.1).
 
 ## Development
 
 ```bash
-python -m pytest tests/ -q                    # 538 tests, no GPU required
-python -m pytest extensions/effectcraft/tests -q   # the EffectCraft bridge (104 tests)
-python -m ruff check src/                      # lint
-pyinstaller --clean better_brush.spec          # developer build
+python -m pytest tests/ -q                          # 538 tests, no GPU required
+python -m pytest extensions/effectcraft/tests -q    # EffectCraft bridge (104 tests)
+python -m ruff check src/                           # lint
+pyinstaller --clean better_brush.spec               # developer build
 ```
 
 Vendored packages and licenses: [src/vendor/README.md](src/vendor/README.md).
@@ -195,46 +216,25 @@ Vendored packages and licenses: [src/vendor/README.md](src/vendor/README.md).
 
 Better Brush is **source-available** under the
 [Functional Source License 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT).
-You can read, fork, modify, build and share it, and you can use it to make
-**any video — including monetised YouTube, TikTok and AMV edits**. The videos
-you create are yours.
+You can read, fork, modify, build and share it, and use it to make **any video —
+including monetised YouTube, TikTok and AMV edits**. The videos you create are
+yours.
 
 You may **not** resell Better Brush, sell the source code, or ship it inside a
-competing or paid rotoscoping/video tool. On **2028-10-23** the license
-automatically converts to **MIT**, and those restrictions disappear.
+competing or paid rotoscoping/video tool. On **2028-10-23** the license converts
+to **MIT** and those restrictions disappear.
 
-Some bundled AI model weights are licensed separately for non-commercial use
-(MatAnyone 2, NTU S-Lab License 1.0; MiniMax-Remover, CC-BY-NC-4.0). Those are
-third-party terms and are unaffected by the code license — review
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) if you plan commercial work.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the
-contribution license.
-
-## Better Brush inside EffectCraft
-
-Select a footage layer, click **Remove Background**, and the cut-out lands on
-your timeline as a track matte. Wrong frame? Paint it — green keeps pixels, red
-deletes them — and **Apply fix & re-run** re-tracks that frame with your strokes.
-
-<img src="docs/images/effectcraft.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
-
-> **Stable, and verified on `effectcraft-0.17.0-windows-x64-portable`** — the
-> command chain, the brush correction and a real SAM 2 matte all pass.
-> **[Download the app](https://huggingface.co/Sneg0wo/better-brush)** — the panel is included — or install
-> from source with `extensions\effectcraft\install.cmd`.
-> Found something? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
-> with `panel.log` and `adapter.log`.
-
-**[Read the EffectCraft guide →](docs/EFFECTCRAFT.md)** — install, workflow,
-brush controls, troubleshooting, uninstall.
+Some bundled AI weights have their own non-commercial terms (MatAnyone 2,
+NTU S-Lab License 1.0; MiniMax-Remover, CC-BY-NC-4.0). See
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) before commercial work, and
+[CONTRIBUTING.md](CONTRIBUTING.md) for the development setup.
 
 ## Star History
 
 <a href="https://www.star-history.com/?repos=snegowo%2Fbetter-brush&type=date&legend=top-left">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&theme=light&legend=top-left" />
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=snegowo/better-brush&type=date&legend=top-left" />
  </picture>
 </a>
