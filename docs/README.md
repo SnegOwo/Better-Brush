@@ -4,6 +4,8 @@
 
 <span style="color:#4a9eff">AI rotoscoping for editors who need clean, controllable mattes.</span>
 
+**<a href="https://huggingface.co/Sneg0wo/better-brush">⬇ Download Better Brush for Windows</a>** — portable zip or installer.
+
 </div>
 
 <div align="center">
