@@ -9,7 +9,15 @@ validator rejects the ``time``/``index`` arguments of ``file.import`` that
     python scripts/validate_commands.py <bridge-dir> \\
         --cli <path\\to\\effectcraft-cli.exe> [--config-dir DIR]
 
-Exit code 0 means every check passed.
+The bridge folder must already hold a finished run: ``sample-job`` only writes
+the job JSON, it does not render frames. Run the adapter once first, e.g.
+
+    python run_adapter.py --bridge-dir <bridge-dir> sample-job --source clip.mp4
+    python run_adapter.py --bridge-dir <bridge-dir> once --mode simulate
+    python scripts/validate_commands.py <bridge-dir> --cli ...\\effectcraft-cli.exe
+
+Otherwise ``file.import`` fails with an I/O error because the PNGs the command
+list points at do not exist yet. Exit code 0 means every check passed.
 """
 
 from __future__ import annotations

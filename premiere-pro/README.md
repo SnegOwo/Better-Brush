@@ -285,7 +285,10 @@ that file has the full trace.
 
 | Symptom | Fix |
 | --- | --- |
-| Panel missing from the Extensions menu | Re-run `install.ps1` (elevated), restart Premiere. Check `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrushPPro\CSXS\manifest.xml` exists. |
+| Panel missing from the Extensions menu | Update the panel: installers before 1.0.1 aborted when Python was not on PATH, so nothing reached the CEP folder. The current `install.ps1` installs the panel regardless. Then fully quit and reopen Premiere. |
+| Panel installed but says "No Python engine is configured" | Expected without Python. Re-run the installer with `-Python "C:\path\to\python.exe"` pointing at a Python that has Better Brush's dependencies. |
+| Installed from inside the `.zip` | Extract the whole download first, then run `Install Panels.bat`. A zip-viewer install copies from a temporary read-only path. |
+| Still invisible after a correct install | Unsigned CEP panels need PlayerDebugMode: `reg query HKCU\Software\Adobe\CSXS.12 /v PlayerDebugMode` must print `0x1`. The installer sets HKCU CSXS.9–16. |
 | The panel doesn't see the clip you selected | Click the clip once in the timeline so it highlights, and give the panel a second — it polls. If it still refuses, the panel now repeats what Premiere reported, which is the useful part. |
 | "The panel has no way to launch a program in this host" | The panel was updated but the manifest it loaded was not. Re-run `install.ps1` (elevated) and **restart Premiere Pro** — CEP reads the manifest once, at startup. |
 | "The engine did not start in time" | The message now carries the reason from the operating system when it has one (for example `spawn ... ENOENT`, which means the Python path in `config.json` is wrong). Re-run `install.ps1` to rewrite `config.json` from this machine's Python. |

@@ -265,7 +265,7 @@ def cmd_print_commands(args: argparse.Namespace) -> int:
     first = None
     if not out_dir.is_dir():
         # Dry run: name the file the import *would* point at.
-        first = out_dir / "00000.png"
+        first = out_dir / "00001.png"
     commands = build_commands(job, out_dir, first_frame=first)
     print(json.dumps({"job": job.id, "png_dir": str(out_dir), "commands": commands},
                      indent=2))

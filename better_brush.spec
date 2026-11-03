@@ -145,8 +145,8 @@ datas.append((str(PROJECT_ROOT / "For-Agent" / "ffmpeg.exe"), "."))
 
 _version_info = VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(1, 0, 0, 0),
-        prodvers=(1, 0, 0, 0),
+        filevers=(1, 0, 1, 0),
+        prodvers=(1, 0, 1, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,
@@ -162,7 +162,7 @@ _version_info = VSVersionInfo(
                     [
                         StringStruct("CompanyName", "Sneg HQ, a company of Lugunica"),
                         StringStruct("FileDescription", "Better Brush — AI rotoscoping"),
-                        StringStruct("FileVersion", "1.0.0"),
+                        StringStruct("FileVersion", "1.0.1"),
                         StringStruct("InternalName", "BetterBrush"),
                         StringStruct(
                             "LegalCopyright",
@@ -170,7 +170,7 @@ _version_info = VSVersionInfo(
                         ),
                         StringStruct("OriginalFilename", "BetterBrush.exe"),
                         StringStruct("ProductName", "Better Brush"),
-                        StringStruct("ProductVersion", "1.0.0"),
+                        StringStruct("ProductVersion", "1.0.1"),
                     ],
                 )
             ]

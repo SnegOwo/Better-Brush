@@ -193,7 +193,10 @@ def run_simulate(
     for i, (offset, bgr, alpha) in enumerate(prepared):
         if cancelled():
             raise JobCancelled()
-        _write_png(out_dir / f"{offset:05d}.png", bgr, alpha)
+        # 1-based, like FFmpeg's ``%05d.png`` in engine mode and like the
+        # panel's frameFile() (frame - frame_in + 1). A 0-based name here used
+        # to shift every simulate preview one frame off.
+        _write_png(out_dir / f"{offset + 1:05d}.png", bgr, alpha)
         if i % 5 == 0 or i == total - 1:
             on_progress("export", i + 1, total, "writing PNG frames")
 
@@ -201,7 +204,7 @@ def run_simulate(
     h, w = prepared[0][1].shape[:2]
     return {
         "png_dir": str(out_dir),
-        "first_frame": str(out_dir / "00000.png"),
+        "first_frame": str(out_dir / "00001.png"),
         "frame_count": total,
         "frame_in": job.frame_in,
         "frame_out": job.frame_in + total - 1,
@@ -557,8 +560,10 @@ def write_preview(png_dir: Path, job: Job) -> str:
     except ImportError:  # pragma: no cover - cv2 is required to render anyway
         return ""
     try:
+        # correction.frame is 0-based *within the job range*; sequence files
+        # are 1-based (FFmpeg's %05d, and the panel's frameFile()).
         index = job.correction.frame if job.correction else 0
-        path = png_dir / f"{index:05d}.png"
+        path = png_dir / f"{index + 1:05d}.png"
         if not path.is_file():
             path = _first_png(png_dir) or Path()
         rgba = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)

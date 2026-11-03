@@ -6,6 +6,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-03
+
+### Fixed
+- **After Effects / Premiere Pro panels install without Python.** The installer
+  used to abort when no interpreter was on PATH, so a setup run that selected
+  "Better Brush + panels" copied no extension at all and the host showed no
+  entry under **Window ▸ Extensions**. It now installs the panel, writes an
+  empty engine path, and says exactly how to point it at Python later. The panel
+  reports *"No Python engine is configured"* instead of a generic timeout.
+- **EffectCraft simulate frames are 1-based**, matching the engine's
+  `%05d.png` output and the panel's `frame - frame_in + 1` lookup. Previews no
+  longer drift one frame.
+
+### Added
+- **Better Brush for EffectCraft is stable**, verified end-to-end on EffectCraft
+  0.17.0 (command chain, brush correction, real SAM 2 matte).
+- **One-file EffectCraft setup** bundled with the app download.
+- **Looping demo GIF** (`docs/images/demo.gif`) plus the reproducible capture
+  script in `tools/make_demo_gif.py`.
+- **Panel packaging tests** (`tests/test_panel_layout.py`) that catch an
+  installer which cannot register the CEP panel.
+
 ## [1.0.0] - 2026-10-23
 
 ### Changed

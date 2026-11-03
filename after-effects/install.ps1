@@ -138,36 +138,58 @@ function Resolve-Python([string]$explicit) {
     if (-not (Test-Path $explicit)) { Die "Python not found: $explicit" }
     return (Resolve-Path $explicit).Path
   }
+  # A local environment is the supported setup for the source package and for
+  # "Install Everything.bat", and it is more likely to hold torch than whatever
+  # `python` resolves to on PATH.
+  foreach ($candidate in @(
+      (Join-Path $RepoRoot ".bb-env\Scripts\python.exe"),
+      (Join-Path $RepoRoot ".venv\Scripts\python.exe"))) {
+    if (Test-Path $candidate) { return (Resolve-Path $candidate).Path }
+  }
   $cmd = Get-Command python -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
   $cmd = Get-Command python3 -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
-  Die "Could not find Python on PATH. Pass -Python 'C:\path\to\python.exe'."
+  # Deliberately not fatal: the panel is a CEP extension and must appear in
+  # Window > Extensions even when no interpreter is configured yet, otherwise a
+  # setup that did not install Python looks like "the extension never installed".
+  return ""
 }
 
 $pythonExe = Resolve-Python $Python
-Info "Python: $pythonExe"
+if ($pythonExe) {
+  Info "Python: $pythonExe"
+} else {
+  Warn "No Python found - installing the panel anyway."
+  Warn "Without a Python engine the panel opens but cannot segment."
+  Warn "After installing Python + the dependencies, re-run:"
+  Warn "  powershell -ExecutionPolicy Bypass -File `"$ScriptDir\install.ps1`" -Python `"C:\path\to\python.exe`""
+}
 
 $pythonwExe = ""
-$candidate = Join-Path (Split-Path -Parent $pythonExe) "pythonw.exe"
-if (Test-Path $candidate) { $pythonwExe = $candidate } else { $pythonwExe = $pythonExe }
-Info "Windowless launcher: $pythonwExe"
+if ($pythonExe) {
+  $candidate = Join-Path (Split-Path -Parent $pythonExe) "pythonw.exe"
+  if (Test-Path $candidate) { $pythonwExe = $candidate } else { $pythonwExe = $pythonExe }
+  Info "Windowless launcher: $pythonwExe"
+}
 
 # --------------------------------------------------------------------- #
 # Sanity-check the interpreter actually has Better Brush's runtime
 # --------------------------------------------------------------------- #
-Push-Location $RepoRoot
-try {
-  & $pythonExe -c "import src.engine, torch" 2>$null
-  if ($LASTEXITCODE -ne 0) {
-    Warn "This Python could not import 'src.engine' and 'torch' from $RepoRoot."
-    Warn "The panel will install, but the engine may fail to start."
-    Warn "Install the app first:  python -m pip install -e ."
-  } else {
-    Good "Runtime check passed."
+if ($pythonExe) {
+  Push-Location $RepoRoot
+  try {
+    & $pythonExe -c "import src.engine, torch" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      Warn "This Python could not import 'src.engine' and 'torch' from $RepoRoot."
+      Warn "The panel will install, but the engine may fail to start."
+      Warn "Install the app first:  python -m pip install -e ."
+    } else {
+      Good "Runtime check passed."
+    }
+  } finally {
+    Pop-Location
   }
-} finally {
-  Pop-Location
 }
 
 # --------------------------------------------------------------------- #
@@ -185,6 +207,39 @@ Copy-Item -Path (Join-Path $ScriptDir "*") -Destination $ExtDir -Recurse -Force
 Remove-Item -Force (Join-Path $ExtDir "install.ps1") -ErrorAction SilentlyContinue
 Remove-Item -Force (Join-Path $ExtDir "config.sample.json") -ErrorAction SilentlyContinue
 Remove-Item -Force (Join-Path $ExtDir "README.md") -ErrorAction SilentlyContinue
+
+# --------------------------------------------------------------------- #
+# Repair a flattened panel payload
+# --------------------------------------------------------------------- #
+# CEP only looks for CSXS\manifest.xml, and the panel HTML loads js\panel.js.
+# Release builds before 1.0.1 were packaged with those two folders flattened
+# (manifest.xml at the root, host.jsx/panel.js beside it), so the panel was
+# copied into the CEP folder but never appeared under Window > Extensions.
+# Normalise the *installed* copy so every download works, however it was zipped.
+$installedManifest = Join-Path $ExtDir "manifest.xml"
+if ((Test-Path $installedManifest) -and -not (Test-Path (Join-Path $ExtDir "CSXS\manifest.xml"))) {
+  New-Item -ItemType Directory -Force -Path (Join-Path $ExtDir "CSXS") | Out-Null
+  Move-Item -Force $installedManifest (Join-Path $ExtDir "CSXS\manifest.xml")
+  Warn "Repaired a flattened panel layout (manifest.xml -> CSXS\manifest.xml)."
+}
+$installedJsDir = Join-Path $ExtDir "js"
+foreach ($jsFile in @("host.jsx", "panel.js")) {
+  $flat = Join-Path $ExtDir $jsFile
+  if ((Test-Path $flat) -and -not (Test-Path (Join-Path $installedJsDir $jsFile))) {
+    New-Item -ItemType Directory -Force -Path $installedJsDir | Out-Null
+    Move-Item -Force $flat (Join-Path $installedJsDir $jsFile)
+    Warn "Repaired a flattened panel layout ($jsFile -> js\$jsFile)."
+  }
+}
+if (-not (Test-Path (Join-Path $ExtDir "CSXS\manifest.xml"))) {
+  Die @"
+No CEP manifest at
+  $(Join-Path $ExtDir "CSXS\manifest.xml")
+The download is incomplete - usually because the panel was installed from
+inside the .zip (or Windows blocked the extracted files). Extract the whole
+package to a normal folder first, then re-run this installer.
+"@
+}
 Good "Installed panel to $ExtDir"
 
 # --------------------------------------------------------------------- #
@@ -242,8 +297,15 @@ Info "1. Restart After Effects."
 Info "2. Window > Extensions > Better Brush  (dock the panel where you like)."
 Info "3. Select a footage layer and click Remove Background."
 Write-Host ""
-Info "The panel starts the engine on demand; you normally never launch it by hand."
-Info "To run it manually:"
-Info "  cd `"$RepoRoot`""
-Info "  `"$pythonExe`" -m src.engine --port $Port"
+if ($pythonExe) {
+  Info "The panel starts the engine on demand; you normally never launch it by hand."
+  Info "To run it manually:"
+  Info "  cd `"$RepoRoot`""
+  Info "  `"$pythonExe`" -m src.engine --port $Port"
+} else {
+  Warn "The panel is installed, but no Python engine is configured."
+  Warn "It will appear under Window > Extensions and report that the engine is"
+  Warn "offline. Install Python 3.11-3.13 + the dependencies, then re-run:"
+  Warn "  powershell -ExecutionPolicy Bypass -File `"$ScriptDir\install.ps1`" -Python `"C:\path\to\python.exe`""
+}
 Write-Host ""

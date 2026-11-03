@@ -11,10 +11,10 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-FSL--1.1--MIT-2ea043" alt="License: FSL-1.1-MIT (source-available, becomes MIT in 2028)" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-blueviolet" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/version-1.0.1-blueviolet" alt="Version 1.0.1" />
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python: 3.11+" />
-  <img src="https://img.shields.io/badge/tests-524%20passing-brightgreen" alt="Tests: 524 passing" />
+  <img src="https://img.shields.io/badge/tests-538%20passing-brightgreen" alt="Tests: 538 passing" />
 </p>
 
 <p align="center"><b>100% local</b> · <b>100% free</b> · <b>source-available</b></p>
@@ -27,6 +27,12 @@ timeline, build a **soft matte** with real hair and motion-blur detail, **paint
 unwanted subjects out**, then export transparent ProRes 4444 or a PNG sequence
 straight into your edit. It's tuned first for **anime / AMV** — crisp line art,
 flat cel shading, thin hair strands — and handles live-action just as well.
+
+## See it work
+
+![Better Brush: click the subject, propagate, check the cutout, brush a fix, export](docs/images/demo.gif)
+
+<sub>Recorded from the real app on Big Buck Bunny (CC-BY, Blender Foundation). Regenerate with `python tools/make_demo_gif.py`.</sub>
 
 ## Screenshots
 
@@ -59,6 +65,14 @@ flat cel shading, thin hair strands — and handles live-action just as well.
   dataset (see below).
 
 ## Install
+
+**Windows, no terminal:** download the portable zip or the installer from
+**[Hugging Face](https://huggingface.co/Sneg0wo/better-brush)**. The installer is
+split into `Setup.exe` + `Setup-*.bin` parts — download all of them into one
+folder and run the `.exe`. The panels (After Effects / Premiere / EffectCraft)
+come with both, and `Install Everything.bat` sets up Python for them.
+
+From source:
 
 ```bash
 git clone https://github.com/SnegOwo/Better-Brush.git
@@ -102,7 +116,7 @@ runs in a local headless process, and nothing leaves your machine.
 |---|---|---|
 | **After Effects** | `powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1` | stable — AE 2022+ |
 | **Premiere Pro** | `powershell -ExecutionPolicy Bypass -File .\premiere-pro\install.ps1` (elevated) | stable — PPro 2022+ |
-| **EffectCraft** | `extensions\effectcraft\install.cmd` | **beta** — 0.17.0 portable only |
+| **EffectCraft** | one-file setup, or `extensions\effectcraft\install.cmd` | stable — 0.17.0 portable |
 
 Select a footage layer (AE), a clip (Premiere) or a layer (EffectCraft), click
 **Remove Background**, and it is rotoscoped in place. A replace keeps the clip's
@@ -112,7 +126,7 @@ own audio — the cut-out is the same footage minus the background.
 
 Panels: **[After Effects](after-effects/README.md)** ·
 **[Premiere Pro](premiere-pro/README.md)** ·
-**[EffectCraft (beta)](docs/EFFECTCRAFT.md)**.
+**[EffectCraft](docs/EFFECTCRAFT.md)**.
 
 ## Fine-tune your own anime SAM 2
 
@@ -140,7 +154,7 @@ to 8K, multi-object scenes, original-audio muxing and Library recoding.
 | Guide | Contents |
 |---|---|
 | [User Guide](docs/USER-GUIDE.md) | The complete editor-facing workflow |
-| [EffectCraft (beta)](docs/EFFECTCRAFT.md) | Install, workflow, brush, troubleshooting |
+| [EffectCraft](docs/EFFECTCRAFT.md) | Install, workflow, brush, troubleshooting |
 | [Anime & AMV Engine](docs/ANIME-AMV.md) | Line lock, cel hold, letterbox, anime QC |
 | [Complete Feature Reference](docs/COMPLETE-FEATURES.md) | Every feature and system, in depth |
 | [Developer Guide](docs/DEVELOPER-GUIDE.md) | Architecture, algorithms, persistence, build |
@@ -154,7 +168,7 @@ Format support, keyboard shortcuts, troubleshooting and the FAQ live in the
 ## Development
 
 ```bash
-python -m pytest tests/ -q                    # 524 tests, no GPU required
+python -m pytest tests/ -q                    # 538 tests, no GPU required
 python -m pytest extensions/effectcraft/tests -q   # the EffectCraft bridge (104 tests)
 python -m ruff check src/                      # lint
 pyinstaller --clean better_brush.spec          # developer build
@@ -182,20 +196,18 @@ third-party terms and are unaffected by the code license — review
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the
 contribution license.
 
-## Better Brush inside EffectCraft (beta)
+## Better Brush inside EffectCraft
 
 Select a footage layer, click **Remove Background**, and the cut-out lands on
 your timeline as a track matte. Wrong frame? Paint it — green keeps pixels, red
 deletes them — and **Apply fix & re-run** re-tracks that frame with your strokes.
 
-<img src="docs/images/effectcraft-beta.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
+<img src="docs/images/effectcraft.webp" alt="Better Brush panel inside EffectCraft, with a corrected matte and the brush panel" width="100%" />
 
-> **Beta, source-only for now.** The panel and its background adapter work today
-> but are young. **Tested on `effectcraft-0.17.0-windows-x64-portable` only** —
-> 0.11.x and older cannot run panel timers at all.
-> Install from source with `extensions\effectcraft\install.cmd`.
-> The portable build and one-file setup arrive on **Hugging Face between 2 and
-> 8 November**.
+> **Stable, and verified on `effectcraft-0.17.0-windows-x64-portable`** — the
+> command chain, the brush correction and a real SAM 2 matte all pass.
+> **[Download the one-file setup](https://huggingface.co/Sneg0wo/better-brush)**, or install
+> from source with `extensions\effectcraft\install.cmd`.
 > Found something? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
 > with `panel.log` and `adapter.log`.
 

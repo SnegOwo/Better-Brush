@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from PySide6.QtCore import QCoreApplication, QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QColor, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -202,6 +202,22 @@ def test_v_key_does_not_activate_view() -> None:
         win.close()
 
 
+def test_mask_overlay_keeps_its_colour_channels():
+    """QImage.Format_ARGB32 is BGRA in memory; writing RGB swapped red/blue.
+
+    The default cyan overlay used to render amber on every frame.
+    """
+    canvas = _canvas()
+    canvas._mask_color = QColor(0, 180, 240, 255)
+    mask = np.zeros((100, 160), dtype=bool)
+    mask[40:60, 70:90] = True
+
+    image = canvas._mask_to_pixmap(mask).toImage()
+    colour = image.pixelColor(80, 50)
+
+    assert (colour.red(), colour.green(), colour.blue()) == (0, 180, 240)
+
+
 if __name__ == "__main__":
     _app()
     tests = [
@@ -216,6 +232,7 @@ if __name__ == "__main__":
         test_zoom_keeps_cursor_point_stable,
         test_no_view_tool_button,
         test_v_key_does_not_activate_view,
+        test_mask_overlay_keeps_its_colour_channels,
     ]
     failed = 0
     for t in tests:

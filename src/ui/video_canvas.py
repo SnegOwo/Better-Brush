@@ -630,22 +630,24 @@ class VideoCanvas(QWidget):
     def _mask_to_pixmap(self, mask: np.ndarray) -> QPixmap:
         h, w = mask.shape
         rgba = np.zeros((h, w, 4), dtype=np.uint8)
+        # QImage.Format_ARGB32 stores one 0xAARRGGBB word per pixel; in memory
+        # (little-endian) that is B, G, R, A — not R, G, B, A. Writing RGB here
+        # swapped red and blue, so the default cyan overlay rendered amber.
+        blue, green, red, alpha = (
+            self._mask_color.blue(),
+            self._mask_color.green(),
+            self._mask_color.red(),
+            self._mask_color.alpha(),
+        )
         if mask.dtype == bool:
-            rgba[mask] = [
-                self._mask_color.red(),
-                self._mask_color.green(),
-                self._mask_color.blue(),
-                self._mask_color.alpha(),
-            ]
+            rgba[mask] = [blue, green, red, alpha]
         else:
             # Soft matte: partial coverage becomes partial colour alpha.
             coverage = mask.astype(np.float32)
-            rgba[:, :, 0] = int(self._mask_color.red())
-            rgba[:, :, 1] = int(self._mask_color.green())
-            rgba[:, :, 2] = int(self._mask_color.blue())
-            rgba[:, :, 3] = (
-                coverage * self._mask_color.alpha()
-            ).astype(np.uint8)
+            rgba[:, :, 0] = int(blue)
+            rgba[:, :, 1] = int(green)
+            rgba[:, :, 2] = int(red)
+            rgba[:, :, 3] = (coverage * alpha).astype(np.uint8)
         bytes_per_line = 4 * w
         image = QImage(rgba.data, w, h, bytes_per_line, QImage.Format.Format_ARGB32)
         return QPixmap.fromImage(image.copy())

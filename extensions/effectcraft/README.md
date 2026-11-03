@@ -1,22 +1,21 @@
-# Better Brush for EffectCraft **Beta**
+# Better Brush for EffectCraft
 
 A ScriptUI panel and a background adapter that put **Remove Background** — and a
 brush for fixing what it gets wrong — inside [EffectCraft](https://github.com/storytold/effectcraft).
 Everything runs locally with the same SAM 2 stack as the desktop app and the
 After Effects / Premiere Pro panels: no upload, no account, no watermark.
 
-![Better Brush inside EffectCraft](../../docs/images/effectcraft-beta.webp)
+![Better Brush inside EffectCraft](../../docs/images/effectcraft.webp)
 
 ---
 
-## Status: beta, source-only for now
+## Status
 
 | | |
 |---|---|
-| **Stage** | Beta. It works and it is used daily — expect rough edges. |
-| **Tested on** | **`effectcraft-0.17.0-windows-x64-portable` only.** Nothing else. |
-| **Install** | From source, right now (this folder + `install.cmd`). |
-| **Portable build & one-file setup** | On Hugging Face between **2 and 8 November**. |
+| **Stage** | Stable — verified end-to-end on EffectCraft 0.17.0 (command chain, brush correction, real SAM 2 matte). |
+| **Tested on** | **`effectcraft-0.17.0-windows-x64-portable`.** |
+| **Install** | One-file setup from [Hugging Face](https://huggingface.co/Sneg0wo/better-brush), or from source (this folder + `install.cmd`). |
 | **Bugs** | Please open a [GitHub issue](https://github.com/SnegOwo/Better-Brush/issues) — include `adapter.log` and `panel.log`. |
 
 EffectCraft **0.11.1 and older cannot run panel timers** (upstream fixed that in
@@ -27,7 +26,7 @@ it and it says so in the status line. Use 0.17.0.
 
 - **EffectCraft 0.17.0**, Windows x64 **portable** (the `EffectCraftData` folder
   next to `effectcraft.exe`). The installed (non-portable) layout is detected
-  too, but it is not what this beta is tested on.
+  too, but it is not the tested build.
 - **Windows 10/11**.
 - **Python 3.11+ with the Better Brush environment** for real mattes — the
   adapter calls the same engine as the app, so `torch`, `cv2`, `numpy` and the
@@ -163,14 +162,14 @@ list, the panel executes it inside one undo group. Everything crossing the
 boundary is a flat JSON file, so a frozen panel can never block the host and a
 crashed adapter leaves a readable log instead of a hung UI.
 
-## Limits (beta)
+## Limits
 
 - One job at a time, one footage layer at a time.
 - Solids, precomps, nulls, 3D and time-stretched layers are rejected with a
   sentence rather than a crash.
 - Engine mode needs the Better Brush Python environment; the standalone adapter
-  planned for the Hugging Face release runs the bridge and `--mode simulate`, not
-  the SAM 2 engine.
+  in the one-file setup runs the bridge and `--mode simulate`, not the SAM 2
+  engine.
 - EffectCraft 0.17.0 only — see above.
 
 ## License

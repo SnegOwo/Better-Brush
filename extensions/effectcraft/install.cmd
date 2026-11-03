@@ -2,8 +2,8 @@
 setlocal
 title Better Brush for EffectCraft - installer
 echo.
-echo  Better Brush for EffectCraft (beta)
-echo  ===================================
+echo  Better Brush for EffectCraft
+echo  =============================
 echo.
 echo  This installs the panel into EffectCraft and writes the bridge folder.
 echo  Nothing is registered at logon - the panel starts the adapter itself.

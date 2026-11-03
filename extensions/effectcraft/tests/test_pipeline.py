@@ -390,8 +390,9 @@ def test_preview_picks_the_correction_frame(tmp_path: Path):
     assert path and Path(path).is_file()
     # Frame 3 of the simulated run differs from frame 0 — the preview must be
     # the frame the strokes were painted on, not simply the first file.
-    first = cv2.imread(str(job.png_dir(root) / "00000.png"), cv2.IMREAD_UNCHANGED)
-    picked = cv2.imread(str(job.png_dir(root) / "00003.png"), cv2.IMREAD_UNCHANGED)
+    # Sequence files are 1-based: correction frame 3 is 00004.png.
+    first = cv2.imread(str(job.png_dir(root) / "00001.png"), cv2.IMREAD_UNCHANGED)
+    picked = cv2.imread(str(job.png_dir(root) / "00004.png"), cv2.IMREAD_UNCHANGED)
     assert not np.array_equal(first[:, :, :3], picked[:, :, :3])
     assert Path(path).name == "preview.jpg"
 

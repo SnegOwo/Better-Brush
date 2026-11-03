@@ -253,10 +253,17 @@ function bbLaunchEngine(pythonw, root, port) {
         root = String(root || "");
         port = parseInt(port, 10);
         if (isNaN(port) || port <= 0) { port = 8765; }
-        if (!pythonw || !root) {
+        if (!root) {
             return bbJson({
                 ok: false,
                 reason: "config.json is missing next to the panel - run after-effects/install.ps1 first."
+            });
+        }
+        if (!pythonw) {
+            return bbJson({
+                ok: false,
+                reason: "No Python engine is configured - re-run after-effects/install.ps1 with " +
+                        "-Python \"C:\\path\\to\\python.exe\" (a Python with Better Brush's dependencies)."
             });
         }
         var inner = 'cd /d "' + root + '" && start "" /b "' + pythonw + '" -m src.engine --port ' + port + ' --quiet';
@@ -272,10 +279,17 @@ function bbOpenFullApp(python, root, file) {
         python = String(python || "");
         root = String(root || "");
         file = String(file || "");
-        if (!python || !root) {
+        if (!root) {
             return bbJson({
                 ok: false,
                 reason: "config.json is missing next to the panel - run after-effects/install.ps1 first."
+            });
+        }
+        if (!python) {
+            return bbJson({
+                ok: false,
+                reason: "No Python engine is configured - re-run after-effects/install.ps1 with " +
+                        "-Python \"C:\\path\\to\\python.exe\" (a Python with Better Brush's dependencies)."
             });
         }
         // Launched exactly like the engine: a detached pythonw.exe with no

@@ -1,19 +1,20 @@
-# Better Brush in EffectCraft — beta guide
+# Better Brush in EffectCraft
 
-> [!WARNING]
-> **Beta, and source-only for now.** The panel and adapter work today, but they
-> are young: expect rough edges, and please report them.
+> [!NOTE]
+> **Stable.** Verified end-to-end against **EffectCraft 0.17.0** on Windows 11:
+> the full command chain (import → rename → transform → track matte), the brush
+> correction path, and a real SAM 2 matte render all pass. See
+> [VALIDATION.md](../extensions/effectcraft/docs/VALIDATION.md).
 >
-> * **Tested on `effectcraft-0.17.0-windows-x64-portable` only.** No other
->   EffectCraft build is supported — 0.11.1 and older cannot run panel timers at
->   all (that was fixed upstream in 0.17.0), so the panel there only refreshes
->   while your pointer is over it.
-> * **Install from source** (this guide). The portable build and one-file setup
->   go to **Hugging Face between 2 and 8 November**.
+> * **Tested on `effectcraft-0.17.0-windows-x64-portable`.** 0.11.1 and older
+>   cannot run panel timers at all (fixed upstream in 0.17.0), so the panel there
+>   only refreshes while your pointer is over it.
+> * **Downloads** — [Better Brush for EffectCraft](https://huggingface.co/Sneg0wo/better-brush):
+>   the one-file setup, or install from source with this guide.
 > * **Bugs & oddities** → [GitHub issues](https://github.com/SnegOwo/Better-Brush/issues).
 >   Attach `panel.log` and `adapter.log` if you can.
 
-![Better Brush inside EffectCraft](../docs/images/effectcraft-beta.webp)
+![Better Brush inside EffectCraft](../docs/images/effectcraft.webp)
 
 EffectCraft's own panel dock shows the matte result, the quality preset and the
 brush. The matte below it is the real track matte applied to the footage layer —
@@ -39,19 +40,29 @@ hung window.
 
 - **EffectCraft 0.17.0**, Windows x64, **portable** layout (`EffectCraftData`
   sits next to `effectcraft.exe`). The installed layout is detected as well, but
-  it is not what this beta is tested on.
+  0.17.0 portable is the tested build.
 - **Windows 10/11**, 64-bit.
-- **Python 3.11+ with the Better Brush environment** for real mattes. The
+- **Python 3.11–3.13 with the Better Brush environment** for real mattes. The
   adapter imports the same engine as the app: `torch`, `opencv-python`, `numpy`
-  and the SAM 2 checkpoints. A clone of this repository is the supported way to
-  get that (see [Install](../README.md#install) in the main README); the
-  standalone adapter planned for the November release runs the bridge but not
-  the SAM 2 engine.
+  and the SAM 2 checkpoints. A clone of this repository (or the app's
+  `Install Everything.bat`) is the supported way to get that; the standalone
+  adapter in the one-file setup runs the bridge and brush but not the SAM 2
+  engine.
 - **Approx. 2 GB of disk** for the first matte (SAM 2 checkpoint + frames).
 
-## 3. Install (from source)
+## 3. Install
 
-### The quick way
+### The one-file setup (recommended)
+
+Download **`BetterBrush-EffectCraft-Setup-1.0.0.cmd`** from
+[Hugging Face](https://huggingface.co/Sneg0wo/better-brush) and double-click it.
+It finds EffectCraft, copies the panel, installs the adapter under
+`%LOCALAPPDATA%\BetterBrush\effectcraft-adapter`, and writes the start file the
+panel runs. Nothing is registered at logon. Real mattes still need a Python
+with Better Brush's dependencies; the setup uses the app's engine if it finds
+one.
+
+### The quick way (from source)
 
 1. Clone this repository:
 
@@ -114,7 +125,7 @@ Files and Access Network**.
 
 With EffectCraft open and a project loaded:
 
-1. The panel is titled **Better Brush v0.6.x** and the status line under the
+1. The panel is titled **Better Brush v1.0.x** and the status line under the
    result image says *Ready — select a footage layer…*.
 2. Select a **footage layer** — not a solid, text layer, null or precomp.
 3. Click **Remove Background**. Progress lines appear on their own.
@@ -183,15 +194,15 @@ full path to `BetterBrush.exe` into the field under the button and click
 | `<EffectCraftData>\betterbrush-bridge\adapter.log` | every job, its stages and its failure |
 | `<EffectCraftData>\betterbrush-bridge\brush-context.json` | what the panel can still correct |
 
-## 8. Beta notes
+## 8. Notes and limits
 
 - One job at a time, one footage layer at a time.
 - Solids, precomps, nulls, 3D layers and time-stretched layers are rejected with
   a sentence rather than a crash.
-- EffectCraft 0.17.0 portable is the only build this beta has been tested on.
-- The portable build and the one-file setup will be on **Hugging Face between
-  2 and 8 November**; until then, installing from source is the only supported
-  route.
+- EffectCraft 0.17.0 portable is the tested build; 0.11.x cannot run the panel's
+  timers.
+- Real mattes need a Python environment with the Better Brush engine. The
+  one-file setup alone runs in **simulate** mode (a plumbing check), not SAM 2.
 - Found a bug? [Open an issue](https://github.com/SnegOwo/Better-Brush/issues)
   with the two logs above and, if possible, the clip's frame size and the
   quality preset you used.

@@ -1,5 +1,5 @@
 ================================================================================
- Better Brush v1.0.0 — Windows
+ Better Brush v1.0.1 — Windows
  The AI rotoscoping studio for video editors.
  100% local: your footage never leaves your machine.
  100% free: every feature is unlocked — no key, no account, no watermark.
@@ -23,6 +23,9 @@ WHAT'S IN THIS PACKAGE
                                  features, into checkpoints\.)
   after-effects\                After Effects 2022+ panel incl. install.ps1
   premiere-pro\                 Premiere Pro 2022+ panel incl. install.ps1
+  effectcraft\                  Better Brush panel for EffectCraft 0.17.0
+                                (see "QUICK START — EFFECTCRAFT" below)
+  Install EffectCraft Panel.bat One-click install of that panel
   src\ + requirements.txt +     The engine source. The installers for both
   pyproject.toml                panels launch the AI engine straight from this
                                 folder (unzip the package first, don't run
@@ -53,6 +56,25 @@ QUICK START — DESKTOP APP
   - Fully reversible: checkpoints, per-shot profiles and version history are
     saved with each project, so you can always roll back.
   - Press the play-button Help → Quick Tutorial in-app for a guided tour.
+
+QUICK START — EFFECTCRAFT PANEL
+--------------------------------------------------------------------------------
+
+ 1. Install EffectCraft 0.17.0 (Windows x64 portable). Other builds are not
+    supported: 0.11.x cannot run panel timers.
+ 2. Double-click "Install EffectCraft Panel.bat". It finds the EffectCraft
+    settings folder (EffectCraftData next to effectcraft.exe) and copies the
+    panel + background adapter.
+ 3. Start EffectCraft. The panel opens on its own; otherwise open
+    Window > Better Brush.
+ 4. In EffectCraft, turn on Preferences > Scripting & Expressions >
+    "Allow Scripts to Write Files and Access Network".
+ 5. Select a footage layer, click Remove Background. Wrong frame? Paint green
+    (keep) or red (delete), then Apply fix & re-run.
+
+  Real mattes use the same Python engine as the After Effects / Premiere
+  panels. If the panel says the engine is offline, run "Install Everything.bat"
+  (creates .bb-env) and re-run "Install EffectCraft Panel.bat".
 
 QUICK START — AFTER EFFECTS / PREMIERE PRO PANELS
 --------------------------------------------------------------------------------

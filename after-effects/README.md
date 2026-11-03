@@ -230,7 +230,11 @@ that file has the full trace.
 
 | Symptom | Fix |
 | --- | --- |
-| Panel missing from the Extensions menu | Re-run `install.ps1`, restart AE. Check that `CSXS\manifest.xml` exists in the folder it installed to (`%APPDATA%\Adobe\CEP\extensions\BetterBrush`, or `C:\Program Files\Common Files\Adobe\CEP\extensions\BetterBrush` if you used `-Scope System`). |
+| Panel missing from the Extensions menu | Update the panel first: installers before 1.0.1 **aborted the install when Python was not on PATH**, so the CEP folder was never written and nothing appeared. The current `install.ps1` installs the panel regardless. Then fully quit AE (File → Exit) and reopen — CEP reads manifests only at launch. |
+| Panel installed but says "No Python engine is configured" | That is the expected state after installing without Python. Re-run the installer pointing at a Python that has Better Brush's dependencies: `powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1 -Python "C:\path\to\python.exe"`. |
+| Installed from inside the `.zip` | Extract the whole download to a normal folder first, then run `Install Panels.bat`. Installing from the zip viewer copies from a temporary read-only path, so `config.json` points at a folder that disappears. |
+| Still invisible after a correct install | Unsigned CEP panels need PlayerDebugMode: `reg query HKCU\Software\Adobe\CSXS.12 /v PlayerDebugMode` must print `0x1` (AE 2024 uses CSXS.12; older hosts use 9–11). `install.ps1` sets HKCU CSXS.9–16. |
+| AE 2024 specifically | The manifest targets `AEFT [22.0,99.9]`, which includes AE 2024 (24.x) and 2025 (25.x). If the menu entry is still absent, the install did not reach the CEP folder — check `%APPDATA%\Adobe\CEP\extensions\BetterBrush\CSXS\manifest.xml` exists. |
 | "engine offline" never clears | Run install again so `config.json` has the right Python path. Test it by hand: `python -m src.engine --port 8765`. |
 | An update changed nothing | The engine is a separate process, so a run that started before the update is still the old code. Quit Better Brush (or end the `pythonw` task) and click again — the panel starts a fresh engine. |
 | "config.json is missing" | Re-run `install.ps1`; it writes `config.json` next to `index.html`. |

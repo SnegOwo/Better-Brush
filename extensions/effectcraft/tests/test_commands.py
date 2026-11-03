@@ -45,7 +45,7 @@ def make_job(**over) -> Job:
 def make_pngs(tmp_path: Path, count: int = 3) -> Path:
     png = tmp_path / "png"
     png.mkdir(parents=True, exist_ok=True)
-    for i in range(count):
+    for i in range(1, count + 1):
         (png / f"{i:05d}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     return png
 
@@ -112,7 +112,7 @@ def test_import_uses_the_first_numbered_frame(tmp_path: Path):
     png = make_pngs(tmp_path)
     commands = build_commands(job, png)
     paths = by_id(commands, "file.import")["params"]["paths"]
-    assert paths == [to_effectcraft_path(png / "00000.png")]
+    assert paths == [to_effectcraft_path(png / "00001.png")]
 
 
 def test_missing_frames_raise(tmp_path: Path):
@@ -127,9 +127,9 @@ def test_dry_run_override(tmp_path: Path):
     """print-commands can show the list before anything is rendered."""
     job = make_job()
     commands = build_commands(job, tmp_path / "not-created-yet",
-                              first_frame=tmp_path / "00000.png")
+                              first_frame=tmp_path / "00001.png")
     assert commands[0]["params"]["paths"] == [
-        to_effectcraft_path(tmp_path / "00000.png")
+        to_effectcraft_path(tmp_path / "00001.png")
     ]
 
 
@@ -190,7 +190,7 @@ def test_correction_swaps_footage_and_parks_stroke_masks(tmp_path: Path):
     first = cmds[0]
     assert first["critical"] is True
     # A correction has no import, so the first command carries a bare path.
-    assert first["params"]["path"] == to_effectcraft_path(png / "00000.png")
+    assert first["params"]["path"] == to_effectcraft_path(png / "00001.png")
     assert first["params"]["item"] == 12
     assert first["params"]["sequence"] is True
     # Mode None is an accepted value of layer.mask.mode — verified against the
@@ -229,4 +229,4 @@ def test_correction_result_indices_do_not_shift(tmp_path: Path):
     assert result["matte_index"] == 2
     assert result["source_index"] == 3
     assert result["corrected"] is True
-    assert result["first_frame"] == to_effectcraft_path(png / "00000.png")
+    assert result["first_frame"] == to_effectcraft_path(png / "00001.png")

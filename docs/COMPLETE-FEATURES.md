@@ -562,7 +562,7 @@ Shot profiles resolve in this order:
 
 ## 19. Licensing
 
-Better Brush **1.0.0** is free and fully unlocked: there is no "Lite"/"Pro"
+Better Brush **1.0.1** is free and fully unlocked: there is no "Lite"/"Pro"
 split, no activation keys, no watermark and nothing to buy. Every capability —
 point prompts and brush, PNG / ProRes / QuickTime / H.264 export, exports up to
 8K, multi-object scenes, original-audio muxing, learned matting and AI object

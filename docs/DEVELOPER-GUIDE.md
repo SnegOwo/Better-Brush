@@ -312,6 +312,30 @@ pyinstaller --clean --noconfirm --distpath BetterbrushDistV3 better_brush.spec
 
 Optional models and FFmpeg are resolved through the constants and detector modules. New modules imported from `MainWindow` or a package `__init__` are included automatically; if a module is only discovered dynamically, add it to the spec explicitly.
 
+The Adobe panels are **copied, not frozen**, so their folder shape has to survive
+packaging. CEP only scans `CSXS/manifest.xml`, and the panel HTML loads
+`js/panel.js`:
+
+```text
+after-effects/            premiere-pro/
+  CSXS/manifest.xml         CSXS/manifest.xml
+  index.html, panel.css     index.html, panel.css
+  js/panel.js, js/host.jsx  js/panel.js, js/host.jsx
+  config.sample.json        config.sample.json
+```
+
+A 1.0.0 packaging pass flattened those folders (`manifest.xml` beside
+`index.html`), which installed without error and never appeared in
+`Window > Extensions`. Before zipping a bundle, check both folders:
+
+```powershell
+python -m pytest tests/test_panel_layout.py -q
+```
+
+`install.ps1` also repairs a flattened copy at install time, so a release that
+was already downloaded can be fixed by re-running it. Keep that repair path when
+editing the installer.
+
 ---
 
 ## 13. Safe extension points

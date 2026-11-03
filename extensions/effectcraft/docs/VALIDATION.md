@@ -1,7 +1,48 @@
-# Validation — EffectCraft 0.11.1
+# Validation — EffectCraft 0.17.0 and 0.11.1
 
 Every API this MVP relies on was checked against a real EffectCraft build, not
 assumed from After Effects documentation.
+
+## Re-validated on 0.17.0 (2026-11-03, panel v1.0.0)
+
+**Verdict: PASS.** Build `effectcraft-0.17.0-windows-x64-portable` on Windows 11
+with the real SAM 2 engine (`torch 2.11.0+cu128`, RTX 3060).
+
+| Check | Result |
+|---|---|
+| Fresh run: `file.import` → `layer.rename` → `prop.set` ×4 → `layer.setTrackMatte`, `matte_index` 1 and 3 | PASS — 11/11 assertions per run, `failures=[]` |
+| Correction: `file.replaceFootage` + `layer.mask.mode` | PASS — mask `6813 → 6812`, footage replaced, layer count unchanged |
+| Adapter `--mode simulate` | PASS — 6 frames in 0.18 s, 6 PNGs, 7 commands |
+| Adapter engine mode | PASS — real SAM 2 matte, `engine=betterbrush`, 1 frame in 35.6 s (cold) |
+| Panel API: `app.run`, `scheduleTask`, `cancelTask`, undo groups | PASS |
+| All nine command ids + signatures | PASS |
+| Write gate sentence, `Folder.temp`/`appData` still null | PASS (unchanged) |
+| Adapter test suite | PASS — 104 tests |
+
+### 0.17.0 differences that matter
+
+- `file.import` with `addToComp:true` **does** add a layer to an empty comp and
+  honours `time`/`index` (the 0.11.1 note said otherwise).
+- `MaskMode` members are uppercase: `MaskMode.ADD` / `SUBTRACT`, not `.Add`.
+  The adapter already passes `"None"` as a string, so it is unaffected.
+- `layer.start` is undefined; use `layer.startTime` (the panel already does).
+- `effectcraft-cli run/exec` still rejects `time`/`index` for `file.import`;
+  `app.run` accepts both. Validation therefore stays on `app.run`.
+- `app.scheduleTask` exists and returns an id; a headless `script` exits before
+  the task fires, so firing is only observable in the GUI.
+- Simulate output is now **1-based** (`00001.png`, …) to match the engine's
+  `%05d.png` and the panel's `frame - frame_in + 1`. Before v1.0.0 it was
+  0-based, which shifted every simulate preview by one frame.
+
+### Harness note
+
+`validate_commands.py` needs rendered frames. `sample-job` only writes the job
+JSON; run the adapter `once` before validating, otherwise `file.import` fails
+with an I/O error for the PNG it points at.
+
+---
+
+# Historical log — EffectCraft 0.11.1
 
 **Build:** `effectcraft-0.11.1-windows-x64-portable` (`portable.txt` present, so
 settings live in `<install>\EffectCraftData`, not `%APPDATA%\EffectCraft`).
