@@ -18,7 +18,7 @@
  */
 
 (function (thisObj) {
-  var VERSION = "1.0.0";
+  var VERSION = "1.0.2";
   var BRIDGE_NAME = "betterbrush-bridge";
   /* Written by scripts/install.ps1 at install time with the absolute bridge
    * folder (forward slashes). Needed because a *panel* script sees

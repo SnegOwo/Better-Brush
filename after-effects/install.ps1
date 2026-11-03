@@ -89,7 +89,30 @@ function Test-Admin {
   }
 }
 
-if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $ScriptDir }
+function Find-AppRoot {
+  # A standalone panel installer runs from its own temp folder; the engine lives
+  # with the app. Look in the default setup locations.
+  foreach ($candidate in @(
+      (Join-Path $env:LOCALAPPDATA "Programs\Better Brush"),
+      (Join-Path $env:ProgramFiles "Better Brush"),
+      (Join-Path $env:LOCALAPPDATA "BetterBrush"))) {
+    if ($candidate -and (Test-Path (Join-Path $candidate "src\engine"))) {
+      return $candidate
+    }
+  }
+  return ""
+}
+
+if (-not $RepoRoot) {
+  $RepoRoot = Split-Path -Parent $ScriptDir
+  if (-not (Test-Path (Join-Path $RepoRoot "src\engine"))) {
+    $appRoot = Find-AppRoot
+    if ($appRoot) {
+      $RepoRoot = $appRoot
+      Info "Using the installed app at $RepoRoot"
+    }
+  }
+}
 
 Write-Host ""
 Write-Host "Better Brush - After Effects panel installer" -ForegroundColor Cyan
@@ -259,6 +282,17 @@ $configJson = $config | ConvertTo-Json
   (New-Object System.Text.UTF8Encoding($false))
 )
 Good "Wrote config.json"
+
+# Chromium cannot fetch() a file:// URL, so CEP 12 (Adobe 2024+) never read the
+# JSON. index.html loads config.js as a normal <script>, which always works.
+$configJsPath = Join-Path $ExtDir "config.js"
+$configJs = "window.BETTER_BRUSH_CONFIG = " + $configJson + ";`r`n"
+[System.IO.File]::WriteAllText(
+  $configJsPath,
+  $configJs,
+  (New-Object System.Text.UTF8Encoding($false))
+)
+Good "Wrote config.js (CEP 12 / Adobe 2024 compatible)"
 
 # --------------------------------------------------------------------- #
 # Enable CEP player-debug mode (unsigned extensions) for this user

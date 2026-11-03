@@ -41,7 +41,8 @@ param(
     [string]$AdapterDir = "",
     [string]$RepoRoot = "",
     [switch]$NoStart,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$IfPresent
 )
 
 $ErrorActionPreference = "Stop"
@@ -179,6 +180,17 @@ if ($Uninstall) {
 # ------------------------------------------------------------------ #
 # Installing
 # ------------------------------------------------------------------ #
+if (-not $SettingsDir) {
+    $SettingsDir = Find-EffectCraftSettings | Select-Object -First 1
+}
+if (-not $SettingsDir -and $IfPresent) {
+    # The all-in-one app setup calls this. No EffectCraft on the machine is not
+    # an installation failure: the user can run Install EffectCraft Panel.bat
+    # after installing EffectCraft.
+    Write-Host "EffectCraft not found - skipping the EffectCraft panel."
+    Write-Host "Run 'Install EffectCraft Panel.bat' in the app folder after installing EffectCraft."
+    exit 0
+}
 $SettingsDir = Resolve-SettingsDir
 Write-Host "EffectCraft settings: $SettingsDir"
 

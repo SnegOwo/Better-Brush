@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Better Brush"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 APP_STAGE = "release"
 
 # Writable storage root. Source tree: repo root. Frozen bundle: the folder

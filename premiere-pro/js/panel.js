@@ -375,13 +375,54 @@
   /* ------------------------------------------------------------------ */
   /* Config + engine                                                     */
   /* ------------------------------------------------------------------ */
+  /* config.json cannot be read with fetch() from a CEP panel: the page is a
+   * file:// document and Chromium rejects non-http(s) schemes there (CEP 12 /
+   * Adobe 2024 and newer). install.ps1 therefore also writes config.js, which
+   * sets window.BETTER_BRUSH_CONFIG before this script runs. Keep fetch + XHR
+   * as fallbacks for older CEP builds and hand-written configs. */
+  function readConfigJson() {
+    return new Promise(function (resolve) {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "config.json", true);
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState !== 4) {
+            return;
+          }
+          if (xhr.status === 200 || xhr.status === 0) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+              return;
+            } catch (err) { /* fall through */ }
+          }
+          resolve(null);
+        };
+        xhr.onerror = function () { resolve(null); };
+        xhr.send();
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  }
+
   function loadConfig() {
+    var embedded = (typeof window !== "undefined" && window.BETTER_BRUSH_CONFIG) || null;
+    if (embedded && typeof embedded === "object") {
+      state.config = Object.assign({}, DEFAULT_CONFIG, embedded);
+      return Promise.resolve(state.config);
+    }
     return fetch("config.json", { cache: "no-store" })
       .then(function (resp) {
         return resp.ok ? resp.json() : null;
       })
       .catch(function () {
-        return null;
+        return readConfigJson();
+      })
+      .then(function (cfg) {
+        if (!cfg || typeof cfg !== "object") {
+          return readConfigJson();
+        }
+        return cfg;
       })
       .then(function (cfg) {
         if (cfg && typeof cfg === "object") {

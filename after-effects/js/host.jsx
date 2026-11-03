@@ -256,7 +256,7 @@ function bbLaunchEngine(pythonw, root, port) {
         if (!root) {
             return bbJson({
                 ok: false,
-                reason: "config.json is missing next to the panel - run after-effects/install.ps1 first."
+                reason: "the panel config is missing - run after-effects/install.ps1 first."
             });
         }
         if (!pythonw) {
@@ -282,7 +282,7 @@ function bbOpenFullApp(python, root, file) {
         if (!root) {
             return bbJson({
                 ok: false,
-                reason: "config.json is missing next to the panel - run after-effects/install.ps1 first."
+                reason: "the panel config is missing - run after-effects/install.ps1 first."
             });
         }
         if (!python) {

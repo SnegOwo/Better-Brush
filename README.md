@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://huggingface.co/Sneg0wo/better-brush">
-    <img src="https://img.shields.io/badge/%E2%AC%87%20Download-Windows%201.0.1-00b4f0?style=for-the-badge" alt="Download Better Brush for Windows (Hugging Face)" />
+    <img src="https://img.shields.io/badge/%E2%AC%87%20Download-Windows%201.0.2-00b4f0?style=for-the-badge" alt="Download Better Brush for Windows (Hugging Face)" />
   </a>
   <br/>
   <sub>Portable zip or installer · <a href="https://huggingface.co/Sneg0wo/better-brush">huggingface.co/Sneg0wo/better-brush</a></sub>
@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-FSL--1.1--MIT-2ea043" alt="License: FSL-1.1-MIT (source-available, becomes MIT in 2028)" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.1-blueviolet" alt="Version 1.0.1" />
+  <img src="https://img.shields.io/badge/version-1.0.2-blueviolet" alt="Version 1.0.2" />
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="Python: 3.11+" />
   <img src="https://img.shields.io/badge/tests-538%20passing-brightgreen" alt="Tests: 538 passing" />
@@ -79,7 +79,7 @@ flat cel shading, thin hair strands — and handles live-action just as well.
 
 | Option | Files to download | Then |
 |---|---|---|
-| **Portable** (simplest) | `portable/BetterBrush-1.0.1-Windows.zip` — 1 file, 5.1 GB | Extract it, run `BetterBrush.exe` |
+| **Portable** (simplest) | `portable/BetterBrush-1.0.2-Windows.zip` - 1 file, 5.0 GB | Extract it, run `BetterBrush.exe` |
 | **Installer** | `installer/` — `Setup.exe` **+ all three `Setup-*.bin`** into one folder | Run `Setup.exe` |
 
 The installer is split only because Windows caps a single `.exe` at 4.2 GB; all

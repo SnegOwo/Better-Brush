@@ -110,6 +110,26 @@ def test_host_script_explains_a_missing_engine_python(panel: str) -> None:
     assert "No Python engine is configured" in text
 
 
+@pytest.mark.parametrize("panel", PANELS)
+def test_config_is_loaded_without_fetch(panel: str) -> None:
+    """CEP 12 (Adobe 2024+) refuses fetch() on file:// URLs.
+
+    The config must arrive through a <script src="config.js"> tag, with the JSON
+    fetch/XHR paths kept only as fallbacks for older hosts.
+    """
+    html = (REPO_ROOT / panel / "index.html").read_text(encoding="utf-8")
+    assert "config.js" in html
+    assert html.index("config.js") < html.index("js/panel.js")
+
+    script = (REPO_ROOT / panel / "js" / "panel.js").read_text(encoding="utf-8")
+    assert "window.BETTER_BRUSH_CONFIG" in script
+    assert "readConfigJson" in script
+
+    installer = (REPO_ROOT / panel / "install.ps1").read_text(encoding="utf-8")
+    assert 'config.js' in installer
+    assert "BETTER_BRUSH_CONFIG" in installer
+
+
 def test_install_bat_points_at_panel_installers() -> None:
     """The portable package advertises a one-click installer; keep it wired."""
     bat_candidates = [

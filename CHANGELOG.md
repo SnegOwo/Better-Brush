@@ -6,6 +6,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/), versioning is
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-03
+
+### Fixed
+- **After Effects / Premiere Pro panels on Adobe 2024+ (CEP 12).** The panel
+  read its settings with `fetch("config.json")`, which Chromium refuses for
+  `file://` pages. It therefore showed *"config.json is missing"* and stayed
+  offline even though the installer had written the file. The installer now
+  also writes `config.js`, loaded as a normal `<script>` before the panel, with
+  an XHR fallback for older CEP builds. This is the real fix for 2024 panels
+  that installed correctly but never found the engine.
+
+### Changed
+- **One all-in-one Windows setup.** It installs the app and registers all three
+  panels (After Effects, Premiere Pro, EffectCraft) with no component page.
+- **Three standalone panel installers** for users who only need one host:
+  `BetterBrush-AfterEffects-Setup.exe`, `BetterBrush-PremierePro-Setup.exe`,
+  `BetterBrush-EffectCraft-Setup.cmd`. They find an installed Better Brush app
+  and reuse its `.bb-env`.
+
 ## [1.0.1] - 2026-11-03
 
 ### Fixed

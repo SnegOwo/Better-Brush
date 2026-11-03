@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "better-brush"
-version = "1.0.1"
+version = "1.0.2"
 description = "Professional rotoscoping desktop app powered by SAM 2 (free, source-available)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -54,7 +54,7 @@ sam3 = [
     "sam3 @ git+https://github.com/facebookresearch/sam3.git",
     "huggingface-hub>=0.30.0",
     "iopath>=0.1.10",
-    "timm>=1.0.17",
+    "timm>=1.0.27",
 ]
 
 [project.gui-scripts]

@@ -1,5 +1,5 @@
 ================================================================================
- Better Brush v1.0.1 — Windows
+ Better Brush v1.0.2 — Windows
  The AI rotoscoping studio for video editors.
  100% local: your footage never leaves your machine.
  100% free: every feature is unlocked — no key, no account, no watermark.

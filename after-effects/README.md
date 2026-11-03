@@ -231,6 +231,7 @@ that file has the full trace.
 | Symptom | Fix |
 | --- | --- |
 | Panel missing from the Extensions menu | Update the panel first: installers before 1.0.1 **aborted the install when Python was not on PATH**, so the CEP folder was never written and nothing appeared. The current `install.ps1` installs the panel regardless. Then fully quit AE (File → Exit) and reopen — CEP reads manifests only at launch. |
+| Panel says *"config.json is missing"* on Adobe 2024+ | Update to **1.0.2**. CEP 12 refuses `fetch()` on `file://`, so the old panel could not read `config.json`. 1.0.2 writes `config.js` and loads it with a `<script>` tag. |
 | Panel installed but says "No Python engine is configured" | That is the expected state after installing without Python. Re-run the installer pointing at a Python that has Better Brush's dependencies: `powershell -ExecutionPolicy Bypass -File .\after-effects\install.ps1 -Python "C:\path\to\python.exe"`. |
 | Installed from inside the `.zip` | Extract the whole download to a normal folder first, then run `Install Panels.bat`. Installing from the zip viewer copies from a temporary read-only path, so `config.json` points at a folder that disappears. |
 | Still invisible after a correct install | Unsigned CEP panels need PlayerDebugMode: `reg query HKCU\Software\Adobe\CSXS.12 /v PlayerDebugMode` must print `0x1` (AE 2024 uses CSXS.12; older hosts use 9–11). `install.ps1` sets HKCU CSXS.9–16. |

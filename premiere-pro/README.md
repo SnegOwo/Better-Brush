@@ -286,6 +286,7 @@ that file has the full trace.
 | Symptom | Fix |
 | --- | --- |
 | Panel missing from the Extensions menu | Update the panel: installers before 1.0.1 aborted when Python was not on PATH, so nothing reached the CEP folder. The current `install.ps1` installs the panel regardless. Then fully quit and reopen Premiere. |
+| Panel says *"config.json is missing"* on Premiere 2024+ | Update to **1.0.2**. CEP 12 refuses `fetch()` on `file://`; 1.0.2 writes `config.js` and loads it with a `<script>` tag. |
 | Panel installed but says "No Python engine is configured" | Expected without Python. Re-run the installer with `-Python "C:\path\to\python.exe"` pointing at a Python that has Better Brush's dependencies. |
 | Installed from inside the `.zip` | Extract the whole download first, then run `Install Panels.bat`. A zip-viewer install copies from a temporary read-only path. |
 | Still invisible after a correct install | Unsigned CEP panels need PlayerDebugMode: `reg query HKCU\Software\Adobe\CSXS.12 /v PlayerDebugMode` must print `0x1`. The installer sets HKCU CSXS.9–16. |
