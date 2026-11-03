@@ -74,11 +74,18 @@ flat cel shading, thin hair strands — and handles live-action just as well.
 
 ## Install
 
-**Windows, no terminal:** download the portable zip or the installer from
-**[Hugging Face](https://huggingface.co/Sneg0wo/better-brush)**. The installer is
-split into `Setup.exe` + `Setup-*.bin` parts — download all of them into one
-folder and run the `.exe`. The panels (After Effects / Premiere / EffectCraft)
-come with both, and `Install Everything.bat` sets up Python for them.
+**Windows, no terminal:** download from
+**[Hugging Face](https://huggingface.co/Sneg0wo/better-brush)**. Pick **one**:
+
+| Option | Files to download | Then |
+|---|---|---|
+| **Portable** (simplest) | `portable/BetterBrush-1.0.1-Windows.zip` — 1 file, 5.1 GB | Extract it, run `BetterBrush.exe` |
+| **Installer** | `installer/` — `Setup.exe` **+ all three `Setup-*.bin`** into one folder | Run `Setup.exe` |
+
+The installer is split only because Windows caps a single `.exe` at 4.2 GB; all
+four files are required. Both options include the After Effects, Premiere Pro and
+EffectCraft panels — run `Install Everything.bat` to set up Python and register
+them.
 
 From source:
 
